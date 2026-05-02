@@ -33,6 +33,17 @@ def _parse_date_ddmmyy(s: str) -> datetime:
     return dt.astimezone(timezone.utc)
 
 
+def _merge_date_time(body_date: datetime, received_at: datetime) -> datetime:
+    """Return received_at when it falls on the same IST calendar date as body_date.
+
+    If the email was delayed and the dates differ, keep body_date (midnight IST)
+    so the stored date reflects the actual transaction day.
+    """
+    if body_date.astimezone(IST).date() == received_at.astimezone(IST).date():
+        return received_at
+    return body_date
+
+
 def _parse_date_debit_card(date_s: str, time_s: str) -> datetime:
     """Parse 'DD Mon, YYYY' + 'HH:MM:SS' (IST) and return UTC datetime."""
     # Normalise any run of whitespace within the captured date group.
@@ -77,22 +88,25 @@ def parse_upi_debit(body: str, received_at: datetime) -> dict | None:
     m = re.search(
         r"Rs\.\s*([\d,]+\.\d{2})\s+has been debited from account\s+\**(\d+)"
         r"\s+to VPA\s+(\S+)\s+(.+?)\s+on\s+(\d{2}-\d{2}-\d{2})\."
-        r"\s+Your UPI transaction reference number is\s+(\d+)",
+        r"\s+Your\s+UPI\s+transaction\s+reference\s+number\s+is\s+(\d+)",
         body,
         re.IGNORECASE | re.DOTALL,
     )
     if not m:
         logger.debug("parse_upi_debit: regex did not match")
         return None
+    vpa = m.group(3)
+    merchant = m.group(4).strip()
     return {
         "amount": _parse_amount(m.group(1)),
         "type": "debit",
         "format": "upi",
         "account_last4": m.group(2)[-4:],
         "card_last4": None,
-        "vpa": m.group(3),
-        "merchant": m.group(4).strip(),
-        "date": _parse_date_ddmmyy(m.group(5)),
+        "vpa": vpa,
+        "merchant": merchant,
+        "raw_entry": f"{vpa} {merchant}",
+        "date": _merge_date_time(_parse_date_ddmmyy(m.group(5)), received_at),
         "upi_ref": m.group(6),
     }
 
@@ -107,22 +121,25 @@ def parse_upi_credit(body: str, received_at: datetime) -> dict | None:
     m = re.search(
         r"Rs\.\s*([\d,]+\.\d{2})\s+is successfully credited to your account\s+\**(\d+)"
         r"\s+by VPA\s+(\S+)\s+(.+?)\s+on\s+(\d{2}-\d{2}-\d{2})\."
-        r"\s+Your UPI transaction reference number is\s+(\d+)",
+        r"\s+Your\s+UPI\s+transaction\s+reference\s+number\s+is\s+(\d+)",
         body,
         re.IGNORECASE | re.DOTALL,
     )
     if not m:
         logger.debug("parse_upi_credit: regex did not match")
         return None
+    vpa = m.group(3)
+    merchant = m.group(4).strip()
     return {
         "amount": _parse_amount(m.group(1)),
         "type": "credit",
         "format": "upi",
         "account_last4": m.group(2)[-4:],
         "card_last4": None,
-        "vpa": m.group(3),
-        "merchant": m.group(4).strip(),
-        "date": _parse_date_ddmmyy(m.group(5)),
+        "vpa": vpa,
+        "merchant": merchant,
+        "raw_entry": f"{vpa} {merchant}",
+        "date": _merge_date_time(_parse_date_ddmmyy(m.group(5)), received_at),
         "upi_ref": m.group(6),
     }
 
@@ -144,6 +161,7 @@ def parse_netbanking(body: str, received_at: datetime) -> dict | None:
     if not m:
         logger.debug("parse_netbanking: regex did not match")
         return None
+    merchant = m.group(3).strip()
     return {
         "amount": _parse_amount(m.group(1)),
         "type": "debit",
@@ -151,7 +169,8 @@ def parse_netbanking(body: str, received_at: datetime) -> dict | None:
         "account_last4": m.group(2)[-4:],
         "card_last4": None,
         "vpa": None,
-        "merchant": m.group(3).strip(),
+        "merchant": merchant,
+        "raw_entry": merchant,
         # No date in body — fall back to email receive time.
         "date": received_at.astimezone(timezone.utc),
         "upi_ref": None,
@@ -173,6 +192,7 @@ def parse_debit_card(body: str, received_at: datetime) -> dict | None:
     if not m:
         logger.debug("parse_debit_card: regex did not match")
         return None
+    merchant = m.group(3).strip()
     return {
         "amount": _parse_amount(m.group(1)),
         "type": "debit",
@@ -180,7 +200,8 @@ def parse_debit_card(body: str, received_at: datetime) -> dict | None:
         "account_last4": None,
         "card_last4": m.group(2),
         "vpa": None,
-        "merchant": m.group(3).strip(),
+        "merchant": merchant,
+        "raw_entry": merchant,
         "date": _parse_date_debit_card(m.group(4), m.group(5)),
         "upi_ref": None,
     }
@@ -246,6 +267,7 @@ if __name__ == "__main__":
     check("F1 vpa",                  r1 and r1["vpa"] == "BHARATPE.90070079482@fbpe")
     check("F1 merchant",             r1 and r1["merchant"] == "PARAS PHARMA CHEMIST DRUGIST GENERALS")
     check("F1 upi_ref",              r1 and r1["upi_ref"] == "463121241499")
+    check("F1 raw_entry",            r1 and r1["raw_entry"] == "BHARATPE.90070079482@fbpe PARAS PHARMA CHEMIST DRUGIST GENERALS")
     check("F1 card_last4 is None",   r1 and r1["card_last4"] is None)
     check("F1 date is datetime",     r1 and isinstance(r1["date"], datetime))
     check("F1 date is UTC",          r1 and r1["date"].tzinfo == timezone.utc)
@@ -268,6 +290,7 @@ if __name__ == "__main__":
     check("F2 vpa",                  r2 and r2["vpa"] == "ktkonceptz-1@okhdfcbank")
     check("F2 merchant",             r2 and r2["merchant"] == "ZABIULLAKHAN H SO HAFIZULLAKHAN")
     check("F2 upi_ref",              r2 and r2["upi_ref"] == "115932677040")
+    check("F2 raw_entry",            r2 and r2["raw_entry"] == "ktkonceptz-1@okhdfcbank ZABIULLAKHAN H SO HAFIZULLAKHAN")
     check("F2 date is UTC",          r2 and r2["date"].tzinfo == timezone.utc)
     print()
 
@@ -285,6 +308,7 @@ if __name__ == "__main__":
     check("F3 format",               r3 and r3["format"] == "netbanking")
     check("F3 account_last4",        r3 and r3["account_last4"] == "1750")
     check("F3 merchant",             r3 and r3["merchant"] == "RAZPBSEINDIACOM")
+    check("F3 raw_entry",            r3 and r3["raw_entry"] == "RAZPBSEINDIACOM")
     check("F3 date == received_at",  r3 and r3["date"] == _received)
     check("F3 vpa is None",          r3 and r3["vpa"] is None)
     check("F3 upi_ref is None",      r3 and r3["upi_ref"] is None)
@@ -305,6 +329,7 @@ if __name__ == "__main__":
     check("F4 format",               r4 and r4["format"] == "debit_card")
     check("F4 card_last4",           r4 and r4["card_last4"] == "4458")
     check("F4 merchant",             r4 and r4["merchant"] == "YOUTUBEGOOGLE")
+    check("F4 raw_entry",            r4 and r4["raw_entry"] == "YOUTUBEGOOGLE")
     check("F4 account_last4 None",   r4 and r4["account_last4"] is None)
     check("F4 date is UTC",          r4 and r4["date"].tzinfo == timezone.utc)
     # 05 Apr 2026 15:23:09 IST  =  05 Apr 2026 09:53:09 UTC

@@ -11,6 +11,7 @@ exclusively from environment variables (no token.json / credentials.json).
 import base64
 import logging
 import os
+import re
 from datetime import datetime, timezone
 
 from dotenv import load_dotenv
@@ -30,7 +31,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
-HDFC_SENDER = "alerts@hdfcbank.net"
+HDFC_SENDER = "alerts@hdfcbank.bank.in"
 
 
 # ---------------------------------------------------------------------------
@@ -66,23 +67,91 @@ def _list_messages(service, query: str) -> list[dict]:
     return messages
 
 
-def _extract_body(payload: dict) -> str:
-    """
-    Recursively walk a Gmail message payload and return the first
-    non-empty plain-text part.
-    """
-    mime = payload.get("mimeType", "")
+from html.parser import HTMLParser
 
-    if mime == "text/plain":
-        data = payload.get("body", {}).get("data", "")
+
+class _TextExtractor(HTMLParser):
+    _SKIP_TAGS  = {"style", "script", "head"}
+    _BLOCK_TAGS = {"br", "p", "div", "tr", "td", "li",
+                   "h1", "h2", "h3", "h4", "h5", "h6", "hr"}
+
+    def __init__(self):
+        super().__init__()
+        self._parts: list[str] = []
+        self._skip_depth = 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag in self._SKIP_TAGS:
+            self._skip_depth += 1
+        elif tag in self._BLOCK_TAGS and not self._skip_depth:
+            self._parts.append(" ")
+
+    def handle_endtag(self, tag):
+        if tag in self._SKIP_TAGS and self._skip_depth:
+            self._skip_depth -= 1
+
+    def handle_data(self, data):
+        if not self._skip_depth:
+            self._parts.append(data)
+
+    def get_text(self) -> str:
+        text = "".join(self._parts)
+        return re.sub(r"[ \t\r\n ]+", " ", text).strip()
+
+
+def _strip_html(html: str) -> str:
+    import html as html_mod
+    extractor = _TextExtractor()
+    extractor.feed(html_mod.unescape(html))
+    return extractor.get_text()
+
+
+def _get_subject(msg: dict) -> str:
+    headers = msg.get("payload", {}).get("headers", [])
+    for h in headers:
+        if h.get("name", "").lower() == "subject":
+            return h.get("value", "")
+    return "(no subject)"
+
+
+def _extract_raw_html(payload: dict, service=None, msg_id: str = "") -> str:
+    """Return raw (un-stripped) text/html content for diagnostic logging."""
+    if payload.get("mimeType") == "text/html":
+        data = _get_body_data(service, msg_id, payload) if service else payload.get("body", {}).get("data", "")
         if data:
             return base64.urlsafe_b64decode(data).decode("utf-8", errors="replace")
-
     for part in payload.get("parts", []):
-        body = _extract_body(part)
-        if body:
-            return body
+        result = _extract_raw_html(part, service, msg_id)
+        if result:
+            return result
+    return ""
 
+
+def _extract_plain(payload: dict, service=None, msg_id: str = "") -> str:
+    """Return the first text/plain body found, recursively."""
+    if payload.get("mimeType") == "text/plain":
+        data = _get_body_data(service, msg_id, payload) if service else payload.get("body", {}).get("data", "")
+        if data:
+            text = base64.urlsafe_b64decode(data).decode("utf-8", errors="replace")
+            return re.sub(r"<https?://\S+>", "", text)
+    for part in payload.get("parts", []):
+        result = _extract_plain(part, service, msg_id)
+        if result:
+            return result
+    return ""
+
+
+def _extract_html(payload: dict, service=None, msg_id: str = "") -> str:
+    """Return the first text/html body found (tags stripped), recursively."""
+    if payload.get("mimeType") == "text/html":
+        data = _get_body_data(service, msg_id, payload) if service else payload.get("body", {}).get("data", "")
+        if data:
+            raw = base64.urlsafe_b64decode(data).decode("utf-8", errors="replace")
+            return _strip_html(raw)
+    for part in payload.get("parts", []):
+        result = _extract_html(part, service, msg_id)
+        if result:
+            return result
     return ""
 
 
@@ -102,13 +171,48 @@ def _get_received_at(msg: dict) -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _log_mime_tree(payload: dict, depth: int = 0) -> None:
+    """Log the MIME part tree at WARNING level for diagnosing empty-body messages."""
+    indent = "  " * depth
+    mime = payload.get("mimeType", "?")
+    body = payload.get("body", {})
+    size = body.get("size", 0)
+    has_data = bool(body.get("data"))
+    has_att_id = bool(body.get("attachmentId"))
+    logger.warning(
+        "%s[%s]  size=%d  inline_data=%s  attachmentId=%s",
+        indent, mime, size, has_data, has_att_id,
+    )
+    for part in payload.get("parts", []):
+        _log_mime_tree(part, depth + 1)
+
+
+def _get_body_data(service, msg_id: str, part: dict) -> str:
+    """Return the raw base64url body data for a MIME part.
+
+    Gmail omits the inline ``data`` field and supplies an ``attachmentId``
+    when the body exceeds ~2 MB. This helper fetches it transparently.
+    """
+    body = part.get("body", {})
+    data = body.get("data", "")
+    if data:
+        return data
+    att_id = body.get("attachmentId")
+    if att_id:
+        att = service.users().messages().attachments().get(
+            userId="me", messageId=msg_id, id=att_id
+        ).execute()
+        return att.get("data", "")
+    return ""
+
+
 # ---------------------------------------------------------------------------
 # Main polling loop
 # ---------------------------------------------------------------------------
 
 def main() -> None:
     poll_days = int(os.environ.get("POLL_DAYS", "1"))
-    query = f"label:inbox from:{HDFC_SENDER} newer_than:{poll_days}d"
+    query = f'from:{HDFC_SENDER} newer_than:{poll_days}d'
 
     logger.info("Connecting to database …")
     conn = db.get_connection()
@@ -120,6 +224,11 @@ def main() -> None:
     logger.info("Gmail query: %s", query)
     message_stubs = _list_messages(service, query)
     logger.info("Found %d message(s).", len(message_stubs))
+
+    max_messages = int(os.environ.get("MAX_MESSAGES", "0"))
+    if max_messages:
+        message_stubs = message_stubs[:max_messages]
+        logger.info("Capped to %d message(s) via MAX_MESSAGES.", len(message_stubs))
 
     if not message_stubs:
         print("Summary: 0 processed, 0 skipped, 0 failed")
@@ -145,25 +254,55 @@ def main() -> None:
             ).execute()
 
             received_at = _get_received_at(msg)
-            body = _extract_body(msg.get("payload", {}))
+            payload = msg.get("payload", {})
+            plain_body = _extract_plain(payload, service, gmail_message_id)
+            transaction = email_parser.parse(plain_body, received_at) if plain_body.strip() else None
+
+            html_body = ""
+            if transaction is None:
+                html_body = _extract_html(payload, service, gmail_message_id)
+                transaction = email_parser.parse(html_body, received_at) if html_body.strip() else None
+
+            logger.debug(
+                "msg=%s  plain=%d chars  html=%d chars",
+                gmail_message_id, len(plain_body), len(html_body),
+            )
+
+            body = (plain_body or html_body).strip()
 
             if not body:
-                logger.error("Empty body for message %s.", gmail_message_id)
+                subject = _get_subject(msg)
+                logger.error(
+                    "Empty body for message %s (subject: %s) — MIME tree:",
+                    gmail_message_id, subject,
+                )
+                _log_mime_tree(payload)
+                raw_html = _extract_raw_html(payload, service, gmail_message_id) or plain_body
+                if raw_html:
+                    logger.warning("Full email body for message %s:\n%s", gmail_message_id, raw_html)
                 db.log_email(conn, gmail_message_id, "failed", "empty body")
                 failed += 1
                 continue
 
-            # --- Parse ---
-            transaction = email_parser.parse(body, received_at)
-
             if transaction is None:
                 logger.error(
-                    "Unrecognised format for message %s. Body snippet: %.120s",
+                    "Unrecognised format for message %s. Body snippet: %.200s",
                     gmail_message_id,
                     body.replace("\n", " "),
                 )
                 db.log_email(conn, gmail_message_id, "failed", "unrecognised format")
                 failed += 1
+                continue
+
+            # --- Duplicate transaction check ---
+            existing_id = db.find_duplicate_transaction(conn, transaction)
+            if existing_id:
+                logger.warning(
+                    "Duplicate transaction in msg %s — already stored under msg %s. Skipping.",
+                    gmail_message_id, existing_id,
+                )
+                db.log_email(conn, gmail_message_id, "skipped", f"duplicate of {existing_id}")
+                skipped += 1
                 continue
 
             # --- Persist ---

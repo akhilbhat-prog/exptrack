@@ -36,10 +36,13 @@ def create_tables(conn) -> None:
                 card_last4       CHAR(4),
                 vpa              TEXT,
                 merchant         TEXT,
+                raw_entry        TEXT,
                 upi_ref          VARCHAR(30),
                 gmail_message_id TEXT UNIQUE,
                 created_at       TIMESTAMPTZ DEFAULT NOW()
             );
+
+            ALTER TABLE transactions ADD COLUMN IF NOT EXISTS raw_entry TEXT;
 
             CREATE TABLE IF NOT EXISTS processed_emails (
                 gmail_message_id TEXT PRIMARY KEY,
@@ -73,17 +76,82 @@ def insert_transaction(conn, transaction_dict: dict, gmail_message_id: str) -> N
             """
             INSERT INTO transactions
                 (date, amount, type, format, account_last4, card_last4,
-                 vpa, merchant, upi_ref, gmail_message_id)
+                 vpa, merchant, raw_entry, upi_ref, gmail_message_id)
             VALUES
                 (%(date)s, %(amount)s, %(type)s, %(format)s, %(account_last4)s,
-                 %(card_last4)s, %(vpa)s, %(merchant)s, %(upi_ref)s,
-                 %(gmail_message_id)s)
+                 %(card_last4)s, %(vpa)s, %(merchant)s, %(raw_entry)s,
+                 %(upi_ref)s, %(gmail_message_id)s)
             ON CONFLICT (gmail_message_id) DO NOTHING
             """,
             params,
         )
     conn.commit()
     logger.debug("Inserted transaction for message %s.", gmail_message_id)
+
+
+def create_data_feed_table(conn) -> None:
+    """Create the data_feed_history table if it doesn't exist."""
+    with conn.cursor() as cur:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS data_feed_history (
+                id         SERIAL PRIMARY KEY,
+                date       DATE NOT NULL,
+                entry      TEXT NOT NULL,
+                expense    TEXT,
+                category   TEXT,
+                type       VARCHAR(20),
+                amount     NUMERIC(12, 2) NOT NULL,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                UNIQUE (date, entry, amount)
+            );
+        """)
+    conn.commit()
+
+
+def insert_data_feed_row(
+    conn, date, entry: str, expense: str | None, category: str | None,
+    type_: str | None, amount
+) -> bool:
+    """Insert one row. Returns True if inserted, False if skipped (duplicate)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO data_feed_history (date, entry, expense, category, type, amount)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT (date, entry, amount) DO NOTHING
+            """,
+            (date, entry, expense, category, type_, amount),
+        )
+        inserted = cur.rowcount == 1
+    conn.commit()
+    return inserted
+
+
+def find_duplicate_transaction(conn, transaction: dict) -> str | None:
+    """
+    Return the gmail_message_id of an existing transaction that matches the
+    given parsed transaction, or None if no duplicate exists.
+
+    UPI transactions match on upi_ref.
+    All other formats match on (amount, date, format, merchant).
+    """
+    with conn.cursor() as cur:
+        if transaction.get("upi_ref"):
+            cur.execute(
+                "SELECT gmail_message_id FROM transactions WHERE upi_ref = %s",
+                (transaction["upi_ref"],),
+            )
+        else:
+            cur.execute(
+                """
+                SELECT gmail_message_id FROM transactions
+                WHERE amount = %s AND date = %s AND format = %s AND merchant = %s
+                """,
+                (transaction["amount"], transaction["date"],
+                 transaction["format"], transaction["merchant"]),
+            )
+        row = cur.fetchone()
+        return row[0] if row else None
 
 
 def log_email(conn, gmail_message_id: str, status: str, notes: str | None = None) -> None:
