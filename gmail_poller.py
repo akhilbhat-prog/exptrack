@@ -4,6 +4,7 @@ Gmail poller — main entry point for the HDFC statement loader.
 Reads HDFC Bank alert emails from Gmail, parses them with parser.py,
 and persists the results to a Neon PostgreSQL database via db.py.
 
+Runs either as a Cloud Run Service (HTTP) or directly from the command line.
 Authentication uses OAuth2 refresh-token flow; credentials are read
 exclusively from environment variables (no token.json / credentials.json).
 """
@@ -12,9 +13,13 @@ import base64
 import logging
 import os
 import re
-from datetime import datetime, timezone
+import subprocess
+import sys
+from datetime import datetime, timedelta, timezone
+from email.mime.text import MIMEText
 
 from dotenv import load_dotenv
+from flask import Flask, jsonify
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
@@ -30,8 +35,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
+GMAIL_SCOPES = [
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.send",
+]
 HDFC_SENDERS = ["alerts@hdfcbank.bank.in", "alerts@hdfcbank.net"]
+IST = timezone(timedelta(hours=5, minutes=30))
+
+app = Flask(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -96,7 +107,7 @@ class _TextExtractor(HTMLParser):
 
     def get_text(self) -> str:
         text = "".join(self._parts)
-        return re.sub(r"[ \t\r\n ]+", " ", text).strip()
+        return re.sub(r"[ \t\r\n ]+", " ", text).strip()
 
 
 def _strip_html(html: str) -> str:
@@ -207,10 +218,84 @@ def _get_body_data(service, msg_id: str, part: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Parser test runner
+# ---------------------------------------------------------------------------
+
+def run_parser_tests() -> str:
+    """Run parser.py unit tests and return the captured output."""
+    result = subprocess.run(
+        [sys.executable, "parser.py"],
+        capture_output=True,
+        text=True,
+    )
+    return (result.stdout + result.stderr).strip()
+
+
+# ---------------------------------------------------------------------------
+# Summary email
+# ---------------------------------------------------------------------------
+
+def send_summary_email(service, summary: dict, test_output: str) -> None:
+    recipient = os.environ.get("NOTIFICATION_EMAIL", "")
+    if not recipient:
+        logger.warning("NOTIFICATION_EMAIL not set — skipping summary email.")
+        return
+
+    now_ist = datetime.now(IST)
+    date_str = now_ist.strftime("%d %b %Y")
+    no_transactions = summary["processed"] == 0 and summary["skipped"] == 0
+
+    subject = (
+        f"HDFC Pipeline Run – No Transactions | {date_str}"
+        if no_transactions
+        else f"HDFC Pipeline Run – {date_str}"
+    )
+
+    lines = [
+        f"HDFC Pipeline Run — {date_str}",
+        "",
+        "Run Summary",
+        "-" * 40,
+        f"Processed : {summary['processed']}",
+        f"Skipped   : {summary['skipped']}",
+        f"Failed    : {summary['failed']}",
+        "",
+    ]
+
+    if no_transactions:
+        lines.append("No new HDFC transactions were found in this run.")
+    else:
+        lines += ["Transactions Processed", "-" * 40]
+        for i, t in enumerate(summary["transactions"], 1):
+            date_ist = t["date"].astimezone(IST)
+            lines.append(
+                f"{i}. {t['format'].upper():<12} {t['type']:<7} "
+                f"Rs. {t['amount']:>10,.2f}   {t['merchant']:<30}  "
+                f"{date_ist.strftime('%d %b %Y %H:%M IST')}"
+            )
+
+    lines += [
+        "",
+        "Parser Test Results",
+        "-" * 40,
+        test_output or "(no output)",
+    ]
+
+    msg = MIMEText("\n".join(lines))
+    msg["to"] = recipient
+    msg["from"] = "me"
+    msg["subject"] = subject
+
+    raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+    service.users().messages().send(userId="me", body={"raw": raw}).execute()
+    logger.info("Summary email sent to %s", recipient)
+
+
+# ---------------------------------------------------------------------------
 # Main polling loop
 # ---------------------------------------------------------------------------
 
-def main() -> None:
+def main(service) -> dict:
     poll_days = int(os.environ.get("POLL_DAYS", "1"))
     sender_filter = " OR ".join(f"from:{s}" for s in HDFC_SENDERS)
     query = f'{{{sender_filter}}} newer_than:{poll_days}d'
@@ -218,9 +303,6 @@ def main() -> None:
     logger.info("Connecting to database …")
     conn = db.get_connection()
     db.create_tables(conn)
-
-    logger.info("Authenticating with Gmail API …")
-    service = _build_gmail_service()
 
     logger.info("Gmail query: %s", query)
     message_stubs = _list_messages(service, query)
@@ -232,11 +314,11 @@ def main() -> None:
         logger.info("Capped to %d message(s) via MAX_MESSAGES.", len(message_stubs))
 
     if not message_stubs:
-        print("Summary: 0 processed, 0 skipped, 0 failed")
         conn.close()
-        return
+        return {"processed": 0, "skipped": 0, "failed": 0, "transactions": []}
 
     processed = skipped = failed = 0
+    transactions: list[dict] = []
 
     for stub in message_stubs:
         gmail_message_id = stub["id"]
@@ -317,20 +399,60 @@ def main() -> None:
                 transaction["merchant"],
                 gmail_message_id,
             )
+            transactions.append(transaction)
             processed += 1
 
         except Exception:
             logger.exception("Unexpected error processing message %s.", gmail_message_id)
             try:
-                # Best-effort — the connection might itself be broken.
                 db.log_email(conn, gmail_message_id, "failed", "unexpected error")
             except Exception:
                 pass
             failed += 1
 
     conn.close()
-    print(f"Summary: {processed} processed, {skipped} skipped, {failed} failed")
+    return {"processed": processed, "skipped": skipped, "failed": failed, "transactions": transactions}
 
+
+# ---------------------------------------------------------------------------
+# Flask HTTP endpoint (Cloud Run Service mode)
+# ---------------------------------------------------------------------------
+
+@app.route("/", methods=["GET", "POST"])
+def trigger():
+    service = _build_gmail_service()
+    summary = main(service)
+    test_output = run_parser_tests()
+    send_summary_email(service, summary, test_output)
+
+    no_transactions = summary["processed"] == 0 and summary["skipped"] == 0
+    return jsonify({
+        "status": "ok" if summary["failed"] == 0 else "partial_failure",
+        "processed": summary["processed"],
+        "skipped": summary["skipped"],
+        "failed": summary["failed"],
+        "message": (
+            "No new transactions found."
+            if no_transactions
+            else f"{summary['processed']} transaction(s) processed."
+        ),
+    }), 200
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    main()
+    port = int(os.environ.get("PORT", 0))
+    if port:
+        app.run(host="0.0.0.0", port=port)
+    else:
+        svc = _build_gmail_service()
+        summary = main(svc)
+        test_output = run_parser_tests()
+        send_summary_email(svc, summary, test_output)
+        print(
+            f"Summary: {summary['processed']} processed, "
+            f"{summary['skipped']} skipped, {summary['failed']} failed"
+        )
