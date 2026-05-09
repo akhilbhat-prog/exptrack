@@ -9,8 +9,7 @@ Google Cloud Run Job triggered by Cloud Scheduler.
 ## How it works
 
 1. **Gmail poller** (`gmail_poller.py`) authenticates with the Gmail API using an
-   OAuth2 refresh token and searches `label:inbox from:alerts@hdfcbank.net` for
-   emails newer than `POLL_DAYS` days.
+   OAuth2 refresh token and searches for emails from `alerts@hdfcbank.bank.in` or `alerts@hdfcbank.net` (both used by HDFC) newer than `POLL_DAYS` days.
 2. **Parser** (`parser.py`) detects the email format (UPI debit/credit,
    NetBanking, Debit Card) and extracts structured fields.
 3. **DB layer** (`db.py`) writes the transaction to Neon PostgreSQL and records

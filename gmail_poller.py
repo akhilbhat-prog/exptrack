@@ -31,7 +31,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
-HDFC_SENDER = "alerts@hdfcbank.bank.in"
+HDFC_SENDERS = ["alerts@hdfcbank.bank.in", "alerts@hdfcbank.net"]
 
 
 # ---------------------------------------------------------------------------
@@ -212,7 +212,8 @@ def _get_body_data(service, msg_id: str, part: dict) -> str:
 
 def main() -> None:
     poll_days = int(os.environ.get("POLL_DAYS", "1"))
-    query = f'from:{HDFC_SENDER} newer_than:{poll_days}d'
+    sender_filter = " OR ".join(f"from:{s}" for s in HDFC_SENDERS)
+    query = f'{{{sender_filter}}} newer_than:{poll_days}d'
 
     logger.info("Connecting to database …")
     conn = db.get_connection()
