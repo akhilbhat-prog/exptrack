@@ -109,7 +109,7 @@ docker run --rm \
 
 ```bash
 gcloud auth login
-gcloud config set project YOUR_PROJECT_ID
+gcloud config set project hdfc-statement-loader
 ```
 
 ### 2. Create an Artifact Registry repository
@@ -123,7 +123,7 @@ gcloud artifacts repositories create hdfc-loader \
 ### 3. Build and push the image
 
 ```bash
-IMAGE="asia-south1-docker.pkg.dev/YOUR_PROJECT_ID/hdfc-loader/hdfc-statement-loader:latest"
+IMAGE="asia-south1-docker.pkg.dev/hdfc-statement-loader/hdfc-loader/hdfc-statement-loader:latest"
 
 gcloud builds submit --tag "$IMAGE"
 # or, if using Docker locally:
@@ -163,12 +163,12 @@ The cron below fires at **06:00 IST** every day (= 00:30 UTC).
 
 ```bash
 # Create a service account for the scheduler to invoke the job
-SA="hdfc-loader-invoker@YOUR_PROJECT_ID.iam.gserviceaccount.com"
+SA="hdfc-loader-invoker@hdfc-statement-loader.iam.gserviceaccount.com"
 
 gcloud iam service-accounts create hdfc-loader-invoker \
   --display-name "HDFC Loader Cloud Run Invoker"
 
-gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
+gcloud projects add-iam-policy-binding hdfc-statement-loader \
   --member "serviceAccount:${SA}" \
   --role "roles/run.invoker"
 
@@ -177,7 +177,7 @@ gcloud scheduler jobs create http hdfc-statement-loader-daily \
   --location asia-south1 \
   --schedule "0 6 * * *" \
   --time-zone "Asia/Kolkata" \
-  --uri "https://run.googleapis.com/v2/projects/YOUR_PROJECT_ID/locations/asia-south1/jobs/hdfc-statement-loader:run" \
+  --uri "https://run.googleapis.com/v2/projects/hdfc-statement-loader/locations/asia-south1/jobs/hdfc-statement-loader:run" \
   --http-method POST \
   --oauth-service-account-email "${SA}"
 ```
