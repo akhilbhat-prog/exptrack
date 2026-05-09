@@ -57,7 +57,9 @@ def _parse_date_debit_card(date_s: str, time_s: str) -> datetime:
 # ---------------------------------------------------------------------------
 
 def is_upi_debit(body: str) -> bool:
-    return bool(re.search(r"has been debited from account", body, re.IGNORECASE))
+    return bool(re.search(r"has been debited from account", body, re.IGNORECASE)) or bool(
+        re.search(r"is debited from your account ending.+towards VPA", body, re.IGNORECASE | re.DOTALL)
+    )
 
 
 def is_upi_credit(body: str) -> bool:
@@ -80,11 +82,40 @@ def is_debit_card(body: str) -> bool:
 
 def parse_upi_debit(body: str, received_at: datetime) -> dict | None:
     """
-    Sample:
+    New format (2026):
+      Rs.12015.00 is debited from your account ending 1750 towards VPA MYNTRA@axl (Myntra)
+      on 08-05-26. UPI transaction reference no.: 022327800326.
+
+    Old format:
       Rs.70.00 has been debited from account 1750 to VPA BHARATPE.90070079482@fbpe
       PARAS PHARMA CHEMIST DRUGIST GENERALS on 28-04-26.
       Your UPI transaction reference number is 463121241499.
     """
+    # New format: merchant is inside parentheses after the VPA.
+    m = re.search(
+        r"Rs\.\s*([\d,]+\.\d{2})\s+is debited from your account ending\s+(\d+)"
+        r"\s+towards VPA\s+(\S+)\s+\((.+?)\)\s+on\s+(\d{2}-\d{2}-\d{2})\."
+        r".*?UPI transaction reference no\.:\s+(\d+)",
+        body,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if m:
+        vpa = m.group(3)
+        merchant = m.group(4).strip()
+        return {
+            "amount": _parse_amount(m.group(1)),
+            "type": "debit",
+            "format": "upi",
+            "account_last4": m.group(2)[-4:],
+            "card_last4": None,
+            "vpa": vpa,
+            "merchant": merchant,
+            "raw_entry": f"{vpa} {merchant}",
+            "date": _merge_date_time(_parse_date_ddmmyy(m.group(5)), received_at),
+            "upi_ref": m.group(6),
+        }
+
+    # Old format: merchant follows the VPA separated by a space.
     m = re.search(
         r"Rs\.\s*([\d,]+\.\d{2})\s+has been debited from account\s+\**(\d+)"
         r"\s+to VPA\s+(\S+)\s+(.+?)\s+on\s+(\d{2}-\d{2}-\d{2})\."
@@ -271,6 +302,26 @@ if __name__ == "__main__":
     check("F1 card_last4 is None",   r1 and r1["card_last4"] is None)
     check("F1 date is datetime",     r1 and isinstance(r1["date"], datetime))
     check("F1 date is UTC",          r1 and r1["date"].tzinfo == timezone.utc)
+    print()
+
+    # -----------------------------------------------------------------------
+    # Format 1b: UPI Debit (new 2026 format)
+    # -----------------------------------------------------------------------
+    b1b = (
+        "Dear Customer, Greetings from HDFC Bank! Rs.12015.00 is debited from your account "
+        "ending 1750 towards VPA MYNTRA@axl (Myntra) on 08-05-26. UPI transaction reference "
+        "no.: 022327800326. If you did not authorise this, call 1800-202-6161."
+    )
+    r1b = parse(b1b, _received)
+    check("F1b parse not None",      r1b is not None)
+    check("F1b amount",              r1b and r1b["amount"] == 12015.00)
+    check("F1b type",                r1b and r1b["type"] == "debit")
+    check("F1b format",              r1b and r1b["format"] == "upi")
+    check("F1b account_last4",       r1b and r1b["account_last4"] == "1750")
+    check("F1b vpa",                 r1b and r1b["vpa"] == "MYNTRA@axl")
+    check("F1b merchant",            r1b and r1b["merchant"] == "Myntra")
+    check("F1b upi_ref",             r1b and r1b["upi_ref"] == "022327800326")
+    check("F1b raw_entry",           r1b and r1b["raw_entry"] == "MYNTRA@axl Myntra")
     print()
 
     # -----------------------------------------------------------------------

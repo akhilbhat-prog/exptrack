@@ -1,0 +1,12 @@
+.git
+.gitignore
+.env
+credentials.json
+token.json
+*.sql
+*.xlsx
+.claude
+__pycache__
+*.pyc
+*.pyo
+README.md
