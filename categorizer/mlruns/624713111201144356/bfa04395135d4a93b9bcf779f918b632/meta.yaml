@@ -1,0 +1,14 @@
+artifact_uri: file:C:/Akhil/Workspace/Finance/Spend Tracker/mlruns/624713111201144356/bfa04395135d4a93b9bcf779f918b632/artifacts
+end_time: 1778411438808
+entry_point_name: ''
+experiment_id: '624713111201144356'
+lifecycle_stage: active
+run_id: bfa04395135d4a93b9bcf779f918b632
+run_name: skittish-crow-184
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1778411432234
+status: 3
+tags: []
+user_id: akhil

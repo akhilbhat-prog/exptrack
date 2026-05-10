@@ -1,0 +1,14 @@
+artifact_uri: file:C:/Akhil/Workspace/Finance/Spend Tracker/mlruns/624713111201144356/2ef05e5b75d341e6ac20722ada61f297/artifacts
+end_time: 1777713495000
+entry_point_name: ''
+experiment_id: '624713111201144356'
+lifecycle_stage: active
+run_id: 2ef05e5b75d341e6ac20722ada61f297
+run_name: youthful-midge-925
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1777713483237
+status: 3
+tags: []
+user_id: akhil

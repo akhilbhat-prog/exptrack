@@ -1,0 +1,530 @@
+{
+  "ACH D- GROWW INVEST TECH": {
+    "category": "Mutual Funds",
+    "subcategory": "Mutual Funds",
+    "type": "investment",
+    "confidence": 0.9
+  },
+  "ACH D- INDIAN CLEARING CORP": {
+    "category": "Mutual Funds",
+    "subcategory": "Mutual Funds",
+    "type": "investment",
+    "confidence": 0.9
+  },
+  "A G RAMU": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "ACT  BROADBAND": {
+    "category": "Bills",
+    "subcategory": "ACT Internet",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "AIRTEL PAYMENTS BANK": {
+    "category": "Bills",
+    "subcategory": "Airtel",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "AIRTELPAYMENTSBANK": {
+    "category": "Bills",
+    "subcategory": "Airtel",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "A K SHAN BASHA": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "AKSHAYA ENTERPRISES": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "ANDAMEN": {
+    "category": "Personal Purchase",
+    "subcategory": "Clothes",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "APPLE MEDIA SERVICES": {
+    "category": "Bills",
+    "subcategory": "Apple Apps",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "ATRIA CONVERGENCE": {
+    "category": "Bills",
+    "subcategory": "ACT Internet",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "BY 2 COFFEE": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "blinkit": {
+    "category": "Misc",
+    "subcategory": "Groceries",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "BOOKMYSHOW": {
+    "category": "Entertainment",
+    "subcategory": "Movie",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "BULL TEMPLE PETROL": {
+    "category": "Travel",
+    "subcategory": "Fuel",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "CARE TAKER": {
+    "category": "Family",
+    "subcategory": "Caretaker",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "CARETAKER": {
+    "category": "Family",
+    "subcategory": "Caretaker",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "comdyna": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "CHATGPT SUBSCR": {
+    "category": "Bills",
+    "subcategory": "OpenAI",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "DC INTL POS TXN MARKUP": {
+    "category": "Bills",
+    "subcategory": "Conversion Markup",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "eternal": {
+    "category": "Food",
+    "subcategory": "Ordering In",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "GAMERSGIFT": {
+    "category": "Personal Purchase",
+    "subcategory": "Game",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "GOOGLE PLAY": {
+    "category": "Bills",
+    "subcategory": "Google Apps",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "GO NATURALS": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "HOTEL": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "IB BILLPAY DR-HDFCVE": {
+    "category": "Bills",
+    "subcategory": "Credit Card",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "HDFC BANK PREPAI": {
+    "category": "Personal Purchase",
+    "subcategory": "Multiple Items",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "JACK FASHION": {
+    "category": "Personal Purchase",
+    "subcategory": "Tailor",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "J B BEKARY": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "JIOFIBERPREPAID": {
+    "category": "Bills",
+    "subcategory": "Jio Internet",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "INDIGO": {
+    "category": "Trip",
+    "subcategory": "Flight",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "K NIRMALA": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "L J IYENGARS BREAD H": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "lakshmi": {
+    "category": "Personal Purchase",
+    "subcategory": "Grooming",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "LIC OF INDIA": {
+    "category": "Insurance",
+    "subcategory": "Insurance",
+    "type": "investment",
+    "confidence": 0.9
+  },
+  "magic": {
+    "category": "Food",
+    "subcategory": "Ordering In",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "MAMATHA ENTERPRISES": {
+    "category": "Personal Purchase",
+    "subcategory": "Courier",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "MANOHAR KUMAR K E": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "md lalu": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "MISS VINUTHA K N": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "MYNTRA": {
+    "category": "Personal Purchase",
+    "subcategory": "Clothes",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "N VENKATESH": {
+    "category": "Personal Purchase",
+    "subcategory": "Clothes Press",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "netflix": {
+    "category": "Entertainment",
+    "subcategory": "Netflix",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "OPENAI": {
+    "category": "Bills",
+    "subcategory": "OpenAI",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "OLD BANGALORE": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "paras": {
+    "category": "Medical",
+    "subcategory": "Meds",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "PLAYSTORE": {
+    "category": "Bills",
+    "subcategory": "Google Apps",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "PRABHAN": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "PREPAIDRECHARGE": {
+    "category": "Bills",
+    "subcategory": "Airtel",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "POLAR BEAR": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "PROTEIN STATION": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "PRASANNA S": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "prasanna": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "RAMS INDIAN KITCHEN": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "reliance": {
+    "category": "Bills",
+    "subcategory": "Jio Internet",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "SATHISH POOJARY": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "SHREE GANESH BAKERY": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "S K ENTERPRISES": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "S P PRAKASH": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "SRI MARUTHI BHEL SAG": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "SRI MARUTHI DOSE CAM": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "SRI SHANKARA CANCER": {
+    "category": "Personal Purchase",
+    "subcategory": "Parking",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "SZECHUAN DRAGON": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "SURESH M": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "swiggy": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "TACO BELL": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "TALE BELLA KAAPI": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "TP-MAX LIFE INS": {
+    "category": "Insurance",
+    "subcategory": "Term Insurance",
+    "type": "investment",
+    "confidence": 0.9
+  },
+  "U V MEDICALS": {
+    "category": "Medical",
+    "subcategory": "Meds",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "uber": {
+    "category": "Travel",
+    "subcategory": "Auto",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "VILLAGE HYPER BAZAAR": {
+    "category": "Misc",
+    "subcategory": "Groceries",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "XFER": {
+    "category": "Family",
+    "subcategory": "Parents",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "YEMKAY SUPER MARKET": {
+    "category": "Misc",
+    "subcategory": "Groceries",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "YOUTUBEGOOGLE": {
+    "category": "Entertainment",
+    "subcategory": "Youtube Prime",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "zomato": {
+    "category": "Food",
+    "subcategory": "Ordering In",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "FRIEND FOR ANIMAL": {
+    "category": "Donation",
+    "subcategory": "FFA",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "MSINDIAN WELFARE": {
+    "category": "Donation",
+    "subcategory": "Dog Vaccination",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "KETTO": {
+    "category": "Donation",
+    "subcategory": "Cancer Help",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "COURSERA": {
+    "category": "Learning",
+    "subcategory": "Coursera",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "DATACAMP": {
+    "category": "Learning",
+    "subcategory": "Datacamp",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "DAILYDOSEOFDATAS": {
+    "category": "Learning",
+    "subcategory": "DDDS",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "IKEA": {
+    "category": "Home",
+    "subcategory": "Ikea",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "MURUDESHWAR CERAMICS": {
+    "category": "Home",
+    "subcategory": "Tiles",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "TILEPRINT": {
+    "category": "Home",
+    "subcategory": "Tiles",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "SECOND FLOOR WORK": {
+    "category": "Home",
+    "subcategory": "Construction",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "GROWING WONDERS": {
+    "category": "Kid",
+    "subcategory": "School",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "VODAFONEIDEA": {
+    "category": "Bills",
+    "subcategory": "Mobile",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "STACKSOCIAL": {
+    "category": "Bills",
+    "subcategory": "Software",
+    "type": "expense",
+    "confidence": 0.9
+  }
+}

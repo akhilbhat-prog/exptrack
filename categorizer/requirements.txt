@@ -1,0 +1,7 @@
+pandas
+openpyxl
+scikit-learn
+psycopg[binary]
+python-dotenv
+lightgbm
+mlflow

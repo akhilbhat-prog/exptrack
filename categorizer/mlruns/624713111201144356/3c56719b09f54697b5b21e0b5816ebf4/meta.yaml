@@ -1,0 +1,14 @@
+artifact_uri: file:C:/Akhil/Workspace/Finance/Spend Tracker/mlruns/624713111201144356/3c56719b09f54697b5b21e0b5816ebf4/artifacts
+end_time: 1777731890161
+entry_point_name: ''
+experiment_id: '624713111201144356'
+lifecycle_stage: active
+run_id: 3c56719b09f54697b5b21e0b5816ebf4
+run_name: abrasive-fly-121
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1777731880628
+status: 3
+tags: []
+user_id: akhil

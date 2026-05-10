@@ -1,0 +1,10 @@
+artifact_location: file:C:/Akhil/Workspace/Finance/Spend Tracker/mlruns/624713111201144356/models/m-f3c61041870745e8b9b33f3a2177952c/artifacts
+creation_timestamp: 1777713483374
+experiment_id: '624713111201144356'
+last_updated_timestamp: 1777713494766
+model_id: m-f3c61041870745e8b9b33f3a2177952c
+model_type: null
+name: model
+source_run_id: 2ef05e5b75d341e6ac20722ada61f297
+status: 2
+status_message: null

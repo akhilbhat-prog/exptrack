@@ -1,0 +1,8 @@
+artifact_location: file:C:/Akhil/Workspace/Finance/Spend Tracker/mlruns/624713111201144356
+creation_time: 1777713481174
+experiment_id: '624713111201144356'
+last_update_time: 1777713481174
+lifecycle_stage: active
+name: spend-classifier
+trace_location: null
+workspace: default

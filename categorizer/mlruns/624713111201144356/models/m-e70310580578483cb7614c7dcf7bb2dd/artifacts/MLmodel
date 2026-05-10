@@ -1,0 +1,23 @@
+artifact_path: file:C:/Akhil/Workspace/Finance/Spend Tracker/mlruns/624713111201144356/models/m-e70310580578483cb7614c7dcf7bb2dd/artifacts
+flavors:
+  python_function:
+    artifacts:
+      bundle:
+        path: artifacts\bundle.joblib
+        uri: C:\Users\akhil\AppData\Local\Temp\tmpmy2dt5g0\bundle.joblib
+    cloudpickle_version: 3.1.2
+    code: null
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.pyfunc.model
+    python_model: python_model.pkl
+    python_version: 3.12.10
+    streamable: false
+mlflow_version: 3.11.1
+model_id: m-e70310580578483cb7614c7dcf7bb2dd
+model_size_bytes: 32354689
+model_uuid: m-e70310580578483cb7614c7dcf7bb2dd
+prompts: null
+run_id: 19888f63aa8845498b0fe5bd51158711
+utc_time_created: '2026-05-02 14:46:43.190156'

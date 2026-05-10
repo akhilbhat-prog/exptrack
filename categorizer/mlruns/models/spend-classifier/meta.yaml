@@ -1,0 +1,9 @@
+aliases:
+  champion: '4'
+creation_timestamp: 1777713495036
+deployment_job_id: null
+deployment_job_state: null
+description: null
+last_updated_timestamp: 1778411438960
+name: spend-classifier
+workspace: default

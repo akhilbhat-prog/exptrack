@@ -1,0 +1,14 @@
+artifact_uri: file:C:/Akhil/Workspace/Finance/Spend Tracker/mlruns/624713111201144356/19888f63aa8845498b0fe5bd51158711/artifacts
+end_time: 1777733209478
+entry_point_name: ''
+experiment_id: '624713111201144356'
+lifecycle_stage: active
+run_id: 19888f63aa8845498b0fe5bd51158711
+run_name: omniscient-chimp-552
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1777733203076
+status: 3
+tags: []
+user_id: akhil

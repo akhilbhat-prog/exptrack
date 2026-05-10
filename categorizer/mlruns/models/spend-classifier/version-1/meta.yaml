@@ -1,0 +1,16 @@
+creation_timestamp: 1777713495078
+current_stage: None
+deployment_job_state: null
+description: null
+last_updated_timestamp: 1777713495078
+model_id: m-f3c61041870745e8b9b33f3a2177952c
+name: spend-classifier
+run_id: 2ef05e5b75d341e6ac20722ada61f297
+run_link: null
+source: models:/m-f3c61041870745e8b9b33f3a2177952c
+status: READY
+status_message: null
+storage_location: file:C:/Akhil/Workspace/Finance/Spend Tracker/mlruns/624713111201144356/models/m-f3c61041870745e8b9b33f3a2177952c/artifacts
+user_id: null
+version: 1
+workspace: default
