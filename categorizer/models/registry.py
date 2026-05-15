@@ -2,70 +2,40 @@ from __future__ import annotations
 
 import os
 import tempfile
-from pathlib import Path
 
 import joblib
-import mlflow
-import mlflow.pyfunc
+from google.cloud import storage
 
-MODEL_NAME = "spend-classifier"
-CHAMPION_ALIAS = "champion"
-
-mlflow.set_tracking_uri((Path(__file__).parent.parent / "mlruns").as_uri())
+MODEL_BLOB = "models/spend-classifier/champion.joblib"
 
 
-class _BundleModel(mlflow.pyfunc.PythonModel):
-    """Thin pyfunc wrapper so the bundle travels through the MLflow registry."""
-
-    def load_context(self, context: mlflow.pyfunc.PythonModelContext) -> None:
-        self.bundle = joblib.load(context.artifacts["bundle"])
-
-    def predict(self, context, model_input, params=None):
-        raise NotImplementedError("Access the bundle via unwrap_python_model().bundle")
+def _bucket() -> storage.Bucket:
+    client = storage.Client()
+    return client.bucket(os.environ["GCS_MODEL_BUCKET"])
 
 
-def register_model(bundle: dict) -> str:
-    """
-    Log the model bundle to MLflow, register it in the Model Registry under
-    MODEL_NAME, and promote it as the new champion. Returns the model URI.
-    """
-    mlflow.set_experiment(MODEL_NAME)
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        bundle_path = os.path.join(tmpdir, "bundle.joblib")
-        joblib.dump(bundle, bundle_path)
-
-        with mlflow.start_run():
-            model_info = mlflow.pyfunc.log_model(
-                artifact_path="model",
-                python_model=_BundleModel(),
-                artifacts={"bundle": bundle_path},
-            )
-            run_id = mlflow.active_run().info.run_id
-
-    model_version = mlflow.register_model(
-        model_uri=f"runs:/{run_id}/model",
-        name=MODEL_NAME,
-    )
-
-    client = mlflow.MlflowClient()
-    client.set_registered_model_alias(MODEL_NAME, CHAMPION_ALIAS, model_version.version)
-
-    print(f"Model registered: {MODEL_NAME} v{model_version.version} (@{CHAMPION_ALIAS})")
-    return f"models:/{MODEL_NAME}@{CHAMPION_ALIAS}"
+def register_model(bundle: dict) -> None:
+    """Serialize the model bundle to GCS, replacing any previous champion."""
+    bucket = _bucket()
+    with tempfile.NamedTemporaryFile(suffix=".joblib", delete=False) as f:
+        joblib.dump(bundle, f.name)
+        tmp_path = f.name
+    bucket.blob(MODEL_BLOB).upload_from_filename(tmp_path)
+    os.unlink(tmp_path)
+    print(f"Model saved to gs://{bucket.name}/{MODEL_BLOB}")
 
 
 def load_model() -> dict:
-    """
-    Load the champion model bundle from the MLflow registry.
-    Raises FileNotFoundError if no model has been registered yet.
-    """
-    uri = f"models:/{MODEL_NAME}@{CHAMPION_ALIAS}"
-    try:
-        loaded = mlflow.pyfunc.load_model(uri)
-    except Exception as exc:
+    """Load the champion model bundle from GCS."""
+    bucket = _bucket()
+    blob = bucket.blob(MODEL_BLOB)
+    if not blob.exists():
         raise FileNotFoundError(
-            f"No registered model found ({MODEL_NAME}@{CHAMPION_ALIAS}). "
+            f"No model found at gs://{bucket.name}/{MODEL_BLOB}. "
             "Run 'python main.py' first to train and register the model."
-        ) from exc
-    return loaded.unwrap_python_model().bundle
+        )
+    with tempfile.NamedTemporaryFile(suffix=".joblib", delete=False) as f:
+        blob.download_to_filename(f.name)
+        bundle = joblib.load(f.name)
+    os.unlink(f.name)
+    return bundle

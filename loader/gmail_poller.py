@@ -20,6 +20,7 @@ from email.mime.text import MIMEText
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify
+from review import review_bp
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
@@ -47,7 +48,9 @@ GMAIL_SCOPES = [
 HDFC_SENDERS = ["alerts@hdfcbank.bank.in", "alerts@hdfcbank.net"]
 IST = timezone(timedelta(hours=5, minutes=30))
 
-app = Flask(__name__)
+_templates_dir = os.path.join(_project_root, "templates")
+app = Flask(__name__, template_folder=_templates_dir)
+app.register_blueprint(review_bp)
 
 
 # ---------------------------------------------------------------------------

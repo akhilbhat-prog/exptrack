@@ -1,3 +1,5 @@
+import os
+
 from evaluation.metrics import evaluate
 from ingestion.database import parse_database
 from models.registry import register_model
@@ -52,6 +54,7 @@ def main():
     print(processed_df[available_preview_columns].head())
 
     evaluate(processed_df)
+    os.makedirs(os.path.dirname(DEFAULT_OUTPUT_PATH), exist_ok=True)
     processed_df.to_csv(DEFAULT_OUTPUT_PATH, index=False)
     print(f"Saved processed output to {DEFAULT_OUTPUT_PATH}")
 
