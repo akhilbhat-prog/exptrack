@@ -22,7 +22,8 @@ hdfc-statement-loader/
 │   ├── db.py                       # PostgreSQL schema creation & queries
 │   ├── auth.py                     # One-time OAuth2 setup (run manually once)
 │   ├── generate_inserts.py         # Excel → SQL migration utility
-│   └── load_excel.py               # Data feed loading utility
+│   ├── load_excel.py               # Data feed loading utility
+│   └── seed_test_batch.py          # One-shot: inserts a test pending batch for UI testing
 │
 ├── templates/
 │   └── review.html                 # Batch review UI (vanilla HTML/CSS/JS)
@@ -166,7 +167,7 @@ hdfc-statement-loader/
 | `NOTIFICATION_EMAIL` | Yes | Recipient for nightly summary email |
 | `POLL_DAYS` | No | Days back to search (default: `1`) |
 | `MAX_MESSAGES` | No | Cap on messages processed (useful for testing) |
-| `PORT` | No | If set, runs Flask server; otherwise runs CLI mode |
+| `PORT` | No | Flask server port (default: `8080`) |
 | `REVIEW_TOKEN` | No | If set, all `/review` and `/api/*` routes require `?token=<value>` or `Authorization: Bearer <value>` |
 
 ### Categorizer
@@ -332,19 +333,28 @@ The old manual SQL approach has been replaced by a web UI. Current workflow:
 | Route | Description |
 |---|---|
 | `GET /review` | Serves the HTML page |
-| `GET /api/batches` | Lists non-complete batches |
+| `GET /api/batches` | Lists batches; append `?include_complete=1` to include completed ones |
 | `GET /api/batches/<id>` | Batch info + all items joined with transactions |
 | `PATCH /api/batches/<id>/items/<txn_id>` | Save category/subcategory/type for one item |
+| `DELETE /api/batches/<id>/items/<txn_id>` | Remove one item from batch, decrements row_count |
 | `POST /api/batches/<id>/mark-reviewed` | Transitions batch pending → reviewed |
 | `POST /api/batches/<id>/complete` | Inserts into data_feed_history, triggers retraining |
 | `GET /api/categories` | Returns category→subcategory map from rules.json |
 
 **UI behaviour notes:**
-- Subcategory dropdown cascades: options filter based on the selected category
-- Dropdown changes fire a PATCH immediately (auto-save, no submit button)
-- Revert button (↩) resets a row's edits back to the ML prediction values
-- Orange hint text under a dropdown signals it has been overridden from the original prediction
+- Category, subcategory, and type are free-text `<input>` elements backed by `<datalist>` suggestions — any value can be typed, not just what's in the list
+- Subcategory datalist repopulates automatically when category changes
+- Input changes fire a PATCH immediately (auto-save, no submit button)
+- Orange hint text under an input signals the value differs from the ML prediction
+- Revert button (↩) resets all three fields for a row back to ML prediction values
+- Delete button (🗑) removes the row from the batch entirely (DELETE API + live row count update)
+- Sidebar "Show all" toggle reveals completed batches; selecting a completed batch shows a read-only view with no action buttons
 - Complete Batch button is disabled until the batch is marked reviewed
+
+### Known Open Issue — Review UI Combo Dropdowns
+The category, subcategory, and type fields in the review table use `<input type="text" list="datalist">` combos to allow both free-text entry and dropdown suggestions. The dropdown suggestions are currently **not reliably appearing** across browsers — the inputs behave as plain text boxes. Root cause is under investigation (likely browser handling of datalist + table context, or the datalist not being populated before the user interacts). This needs to be fixed before the review UI can be considered fully functional.
+
+**Affected file:** `templates/review.html` — `renderItems()`, `populateCatDatalist()`, `syncSubDatalist()`
 
 ### SQL Migration Scripts
 Never run SQL migration or setup scripts against the database without first asking the user for confirmation and any required inputs (connection strings, target tables, etc.).

@@ -70,15 +70,23 @@ def review_page():
 @review_bp.route("/api/batches")
 @_require_token
 def list_batches():
+    include_complete = request.args.get("include_complete") == "1"
     conn = db.get_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("""
-                SELECT id, row_count, status, created_at
-                FROM transaction_batches
-                WHERE status != 'complete'
-                ORDER BY created_at DESC
-            """)
+            if include_complete:
+                cur.execute("""
+                    SELECT id, row_count, status, created_at
+                    FROM transaction_batches
+                    ORDER BY created_at DESC
+                """)
+            else:
+                cur.execute("""
+                    SELECT id, row_count, status, created_at
+                    FROM transaction_batches
+                    WHERE status != 'complete'
+                    ORDER BY created_at DESC
+                """)
             rows = cur.fetchall()
         return jsonify([
             {
@@ -175,6 +183,32 @@ def update_item(batch_id, txn_id):
             )
             if cur.rowcount == 0:
                 abort(404, "Item not found")
+        conn.commit()
+        return jsonify({"ok": True})
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Item delete
+# ---------------------------------------------------------------------------
+
+@review_bp.route("/api/batches/<int:batch_id>/items/<int:txn_id>", methods=["DELETE"])
+@_require_token
+def delete_item(batch_id, txn_id):
+    conn = db.get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM transaction_batch_items WHERE batch_id = %s AND transaction_id = %s",
+                (batch_id, txn_id),
+            )
+            if cur.rowcount == 0:
+                abort(404, "Item not found")
+            cur.execute(
+                "UPDATE transaction_batches SET row_count = GREATEST(row_count - 1, 0) WHERE id = %s",
+                (batch_id,),
+            )
         conn.commit()
         return jsonify({"ok": True})
     finally:

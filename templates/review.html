@@ -247,24 +247,28 @@
   .amt-debit  { color: var(--red);   font-weight: 600; }
   .amt-credit { color: var(--green); font-weight: 600; }
 
-  /* ── Inline select ── */
-  .inline-select {
+  /* ── Inline combo (input + datalist) ── */
+  .combo-wrap { position: relative; }
+  .combo-arrow {
+    position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+    font-size: 10px; color: var(--muted2); pointer-events: none; user-select: none;
+  }
+  .inline-combo {
     background: var(--surface2);
     border: 1px solid var(--border2);
     border-radius: var(--radius-sm);
     color: var(--text);
-    padding: 5px 8px;
+    padding: 5px 22px 5px 8px;
     font-size: 12px;
     font-family: var(--font);
     font-weight: 500;
-    cursor: pointer;
     outline: none;
     width: 100%;
     min-width: 90px;
     transition: border-color var(--transition), background var(--transition);
   }
-  .inline-select:focus { border-color: var(--teal); }
-  .inline-select option { background: var(--surface); }
+  .inline-combo:focus { border-color: var(--teal); }
+  .inline-combo:read-only { opacity: 0.6; cursor: default; }
 
   /* ── Pred hint ── */
   .pred-hint {
@@ -289,15 +293,27 @@
   /* ── Confidence ── */
   .confidence { font-size: 10px; color: var(--muted2); margin-top: 2px; }
 
-  /* ── Revert button ── */
-  .revert-btn {
+  /* ── Row action buttons (revert / delete) ── */
+  .row-action-btn {
     width: 26px; height: 26px; border-radius: 5px; border: none;
     background: transparent; color: var(--muted2); cursor: pointer;
     display: flex; align-items: center; justify-content: center;
     font-size: 13px; transition: var(--transition);
     font-family: var(--font);
   }
-  .revert-btn:hover { background: var(--surface2); color: var(--text); }
+  .row-action-btn:hover { background: var(--surface2); color: var(--text); }
+  .row-action-btn.delete:hover { background: var(--red-dim); color: var(--red); }
+  .row-actions { display: flex; gap: 2px; }
+
+  /* ── Sidebar toggle ── */
+  .sidebar-toggle {
+    background: none; border: none; cursor: pointer;
+    font-size: 11px; font-weight: 600; color: var(--muted);
+    padding: 0; font-family: var(--font);
+    transition: color var(--transition);
+  }
+  .sidebar-toggle:hover { color: var(--text); }
+  .sidebar-toggle.active { color: var(--teal); }
 
   /* ── Empty / loading states ── */
   .empty-state {
@@ -316,6 +332,7 @@
   }
   .pill-pending  { background: var(--yellow-dim); color: var(--yellow); }
   .pill-reviewed { background: var(--teal-dim);   color: var(--teal); }
+  .pill-complete { background: var(--border);     color: var(--muted); }
 
   /* ── Toast ── */
   .toast {
@@ -371,7 +388,10 @@
 
     <!-- Sidebar: batch list -->
     <aside class="sidebar">
-      <div class="sidebar-header">Pending Batches</div>
+      <div class="sidebar-header" style="display:flex;align-items:center;justify-content:space-between">
+        <span>Batches</span>
+        <button class="sidebar-toggle" id="btnShowAll" onclick="toggleShowAll()">Show all</button>
+      </div>
       <div id="batchList">
         <div class="loading-state">Loading…</div>
       </div>
@@ -416,7 +436,7 @@
                 <th style="width:150px">Subcategory</th>
                 <th style="width:110px">Type</th>
                 <th style="width:72px">Source</th>
-                <th style="width:32px"></th>
+                <th style="width:56px"></th>
               </tr>
             </thead>
             <tbody id="itemsBody"></tbody>
@@ -431,6 +451,15 @@
 
 <div class="toast" id="toast"></div>
 
+<datalist id="type-options">
+  <option value="expense">
+  <option value="income">
+  <option value="investment">
+  <option value="transfer">
+</datalist>
+<datalist id="cat-options"></datalist>
+<datalist id="sub-options"></datalist>
+
 <script>
 const REVIEW_TOKEN = {{ review_token | tojson }};
 
@@ -438,11 +467,14 @@ const REVIEW_TOKEN = {{ review_token | tojson }};
 let categories   = {};    // { "Food": ["Eating Out", "Ordering In"], ... }
 let currentBatch = null;  // { id, row_count, status, created_at }
 let currentItems = [];    // array of item objects
+let showAllBatches = false;
 const TYPES = ['expense', 'income', 'investment', 'transfer'];
 
 /* ── API helpers ── */
 function apiUrl(path) {
-  return REVIEW_TOKEN ? `${path}?token=${encodeURIComponent(REVIEW_TOKEN)}` : path;
+  if (!REVIEW_TOKEN) return path;
+  const sep = path.includes('?') ? '&' : '?';
+  return `${path}${sep}token=${encodeURIComponent(REVIEW_TOKEN)}`;
 }
 async function apiCall(path, opts = {}) {
   return fetch(apiUrl(path), opts);
@@ -486,10 +518,20 @@ function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
+/* ── Sidebar all-batches toggle ── */
+function toggleShowAll() {
+  showAllBatches = !showAllBatches;
+  const btn = document.getElementById('btnShowAll');
+  btn.textContent = showAllBatches ? 'Hide completed' : 'Show all';
+  btn.classList.toggle('active', showAllBatches);
+  loadBatches();
+}
+
 /* ── Batch list ── */
 async function loadBatches() {
   try {
-    const resp = await apiCall('/api/batches');
+    const url = showAllBatches ? '/api/batches?include_complete=1' : '/api/batches';
+    const resp = await apiCall(url);
     if (!resp.ok) throw new Error(resp.statusText);
     const batches = await resp.json();
     renderBatchList(batches);
@@ -555,10 +597,28 @@ function updateBatchHeader() {
   document.getElementById('batchSubtitle').textContent =
     `${currentBatch.row_count} items · ${currentBatch.status}`;
 
-  const isPending  = currentBatch.status === 'pending';
-  const isReviewed = currentBatch.status === 'reviewed';
+  const isPending    = currentBatch.status === 'pending';
+  const isReviewed   = currentBatch.status === 'reviewed';
+  const isComplete   = currentBatch.status === 'complete';
+
+  document.getElementById('btnMarkReviewed').style.display = isComplete ? 'none' : '';
+  document.getElementById('btnComplete').style.display     = isComplete ? 'none' : '';
   document.getElementById('btnMarkReviewed').disabled = !isPending;
   document.getElementById('btnComplete').disabled     = !isReviewed;
+}
+
+/* ── Datalist population ── */
+function populateCatDatalist() {
+  const dl = document.getElementById('cat-options');
+  dl.innerHTML = Object.keys(categories).sort()
+    .map(c => `<option value="${escHtml(c)}">`).join('');
+}
+
+function syncSubDatalist(txnId) {
+  const item = currentItems.find(i => i.transaction_id === txnId);
+  const cat  = item ? item.category : '';
+  document.getElementById('sub-options').innerHTML =
+    (categories[cat] || []).map(s => `<option value="${escHtml(s)}">`).join('');
 }
 
 /* ── Render items table ── */
@@ -570,25 +630,34 @@ function renderItems(items) {
     return;
   }
 
-  const allCats = Object.keys(categories).sort();
+  const isComplete = currentBatch && currentBatch.status === 'complete';
 
   body.innerHTML = items.map(item => {
     const txnId = item.transaction_id;
-    const catOpts  = buildOptions(allCats, item.category);
-    const subOpts  = buildOptions(getSubcats(item.category), item.subcategory);
-    const typeOpts = buildOptions(TYPES, item.type);
-
     const catChanged = item.category !== item.pred_category;
     const subChanged = item.subcategory !== item.pred_subcategory;
-
     const predHintCat = `<div class="pred-hint ${catChanged ? 'changed' : ''}">ML: ${escHtml(item.pred_category) || '—'}</div>`;
     const predHintSub = `<div class="pred-hint ${subChanged ? 'changed' : ''}">ML: ${escHtml(item.pred_subcategory) || '—'}</div>`;
-
     const amtClass = item.type === 'income' ? 'amt-credit' : 'amt-debit';
-    const amtSign  = (item.type === 'income') ? '+' : '−';
-
+    const amtSign  = item.type === 'income' ? '+' : '−';
     const conf = item.pred_confidence != null
       ? `<div class="confidence">${(item.pred_confidence * 100).toFixed(0)}%</div>` : '';
+
+    if (isComplete) {
+      return `<tr data-txn="${txnId}">
+        <td class="date-cell">${fmtDateShort(item.date)}</td>
+        <td>
+          <div class="merchant-name">${escHtml(item.merchant) || '—'}</div>
+          <div class="merchant-entry" title="${escHtml(item.raw_entry)}">${escHtml(item.raw_entry)}</div>
+        </td>
+        <td class="right"><span class="${amtClass}">${amtSign}${fmtAmt(item.amount)}</span></td>
+        <td><span style="font-size:12px">${escHtml(item.category) || '—'}</span>${predHintCat}</td>
+        <td><span style="font-size:12px">${escHtml(item.subcategory) || '—'}</span>${predHintSub}</td>
+        <td><span style="font-size:12px">${escHtml(item.type) || '—'}</span></td>
+        <td><span class="source-badge source-${item.pred_source || 'none'}">${item.pred_source || 'none'}</span>${conf}</td>
+        <td></td>
+      </tr>`;
+    }
 
     return `<tr data-txn="${txnId}">
       <td class="date-cell">${fmtDateShort(item.date)}</td>
@@ -596,47 +665,44 @@ function renderItems(items) {
         <div class="merchant-name">${escHtml(item.merchant) || '—'}</div>
         <div class="merchant-entry" title="${escHtml(item.raw_entry)}">${escHtml(item.raw_entry)}</div>
       </td>
-      <td class="right">
-        <span class="${amtClass}">${amtSign}${fmtAmt(item.amount)}</span>
-      </td>
+      <td class="right"><span class="${amtClass}">${amtSign}${fmtAmt(item.amount)}</span></td>
       <td>
-        <select class="inline-select" data-field="category" data-txn="${txnId}"
-                onchange="onFieldChange(this)">${catOpts}</select>
+        <div class="combo-wrap">
+          <input class="inline-combo" list="cat-options" data-field="category" data-txn="${txnId}"
+                 value="${escHtml(item.category)}" onchange="onFieldChange(this)">
+          <span class="combo-arrow">▾</span>
+        </div>
         ${predHintCat}
       </td>
       <td>
-        <select class="inline-select" data-field="subcategory" data-txn="${txnId}"
-                onchange="onFieldChange(this)">${subOpts}</select>
+        <div class="combo-wrap">
+          <input class="inline-combo" list="sub-options" data-field="subcategory" data-txn="${txnId}"
+                 value="${escHtml(item.subcategory)}"
+                 onfocus="syncSubDatalist(${txnId})" onchange="onFieldChange(this)">
+          <span class="combo-arrow">▾</span>
+        </div>
         ${predHintSub}
       </td>
       <td>
-        <select class="inline-select" data-field="type" data-txn="${txnId}"
-                onchange="onFieldChange(this)">${typeOpts}</select>
+        <div class="combo-wrap">
+          <input class="inline-combo" list="type-options" data-field="type" data-txn="${txnId}"
+                 value="${escHtml(item.type)}" onchange="onFieldChange(this)">
+          <span class="combo-arrow">▾</span>
+        </div>
       </td>
       <td>
         <span class="source-badge source-${item.pred_source || 'none'}">${item.pred_source || 'none'}</span>
         ${conf}
       </td>
       <td>
-        <button class="revert-btn" title="Revert to prediction" onclick="revertItem(${txnId})">↩</button>
+        <div class="row-actions">
+          <button class="row-action-btn" title="Revert to prediction" onclick="revertItem(${txnId})">↩</button>
+          <button class="row-action-btn delete" title="Delete row" onclick="deleteItem(${txnId})">🗑</button>
+        </div>
       </td>
     </tr>`;
   }).join('');
-}
 
-function buildOptions(opts, selected) {
-  if (!opts || !opts.length) {
-    return `<option value="${escHtml(selected)}">${escHtml(selected) || '—'}</option>`;
-  }
-  const hasSelected = opts.includes(selected);
-  let html = '';
-  if (selected && !hasSelected) {
-    html += `<option value="${escHtml(selected)}">${escHtml(selected)}</option>`;
-  }
-  html += opts.map(o =>
-    `<option value="${escHtml(o)}"${o === selected ? ' selected' : ''}>${escHtml(o)}</option>`
-  ).join('');
-  return html;
 }
 
 function getSubcats(cat) {
@@ -644,22 +710,24 @@ function getSubcats(cat) {
 }
 
 /* ── Field change → auto-save ── */
-function onFieldChange(selectEl) {
-  const txnId = parseInt(selectEl.dataset.txn);
-  const field  = selectEl.dataset.field;
-  const row    = selectEl.closest('tr');
+function onFieldChange(el) {
+  const txnId = parseInt(el.dataset.txn);
+  const field  = el.dataset.field;
+  const row    = el.closest('tr');
   const item   = currentItems.find(i => i.transaction_id === txnId);
   if (!item) return;
 
-  // Update in-memory item
-  item[field] = selectEl.value;
+  item[field] = el.value;
 
-  // If category changed, rebuild subcategory options
+  // If category changed, repopulate subcategory datalist
   if (field === 'category') {
-    const subSel = row.querySelector('[data-field="subcategory"]');
-    const newSubs = getSubcats(selectEl.value);
-    subSel.innerHTML = buildOptions(newSubs, newSubs[0] || '');
-    item.subcategory = subSel.value;
+    syncSubDatalist(txnId);
+  }
+
+  // Update pred-hint changed indicator for category and subcategory
+  if (field === 'category' || field === 'subcategory') {
+    const hint = el.closest('td').querySelector('.pred-hint');
+    if (hint) hint.classList.toggle('changed', item[field] !== (item[`pred_${field}`] || ''));
   }
 
   saveItem(txnId, item.category, item.subcategory, item.type, row);
@@ -701,19 +769,37 @@ async function revertItem(txnId) {
   item.subcategory = item.pred_subcategory || '';
   item.type        = item.pred_type        || '';
 
-  // Update selects in place
-  const catSel  = row.querySelector('[data-field="category"]');
-  const subSel  = row.querySelector('[data-field="subcategory"]');
-  const typeSel = row.querySelector('[data-field="type"]');
+  row.querySelector('[data-field="category"]').value    = item.category;
+  row.querySelector('[data-field="subcategory"]').value = item.subcategory;
+  row.querySelector('[data-field="type"]').value        = item.type;
 
-  catSel.innerHTML  = buildOptions(Object.keys(categories).sort(), item.category);
-  subSel.innerHTML  = buildOptions(getSubcats(item.category), item.subcategory);
-  typeSel.innerHTML = buildOptions(TYPES, item.type);
+  syncSubDatalist(txnId);
 
-  // Update pred hints
+  // All values now match prediction — clear changed indicators
   row.querySelectorAll('.pred-hint').forEach(el => el.classList.remove('changed'));
 
   await saveItem(txnId, item.category, item.subcategory, item.type, row);
+}
+
+/* ── Delete row from batch ── */
+async function deleteItem(txnId) {
+  if (!currentBatch) return;
+  if (!confirm('Remove this row from the batch?')) return;
+  try {
+    const resp = await apiCall(
+      `/api/batches/${currentBatch.id}/items/${txnId}`,
+      { method: 'DELETE' }
+    );
+    if (!resp.ok) throw new Error('Delete failed');
+    document.querySelector(`tr[data-txn="${txnId}"]`)?.remove();
+    currentItems = currentItems.filter(i => i.transaction_id !== txnId);
+    currentBatch.row_count = Math.max(0, currentBatch.row_count - 1);
+    updateBatchHeader();
+    showToast('Row deleted ✓');
+    await loadBatches();
+  } catch (e) {
+    showToast('Failed to delete row', 'error');
+  }
 }
 
 /* ── Mark reviewed ── */
@@ -773,7 +859,10 @@ async function init() {
 
   try {
     const resp = await apiCall('/api/categories');
-    if (resp.ok) categories = await resp.json();
+    if (resp.ok) {
+      categories = await resp.json();
+      populateCatDatalist();
+    }
   } catch (_) {}
 
   await loadBatches();

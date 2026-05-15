@@ -20,6 +20,7 @@ import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 from email.mime.text import MIMEText
+from html.parser import HTMLParser
 
 from dotenv import load_dotenv
 from google.oauth2.credentials import Credentials
@@ -80,9 +81,6 @@ def _list_messages(service, query: str) -> list[dict]:
         kwargs["pageToken"] = page_token
 
     return messages
-
-
-from html.parser import HTMLParser
 
 
 class _TextExtractor(HTMLParser):
