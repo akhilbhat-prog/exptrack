@@ -39,7 +39,7 @@ hdfc-statement-loader/
 │   ├── models/
 │   │   ├── train.py                # Hierarchical LightGBM trainer (3-stage)
 │   │   ├── predict.py              # 3-stage inference (type → category → subcategory)
-│   │   └── registry.py             # MLflow model versioning & loading
+│   │   └── registry.py             # GCS joblib model store (save/load champion bundle)
 │   ├── processing/
 │   │   ├── pipeline.py             # Main prediction orchestration
 │   │   ├── cleaner.py              # Text normalization
@@ -48,7 +48,6 @@ hdfc-statement-loader/
 │   │   └── merchant.py             # Merchant name extraction
 │   ├── evaluation/
 │   │   └── metrics.py              # Evaluation metrics
-│   └── mlruns/                     # MLflow experiment tracking data (local)
 │
 ├── tests/
 │   ├── conftest.py                 # Adds loader/ to sys.path for imports
@@ -146,7 +145,7 @@ hdfc-statement-loader/
 | `pandas` | DataFrame manipulation for training data |
 | `scikit-learn` | TF-IDF vectorization, preprocessing |
 | `lightgbm` | Hierarchical 3-stage classifier |
-| `mlflow` | Model registry & experiment tracking |
+| `google-cloud-storage` | GCS model artifact store |
 | `joblib` | Model serialization |
 | `psycopg[binary]` | PostgreSQL async driver |
 | `python-dotenv` | `.env` file loading |
@@ -173,6 +172,7 @@ hdfc-statement-loader/
 | Variable | Required | Description |
 |---|---|---|
 | `DATABASE_URL` | Yes (or individual vars) | Full Neon connection string |
+| `GCS_MODEL_BUCKET` | Yes | GCS bucket name for model storage (e.g. `hdfc-statement-loader-mlruns`) |
 | `DB_HOST` | Alt | Used if `DATABASE_URL` not set |
 | `DB_PORT` | Alt | Default: `5432` |
 | `DB_NAME` | Alt | Database name |
@@ -210,15 +210,17 @@ notes            TEXT
 
 ### `data_feed_history` — labeled training data & final categorized transactions
 ```
-id               SERIAL PRIMARY KEY
-date             DATE
-entry            TEXT
-expense          TEXT
-category         TEXT
-type             VARCHAR(20)
-amount           NUMERIC(12, 2)
-created_at       TIMESTAMPTZ DEFAULT NOW()
-UNIQUE (date, entry, amount)
+id           SERIAL PRIMARY KEY
+entry_date   DATE NOT NULL
+entry_text   TEXT NOT NULL
+sub_category TEXT
+category     TEXT
+spend_type   VARCHAR(20)
+amount       NUMERIC(12, 2) NOT NULL
+merchant     TEXT
+vpa          TEXT
+upi_ref      TEXT
+created_at   TIMESTAMPTZ DEFAULT NOW()
 ```
 
 ### `transaction_batches` — batch lifecycle management
@@ -309,7 +311,7 @@ Each format has its own `parse_*()` function. The main `parse()` entry point ret
 3. **ML model** (`models/predict.py`): 3-stage LightGBM (type → category → subcategory)
 4. **Fallback**: `"Unknown"`
 
-Model is loaded from MLflow registry (`mlruns/`). If no model is registered, `batch_process.py` will raise an error — run `categorizer/main.py` to train and register a model first.
+Model bundle is stored in GCS (`GCS_MODEL_BUCKET` env var, path `models/spend-classifier/champion.joblib`). If no model exists in GCS, `batch_process.py` will raise `FileNotFoundError` — run `python main.py` from the `categorizer/` directory with `GCS_MODEL_BUCKET` set to seed it. In Cloud Run, the service account authenticates to GCS automatically via IAM.
 
 ### Batch Review Workflow
 The old manual SQL approach has been replaced by a web UI. Current workflow:
