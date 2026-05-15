@@ -94,37 +94,48 @@ def create_data_feed_table(conn) -> None:
     with conn.cursor() as cur:
         cur.execute("""
             CREATE TABLE IF NOT EXISTS data_feed_history (
-                id         SERIAL PRIMARY KEY,
-                date       DATE NOT NULL,
-                entry      TEXT NOT NULL,
-                expense    TEXT,
-                category   TEXT,
-                type       VARCHAR(20),
-                amount     NUMERIC(12, 2) NOT NULL,
-                created_at TIMESTAMPTZ DEFAULT NOW(),
-                UNIQUE (date, entry, amount)
+                id           SERIAL PRIMARY KEY,
+                entry_date   DATE NOT NULL,
+                entry_text   TEXT NOT NULL,
+                sub_category TEXT,
+                category     TEXT,
+                spend_type   VARCHAR(20),
+                amount       NUMERIC(12, 2) NOT NULL,
+                merchant     TEXT,
+                vpa          TEXT,
+                upi_ref      TEXT,
+                created_at   TIMESTAMPTZ DEFAULT NOW()
             );
         """)
     conn.commit()
 
 
 def insert_data_feed_row(
-    conn, date, entry: str, expense: str | None, category: str | None,
-    type_: str | None, amount
+    conn,
+    entry_date,
+    entry_text: str,
+    sub_category: str | None,
+    category: str | None,
+    spend_type: str | None,
+    amount,
+    merchant: str | None = None,
+    vpa: str | None = None,
+    upi_ref: str | None = None,
 ) -> bool:
-    """Insert one row. Returns True if inserted, False if skipped (duplicate)."""
+    """Insert one row into data_feed_history. Returns True on success."""
     with conn.cursor() as cur:
         cur.execute(
             """
-            INSERT INTO data_feed_history (date, entry, expense, category, type, amount)
-            VALUES (%s, %s, %s, %s, %s, %s)
-            ON CONFLICT (date, entry, amount) DO NOTHING
+            INSERT INTO data_feed_history
+                (entry_date, entry_text, sub_category, category, spend_type,
+                 amount, merchant, vpa, upi_ref)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
-            (date, entry, expense, category, type_, amount),
+            (entry_date, entry_text, sub_category, category, spend_type,
+             amount, merchant, vpa, upi_ref),
         )
-        inserted = cur.rowcount == 1
     conn.commit()
-    return inserted
+    return True
 
 
 def find_duplicate_transaction(conn, transaction: dict) -> str | None:

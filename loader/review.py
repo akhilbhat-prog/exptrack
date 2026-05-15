@@ -236,7 +236,8 @@ def complete_batch(batch_id):
                 SELECT t.date, t.raw_entry, t.amount,
                        COALESCE(NULLIF(TRIM(tbi.category),    ''), tbi.pred_category)    AS category,
                        COALESCE(NULLIF(TRIM(tbi.subcategory), ''), tbi.pred_subcategory) AS subcategory,
-                       COALESCE(NULLIF(TRIM(tbi.type),        ''), tbi.pred_type)        AS txn_type
+                       COALESCE(NULLIF(TRIM(tbi.type),        ''), tbi.pred_type)        AS txn_type,
+                       t.merchant, t.vpa, t.upi_ref
                 FROM transaction_batch_items tbi
                 JOIN transactions t ON t.id = tbi.transaction_id
                 WHERE tbi.batch_id = %s
@@ -246,8 +247,11 @@ def complete_batch(batch_id):
             items = cur.fetchall()
 
         inserted = 0
-        for date, entry, amount, category, subcategory, txn_type in items:
-            if db.insert_data_feed_row(conn, date, entry, subcategory, category, txn_type, amount):
+        for date, entry, amount, category, subcategory, txn_type, merchant, vpa, upi_ref in items:
+            if db.insert_data_feed_row(
+                conn, date, entry, subcategory, category, txn_type, amount,
+                merchant, vpa, upi_ref,
+            ):
                 inserted += 1
 
         with conn.cursor() as cur:
