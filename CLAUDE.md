@@ -15,7 +15,8 @@ A production financial pipeline that polls HDFC Bank transaction alert emails da
 ```
 hdfc-statement-loader/
 ├── loader/                         # Gmail polling + email parsing pipeline
-│   ├── gmail_poller.py             # ENTRY POINT: Flask HTTP handler + CLI runner
+│   ├── app.py                      # ENTRY POINT: Flask app, Cloud Run trigger, review blueprint
+│   ├── gmail_poller.py             # Gmail polling logic + email parsing (CLI runner)
 │   ├── review.py                   # Flask Blueprint: batch review API (7 routes)
 │   ├── parser.py                   # Email format detection & field extraction
 │   ├── db.py                       # PostgreSQL schema creation & queries
@@ -325,7 +326,7 @@ The old manual SQL approach has been replaced by a web UI. Current workflow:
 **Review UI implementation files:**
 - `loader/review.py` — Flask Blueprint registered on the main app; all API logic is here
 - `templates/review.html` — Single-page UI served at `GET /review`
-- Blueprint is registered in `loader/gmail_poller.py` with `app.register_blueprint(review_bp)`
+- Blueprint is registered in `loader/app.py` with `app.register_blueprint(review_bp)`
 
 **Review API routes** (all in `loader/review.py`):
 | Route | Description |

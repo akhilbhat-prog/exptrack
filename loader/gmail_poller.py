@@ -1,10 +1,13 @@
 """
-Gmail poller — main entry point for the HDFC statement loader.
+Gmail poller — HDFC Bank email polling and parsing pipeline.
 
 Reads HDFC Bank alert emails from Gmail, parses them with parser.py,
 and persists the results to a Neon PostgreSQL database via db.py.
 
-Runs either as a Cloud Run Service (HTTP) or directly from the command line.
+Run directly for CLI mode (no Flask server):
+    python loader/gmail_poller.py
+
+For the Cloud Run HTTP server, see loader/app.py.
 Authentication uses OAuth2 refresh-token flow; credentials are read
 exclusively from environment variables (no token.json / credentials.json).
 """
@@ -19,8 +22,6 @@ from datetime import datetime, timedelta, timezone
 from email.mime.text import MIMEText
 
 from dotenv import load_dotenv
-from flask import Flask, jsonify
-from review import review_bp
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
@@ -47,11 +48,6 @@ GMAIL_SCOPES = [
 ]
 HDFC_SENDERS = ["alerts@hdfcbank.bank.in", "alerts@hdfcbank.net"]
 IST = timezone(timedelta(hours=5, minutes=30))
-
-_templates_dir = os.path.join(_project_root, "templates")
-app = Flask(__name__, template_folder=_templates_dir)
-app.register_blueprint(review_bp)
-
 
 # ---------------------------------------------------------------------------
 # Gmail API helpers
@@ -439,46 +435,16 @@ def run_categorization() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Flask HTTP endpoint (Cloud Run Service mode)
-# ---------------------------------------------------------------------------
-
-@app.route("/", methods=["GET", "POST"])
-def trigger():
-    service = _build_gmail_service()
-    summary = main(service)
-    run_categorization()
-    test_output = run_parser_tests()
-    send_summary_email(service, summary, test_output)
-
-    no_transactions = summary["processed"] == 0 and summary["skipped"] == 0
-    return jsonify({
-        "status": "ok" if summary["failed"] == 0 else "partial_failure",
-        "processed": summary["processed"],
-        "skipped": summary["skipped"],
-        "failed": summary["failed"],
-        "message": (
-            "No new transactions found."
-            if no_transactions
-            else f"{summary['processed']} transaction(s) processed."
-        ),
-    }), 200
-
-
-# ---------------------------------------------------------------------------
-# Entry point
+# Entry point (CLI mode)
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 0))
-    if port:
-        app.run(host="0.0.0.0", port=port)
-    else:
-        svc = _build_gmail_service()
-        summary = main(svc)
-        run_categorization()
-        test_output = run_parser_tests()
-        send_summary_email(svc, summary, test_output)
-        print(
-            f"Summary: {summary['processed']} processed, "
-            f"{summary['skipped']} skipped, {summary['failed']} failed"
-        )
+    svc = _build_gmail_service()
+    summary = main(svc)
+    run_categorization()
+    test_output = run_parser_tests()
+    send_summary_email(svc, summary, test_output)
+    print(
+        f"Summary: {summary['processed']} processed, "
+        f"{summary['skipped']} skipped, {summary['failed']} failed"
+    )

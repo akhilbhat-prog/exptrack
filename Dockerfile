@@ -12,4 +12,4 @@ COPY . .
 
 EXPOSE 8080
 
-CMD ["python", "loader/gmail_poller.py"]
+CMD ["python", "loader/app.py"]
