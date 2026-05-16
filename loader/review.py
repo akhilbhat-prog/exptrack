@@ -8,7 +8,7 @@ Routes:
   PATCH /api/batches/<id>/items/<txn_id>    — save edits (category/subcategory/type)
   POST /api/batches/<id>/mark-reviewed      — set batch status = 'reviewed'
   POST /api/batches/<id>/complete           — complete batch, trigger retraining
-  GET  /api/categories                      — category→subcategory map from rules.json
+  GET  /api/categories                      — {categories, types} merged from rules.json + data_feed_history
 
 Auth: if REVIEW_TOKEN env var is set, all routes require a matching
       ?token= query param or Authorization: Bearer <token> header.
@@ -322,18 +322,63 @@ def _trigger_retraining():
 @review_bp.route("/api/categories")
 @_require_token
 def get_categories():
-    """Return category → sorted subcategory list derived from rules.json."""
+    """Return { categories: {cat: [subcats]}, types: [...] } merged from rules.json + data_feed_history."""
+    cat_map: dict[str, set] = {}
+    type_set: set[str] = set()
+
+    # Seed from rules.json
     try:
         with open(_RULES_PATH, encoding="utf-8") as f:
             rules = json.load(f)
+        for rule in rules.values():
+            cat = rule.get("category", "")
+            sub = rule.get("subcategory", "")
+            if cat:
+                cat_map.setdefault(cat, set()).add(sub)
     except Exception:
-        return jsonify({})
+        pass
 
-    cat_map: dict[str, set] = {}
-    for rule in rules.values():
-        cat = rule.get("category", "")
-        sub = rule.get("subcategory", "")
-        if cat:
-            cat_map.setdefault(cat, set()).add(sub)
+    # Enrich from data_feed_history (the ground truth).
+    # Try new column names first; fall back to old schema (expense/type) if the
+    # table was created before the column rename migration.
+    try:
+        conn = db.get_connection()
+        try:
+            rows = None
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT DISTINCT category, sub_category, spend_type
+                        FROM data_feed_history
+                        WHERE category IS NOT NULL AND category <> ''
+                    """)
+                    rows = cur.fetchall()
+            except Exception as e:
+                conn.rollback()
+                logger.warning("data_feed_history new-schema query failed (%s); trying old schema", e)
+                try:
+                    with conn.cursor() as cur:
+                        cur.execute("""
+                            SELECT DISTINCT category, expense, type
+                            FROM data_feed_history
+                            WHERE category IS NOT NULL AND category <> ''
+                        """)
+                        rows = cur.fetchall()
+                except Exception as e2:
+                    logger.error("data_feed_history old-schema query also failed: %s", e2)
 
-    return jsonify({cat: sorted(subs) for cat, subs in sorted(cat_map.items())})
+            if rows:
+                for cat, sub, spend_type in rows:
+                    cat_map.setdefault(cat, set()).add(sub or "")
+                    if spend_type:
+                        type_set.add(spend_type)
+            else:
+                logger.info("data_feed_history returned no rows; categories will be rules.json only")
+        finally:
+            conn.close()
+    except Exception as e:
+        logger.warning("Could not connect to DB for category enrichment: %s", e)
+
+    categories = {cat: sorted(s for s in subs if s) for cat, subs in sorted(cat_map.items())}
+    types = sorted(type_set) or ["expense", "income", "investment", "transfer"]
+    return jsonify({"categories": categories, "types": types})

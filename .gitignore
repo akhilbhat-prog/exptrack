@@ -22,3 +22,12 @@ token.json
 # OS
 .DS_Store
 Thumbs.db
+
+# Data files (sensitive / generated)
+*.xlsx
+*.xls
+categorizer/data/
+ui_samples/
+
+# Claude Code
+.claude/

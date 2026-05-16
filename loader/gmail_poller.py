@@ -426,6 +426,9 @@ def run_categorization() -> None:
     Imported lazily so a missing/broken categorizer never crashes the email loader.
     """
     try:
+        _cat_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "categorizer")
+        if _cat_dir not in sys.path:
+            sys.path.insert(0, _cat_dir)
         from batch_process import cmd_process
         cmd_process()
     except Exception:

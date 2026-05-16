@@ -351,10 +351,6 @@ The old manual SQL approach has been replaced by a web UI. Current workflow:
 - Sidebar "Show all" toggle reveals completed batches; selecting a completed batch shows a read-only view with no action buttons
 - Complete Batch button is disabled until the batch is marked reviewed
 
-### Known Open Issue — Review UI Combo Dropdowns
-The category, subcategory, and type fields in the review table use `<input type="text" list="datalist">` combos to allow both free-text entry and dropdown suggestions. The dropdown suggestions are currently **not reliably appearing** across browsers — the inputs behave as plain text boxes. Root cause is under investigation (likely browser handling of datalist + table context, or the datalist not being populated before the user interacts). This needs to be fixed before the review UI can be considered fully functional.
-
-**Affected file:** `templates/review.html` — `renderItems()`, `populateCatDatalist()`, `syncSubDatalist()`
 
 ### SQL Migration Scripts
 Never run SQL migration or setup scripts against the database without first asking the user for confirmation and any required inputs (connection strings, target tables, etc.).

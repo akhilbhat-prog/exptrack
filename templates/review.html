@@ -265,10 +265,25 @@
     outline: none;
     width: 100%;
     min-width: 90px;
+    cursor: pointer;
     transition: border-color var(--transition), background var(--transition);
   }
   .inline-combo:focus { border-color: var(--teal); }
   .inline-combo:read-only { opacity: 0.6; cursor: default; }
+
+  /* ── Custom combo dropdown panel ── */
+  .dropdown-panel {
+    display: none; position: absolute; top: calc(100% + 2px); left: 0; right: 0; z-index: 1000;
+    background: var(--surface2); border: 1px solid var(--teal);
+    border-radius: var(--radius-sm); max-height: 180px; overflow-y: auto;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.5);
+  }
+  .dropdown-item {
+    padding: 6px 10px; font-size: 12px; color: var(--text);
+    cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .dropdown-item:hover, .dropdown-item.focused { background: var(--teal-dim); color: var(--teal); }
+  .dropdown-empty { padding: 6px 10px; font-size: 12px; color: var(--muted2); }
 
   /* ── Pred hint ── */
   .pred-hint {
@@ -451,15 +466,6 @@
 
 <div class="toast" id="toast"></div>
 
-<datalist id="type-options">
-  <option value="expense">
-  <option value="income">
-  <option value="investment">
-  <option value="transfer">
-</datalist>
-<datalist id="cat-options"></datalist>
-<datalist id="sub-options"></datalist>
-
 <script>
 const REVIEW_TOKEN = {{ review_token | tojson }};
 
@@ -468,7 +474,6 @@ let categories   = {};    // { "Food": ["Eating Out", "Ordering In"], ... }
 let currentBatch = null;  // { id, row_count, status, created_at }
 let currentItems = [];    // array of item objects
 let showAllBatches = false;
-const TYPES = ['expense', 'income', 'investment', 'transfer'];
 
 /* ── API helpers ── */
 function apiUrl(path) {
@@ -607,19 +612,52 @@ function updateBatchHeader() {
   document.getElementById('btnComplete').disabled     = !isReviewed;
 }
 
-/* ── Datalist population ── */
-function populateCatDatalist() {
-  const dl = document.getElementById('cat-options');
-  dl.innerHTML = Object.keys(categories).sort()
-    .map(c => `<option value="${escHtml(c)}">`).join('');
+/* ── Custom combo dropdown ── */
+let TYPE_OPTIONS = ['expense', 'income', 'investment', 'transfer'];
+function getCatOptions() { return Object.keys(categories).sort(); }
+function getSubOptions(txnId) {
+  const item = currentItems.find(i => i.transaction_id === txnId);
+  return item ? (categories[item.category] || []) : [];
 }
 
-function syncSubDatalist(txnId) {
-  const item = currentItems.find(i => i.transaction_id === txnId);
-  const cat  = item ? item.category : '';
-  document.getElementById('sub-options').innerHTML =
-    (categories[cat] || []).map(s => `<option value="${escHtml(s)}">`).join('');
+function openCombo(input, options) {
+  closeAllCombos();
+  const wrap = input.closest('.combo-wrap');
+  let panel = wrap.querySelector('.dropdown-panel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.className = 'dropdown-panel';
+    wrap.appendChild(panel);
+  }
+  input._comboOptions = options;
+  renderComboItems(panel, options, '');  // show all on open regardless of current value
+  panel.style.display = 'block';
 }
+
+function renderComboItems(panel, options, q) {
+  const filtered = q ? options.filter(o => o.toLowerCase().includes(q.toLowerCase())) : options;
+  panel.innerHTML = filtered.length
+    ? filtered.map(o => `<div class="dropdown-item" onmousedown="pickCombo(this)">${escHtml(o)}</div>`).join('')
+    : '<div class="dropdown-empty">No matches — type freely</div>';
+}
+
+function filterCombo(input) {
+  const panel = input.closest('.combo-wrap')?.querySelector('.dropdown-panel');
+  if (panel && input._comboOptions) renderComboItems(panel, input._comboOptions, input.value.trim());
+}
+
+function pickCombo(item) {
+  const wrap = item.closest('.combo-wrap');
+  const input = wrap.querySelector('input');
+  input.value = item.textContent;
+  wrap.querySelector('.dropdown-panel').style.display = 'none';
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function closeAllCombos() {
+  document.querySelectorAll('.dropdown-panel').forEach(p => p.style.display = 'none');
+}
+document.addEventListener('click', e => { if (!e.target.closest('.combo-wrap')) closeAllCombos(); });
 
 /* ── Render items table ── */
 function renderItems(items) {
@@ -668,26 +706,34 @@ function renderItems(items) {
       <td class="right"><span class="${amtClass}">${amtSign}${fmtAmt(item.amount)}</span></td>
       <td>
         <div class="combo-wrap">
-          <input class="inline-combo" list="cat-options" data-field="category" data-txn="${txnId}"
-                 value="${escHtml(item.category)}" onchange="onFieldChange(this)">
-          <span class="combo-arrow">▾</span>
+          <input class="inline-combo" data-field="category" data-txn="${txnId}"
+                 value="${escHtml(item.category)}"
+                 onfocus="openCombo(this, getCatOptions())"
+                 oninput="filterCombo(this)"
+                 onchange="onFieldChange(this)">
+          <span class="combo-arrow" onmousedown="event.preventDefault(); this.closest('.combo-wrap').querySelector('input').focus()">▾</span>
         </div>
         ${predHintCat}
       </td>
       <td>
         <div class="combo-wrap">
-          <input class="inline-combo" list="sub-options" data-field="subcategory" data-txn="${txnId}"
+          <input class="inline-combo" data-field="subcategory" data-txn="${txnId}"
                  value="${escHtml(item.subcategory)}"
-                 onfocus="syncSubDatalist(${txnId})" onchange="onFieldChange(this)">
-          <span class="combo-arrow">▾</span>
+                 onfocus="openCombo(this, getSubOptions(${txnId}))"
+                 oninput="filterCombo(this)"
+                 onchange="onFieldChange(this)">
+          <span class="combo-arrow" onmousedown="event.preventDefault(); this.closest('.combo-wrap').querySelector('input').focus()">▾</span>
         </div>
         ${predHintSub}
       </td>
       <td>
         <div class="combo-wrap">
-          <input class="inline-combo" list="type-options" data-field="type" data-txn="${txnId}"
-                 value="${escHtml(item.type)}" onchange="onFieldChange(this)">
-          <span class="combo-arrow">▾</span>
+          <input class="inline-combo" data-field="type" data-txn="${txnId}"
+                 value="${escHtml(item.type)}"
+                 onfocus="openCombo(this, TYPE_OPTIONS)"
+                 oninput="filterCombo(this)"
+                 onchange="onFieldChange(this)">
+          <span class="combo-arrow" onmousedown="event.preventDefault(); this.closest('.combo-wrap').querySelector('input').focus()">▾</span>
         </div>
       </td>
       <td>
@@ -705,10 +751,6 @@ function renderItems(items) {
 
 }
 
-function getSubcats(cat) {
-  return (categories[cat] || []);
-}
-
 /* ── Field change → auto-save ── */
 function onFieldChange(el) {
   const txnId = parseInt(el.dataset.txn);
@@ -718,11 +760,6 @@ function onFieldChange(el) {
   if (!item) return;
 
   item[field] = el.value;
-
-  // If category changed, repopulate subcategory datalist
-  if (field === 'category') {
-    syncSubDatalist(txnId);
-  }
 
   // Update pred-hint changed indicator for category and subcategory
   if (field === 'category' || field === 'subcategory') {
@@ -772,8 +809,6 @@ async function revertItem(txnId) {
   row.querySelector('[data-field="category"]').value    = item.category;
   row.querySelector('[data-field="subcategory"]').value = item.subcategory;
   row.querySelector('[data-field="type"]').value        = item.type;
-
-  syncSubDatalist(txnId);
 
   // All values now match prediction — clear changed indicators
   row.querySelectorAll('.pred-hint').forEach(el => el.classList.remove('changed'));
@@ -860,8 +895,9 @@ async function init() {
   try {
     const resp = await apiCall('/api/categories');
     if (resp.ok) {
-      categories = await resp.json();
-      populateCatDatalist();
+      const data = await resp.json();
+      categories = data.categories || {};
+      if (data.types && data.types.length) TYPE_OPTIONS = data.types;
     }
   } catch (_) {}
 
