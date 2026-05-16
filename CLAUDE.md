@@ -55,7 +55,8 @@ hdfc-statement-loader/
 │   ├── conftest.py                 # Adds loader/ to sys.path for imports
 │   ├── test_parser.py              # 40+ unit tests for email parsing
 │   ├── test_gmail_poller.py        # Integration tests (mocked)
-│   └── test_generate_inserts.py    # Migration tool tests
+│   ├── test_generate_inserts.py    # Migration tool tests
+│   └── test_review.py              # Token auth + /api/categories shape tests
 │
 ├── .github/
 │   └── workflows/
@@ -339,11 +340,12 @@ The old manual SQL approach has been replaced by a web UI. Current workflow:
 | `DELETE /api/batches/<id>/items/<txn_id>` | Remove one item from batch, decrements row_count |
 | `POST /api/batches/<id>/mark-reviewed` | Transitions batch pending → reviewed |
 | `POST /api/batches/<id>/complete` | Inserts into data_feed_history, triggers retraining |
-| `GET /api/categories` | Returns category→subcategory map from rules.json |
+| `GET /api/categories` | Returns `{categories, types}` merged from rules.json + data_feed_history |
 
 **UI behaviour notes:**
-- Category, subcategory, and type are free-text `<input>` elements backed by `<datalist>` suggestions — any value can be typed, not just what's in the list
-- Subcategory datalist repopulates automatically when category changes
+- Category, subcategory, and type use a custom combo: clicking shows a full dropdown, typing filters it, any free-text value is accepted
+- Dropdown options are sourced from `GET /api/categories` (merged rules.json + data_feed_history) and populated at page load
+- Subcategory options update automatically when category changes
 - Input changes fire a PATCH immediately (auto-save, no submit button)
 - Orange hint text under an input signals the value differs from the ML prediction
 - Revert button (↩) resets all three fields for a row back to ML prediction values
