@@ -298,9 +298,13 @@ def send_summary_email(service, summary: dict, test_output: str) -> None:
 # ---------------------------------------------------------------------------
 
 def main(service) -> dict:
-    poll_days = int(os.environ.get("POLL_DAYS", "1"))
     sender_filter = " OR ".join(f"from:{s}" for s in HDFC_SENDERS)
-    query = f'{{{sender_filter}}} newer_than:{poll_days}d'
+    after_date = os.environ.get("AFTER_DATE")  # YYYY/MM/DD — exclusive, so use day before desired start
+    if after_date:
+        query = f'{{{sender_filter}}} after:{after_date}'
+    else:
+        poll_days = int(os.environ.get("POLL_DAYS", "1"))
+        query = f'{{{sender_filter}}} newer_than:{poll_days}d'
 
     logger.info("Connecting to database …")
     conn = db.get_connection()

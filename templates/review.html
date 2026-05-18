@@ -844,7 +844,11 @@ async function markReviewed() {
   btn.disabled = true;
   try {
     const resp = await apiCall(`/api/batches/${currentBatch.id}/mark-reviewed`, { method: 'POST' });
-    if (!resp.ok) throw new Error((await resp.json()).description || 'Failed');
+    if (!resp.ok) {
+      let msg = 'Failed';
+      try { msg = (await resp.json()).error || msg; } catch (_) {}
+      throw new Error(msg);
+    }
     currentBatch.status = 'reviewed';
     updateBatchHeader();
     document.getElementById('batchSubtitle').textContent =
@@ -869,7 +873,11 @@ async function completeBatch() {
   btn.textContent = 'Completing…';
   try {
     const resp = await apiCall(`/api/batches/${currentBatch.id}/complete`, { method: 'POST' });
-    if (!resp.ok) throw new Error((await resp.json()).description || 'Failed');
+    if (!resp.ok) {
+      let msg = 'Failed';
+      try { msg = (await resp.json()).error || msg; } catch (_) {}
+      throw new Error(msg);
+    }
     const data = await resp.json();
     showToast(`Batch complete — ${data.inserted} rows saved ✓`);
 

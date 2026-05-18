@@ -28,6 +28,11 @@ Thumbs.db
 *.xls
 categorizer/data/
 ui_samples/
+ErrorShots/
+
+# One-shot utility scripts
+loader/reset_db.py
+loader/restore_feed.py
 
 # Claude Code
 .claude/

@@ -14,6 +14,7 @@ from processing.pipeline import process_dataframe
 from processing.rules import load_rules
 
 DEFAULT_RULES_PATH = Path(__file__).parent / "config" / "rules.json"
+BATCH_SIZE = 25
 
 
 def cmd_process() -> None:
@@ -32,16 +33,17 @@ def cmd_process() -> None:
     print(f"Running predictions on {len(transactions_df)} transactions...")
     processed_df = process_dataframe(transactions_df, rules=rules, memory=memory, model=model)
 
+    chunks = [processed_df.iloc[i:i + BATCH_SIZE] for i in range(0, len(processed_df), BATCH_SIZE)]
+    batch_ids = []
     with connect() as conn:
-        batch_id = create_batch(conn, row_count=len(processed_df))
-        insert_batch_items(conn, batch_id, processed_df)
+        for chunk in chunks:
+            batch_id = create_batch(conn, row_count=len(chunk))
+            insert_batch_items(conn, batch_id, chunk)
+            batch_ids.append(batch_id)
 
-    print(
-        f"\nBatch #{batch_id} created — {len(processed_df)} rows.\n"
-        f"Review and correct categories in: public.transaction_batch_items (batch_id = {batch_id})\n"
-        f"When done, set status = 'reviewed' in: public.transaction_batches (id = {batch_id})\n"
-        f"Then run: python batch_process.py --complete {batch_id}"
-    )
+    print(f"\n{len(batch_ids)} batch(es) created — {len(processed_df)} transactions total.")
+    for bid in batch_ids:
+        print(f"  Batch #{bid}")
 
 
 def cmd_complete(batch_id: int) -> None:

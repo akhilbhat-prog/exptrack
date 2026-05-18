@@ -13,6 +13,7 @@ import os
 from dotenv import load_dotenv
 from flask import Flask, jsonify
 from review import review_bp
+from werkzeug.exceptions import HTTPException
 from gmail_poller import (
     _build_gmail_service,
     main,
@@ -26,6 +27,11 @@ load_dotenv()
 _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 app = Flask(__name__, template_folder=os.path.join(_project_root, "templates"))
 app.register_blueprint(review_bp)
+
+
+@app.errorhandler(HTTPException)
+def handle_http_exception(e):
+    return jsonify({"error": e.description, "code": e.code}), e.code
 
 
 @app.route("/", methods=["GET", "POST"])
