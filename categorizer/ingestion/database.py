@@ -128,16 +128,35 @@ def insert_data_feed_history(conn: psycopg.Connection, rows: list[dict]) -> None
     Bulk-insert completed batch rows into data_feed_history.
 
     Each dict in rows must have: entry_date, entry_text, amount, category,
-    sub_category, spend_type, merchant, vpa, upi_ref.
+    sub_category, spend_type, merchant, vpa, upi_ref. New financial analysis
+    columns (time_period, cadence, divide_by, monthly_amount, shared_expense,
+    share_ratio, final_amount) are optional and default to safe values.
     """
     sql = """
         INSERT INTO public.data_feed_history
             (entry_date, entry_text, amount, category, sub_category, spend_type,
-             merchant, vpa, upi_ref)
+             merchant, vpa, upi_ref,
+             time_period, cadence, divide_by, monthly_amount,
+             shared_expense, share_ratio, final_amount)
         VALUES
             (%(entry_date)s, %(entry_text)s, %(amount)s, %(category)s,
-             %(sub_category)s, %(spend_type)s, %(merchant)s, %(vpa)s, %(upi_ref)s)
+             %(sub_category)s, %(spend_type)s, %(merchant)s, %(vpa)s, %(upi_ref)s,
+             %(time_period)s, %(cadence)s, %(divide_by)s, %(monthly_amount)s,
+             %(shared_expense)s, %(share_ratio)s, %(final_amount)s)
     """
+    filled = [
+        {
+            **r,
+            "time_period": r.get("time_period"),
+            "cadence": r.get("cadence", "O"),
+            "divide_by": r.get("divide_by", 1),
+            "monthly_amount": r.get("monthly_amount"),
+            "shared_expense": r.get("shared_expense", "N"),
+            "share_ratio": r.get("share_ratio", 1.0),
+            "final_amount": r.get("final_amount"),
+        }
+        for r in rows
+    ]
     with conn.cursor() as cur:
-        cur.executemany(sql, rows)
+        cur.executemany(sql, filled)
     conn.commit()

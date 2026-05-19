@@ -36,7 +36,11 @@ SELECT
     t.amount,
     t.merchant,
     t.vpa,
-    t.upi_ref
+    t.upi_ref,
+    tbi.cadence,
+    tbi.divide_by,
+    tbi.shared_expense,
+    tbi.share_ratio
 FROM public.transaction_batch_items tbi
 JOIN public.transactions t ON t.id = tbi.transaction_id
 WHERE tbi.batch_id = %s
@@ -87,12 +91,14 @@ def insert_batch_items(
         INSERT INTO public.transaction_batch_items
             (batch_id, transaction_id,
              pred_category, pred_subcategory, pred_type, pred_confidence, pred_source,
-             category, subcategory, type)
+             category, subcategory, type,
+             cadence, divide_by, shared_expense, share_ratio)
         VALUES
             (%(batch_id)s, %(transaction_id)s,
              %(pred_category)s, %(pred_subcategory)s, %(pred_type)s,
              %(pred_confidence)s, %(pred_source)s,
-             %(pred_category)s, %(pred_subcategory)s, %(pred_type)s)
+             %(pred_category)s, %(pred_subcategory)s, %(pred_type)s,
+             'O', 1, 'N', 1.0)
     """
     rows = [
         {
@@ -145,9 +151,15 @@ def complete_batch(conn: psycopg.Connection, batch_id: int) -> int:
     rows = []
     for item in items:
         r = dict(zip(cols, item))
+        divide_by = r.get("divide_by") or 1
+        share_ratio = float(r.get("share_ratio") or 1.0)
+        amount_val = float(r["amount"]) if r.get("amount") is not None else 0.0
+        monthly_amount = round(amount_val / divide_by, 2)
+        final_amount = round(monthly_amount * share_ratio, 2)
+        date = r["date"]
         rows.append(
             {
-                "entry_date": r["date"],
+                "entry_date": date,
                 "entry_text": r["raw_entry"],
                 "amount": r["amount"],
                 "category": r["category"],
@@ -156,6 +168,13 @@ def complete_batch(conn: psycopg.Connection, batch_id: int) -> int:
                 "merchant": r["merchant"] or "",
                 "vpa": r["vpa"] or "",
                 "upi_ref": r["upi_ref"] or "",
+                "time_period": date.strftime("%b-%Y") if date else None,
+                "cadence": r.get("cadence") or "O",
+                "divide_by": divide_by,
+                "monthly_amount": monthly_amount,
+                "shared_expense": r.get("shared_expense") or "N",
+                "share_ratio": share_ratio,
+                "final_amount": final_amount,
             }
         )
 

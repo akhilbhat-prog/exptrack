@@ -126,7 +126,8 @@ def get_batch(batch_id):
                        tbi.pred_category, tbi.pred_subcategory, tbi.pred_type,
                        tbi.pred_confidence, tbi.pred_source,
                        tbi.category, tbi.subcategory, tbi.type,
-                       t.date, t.raw_entry, t.amount, t.merchant, t.vpa
+                       t.date, t.raw_entry, t.amount, t.merchant, t.vpa,
+                       tbi.cadence, tbi.divide_by, tbi.shared_expense, tbi.share_ratio
                 FROM transaction_batch_items tbi
                 JOIN transactions t ON t.id = tbi.transaction_id
                 WHERE tbi.batch_id = %s
@@ -150,6 +151,10 @@ def get_batch(batch_id):
                 "amount":           float(r[11]) if r[11] is not None else None,
                 "merchant":         r[12],
                 "vpa":              r[13],
+                "cadence":          r[14] if r[14] is not None else "O",
+                "divide_by":        r[15] if r[15] is not None else 1,
+                "shared_expense":   r[16] if r[16] is not None else "N",
+                "share_ratio":      float(r[17]) if r[17] is not None else 1.0,
             }
             for r in rows
         ]
@@ -166,9 +171,13 @@ def get_batch(batch_id):
 @_require_token
 def update_item(batch_id, txn_id):
     data = request.get_json(force=True)
-    category   = (data.get("category")   or "").strip()
-    subcategory = (data.get("subcategory") or "").strip()
-    txn_type   = (data.get("type")        or "").strip()
+    category      = (data.get("category")      or "").strip()
+    subcategory   = (data.get("subcategory")   or "").strip()
+    txn_type      = (data.get("type")          or "").strip()
+    cadence       = (data.get("cadence")       or "O").strip()
+    divide_by     = int(data.get("divide_by") or 1)
+    shared_expense = (data.get("shared_expense") or "N").strip().upper()[:1]
+    share_ratio   = float(data.get("share_ratio") or 1.0)
 
     conn = db.get_connection()
     try:
@@ -176,10 +185,13 @@ def update_item(batch_id, txn_id):
             cur.execute(
                 """
                 UPDATE transaction_batch_items
-                SET category = %s, subcategory = %s, type = %s
+                SET category = %s, subcategory = %s, type = %s,
+                    cadence = %s, divide_by = %s, shared_expense = %s, share_ratio = %s
                 WHERE batch_id = %s AND transaction_id = %s
                 """,
-                (category, subcategory, txn_type, batch_id, txn_id),
+                (category, subcategory, txn_type,
+                 cadence, divide_by, shared_expense, share_ratio,
+                 batch_id, txn_id),
             )
             if cur.rowcount == 0:
                 abort(404, "Item not found")
@@ -271,7 +283,8 @@ def complete_batch(batch_id):
                        COALESCE(NULLIF(TRIM(tbi.category),    ''), tbi.pred_category)    AS category,
                        COALESCE(NULLIF(TRIM(tbi.subcategory), ''), tbi.pred_subcategory) AS subcategory,
                        COALESCE(NULLIF(TRIM(tbi.type),        ''), tbi.pred_type)        AS txn_type,
-                       t.merchant, t.vpa, t.upi_ref
+                       t.merchant, t.vpa, t.upi_ref,
+                       tbi.cadence, tbi.divide_by, tbi.shared_expense, tbi.share_ratio
                 FROM transaction_batch_items tbi
                 JOIN transactions t ON t.id = tbi.transaction_id
                 WHERE tbi.batch_id = %s
@@ -281,10 +294,24 @@ def complete_batch(batch_id):
             items = cur.fetchall()
 
         inserted = 0
-        for date, entry, amount, category, subcategory, txn_type, merchant, vpa, upi_ref in items:
+        for (date, entry, amount, category, subcategory, txn_type,
+             merchant, vpa, upi_ref, cadence, divide_by, shared_expense, share_ratio) in items:
+            divide_by = divide_by or 1
+            share_ratio = float(share_ratio) if share_ratio is not None else 1.0
+            amount_val = float(amount) if amount is not None else 0.0
+            monthly_amount = round(amount_val / divide_by, 2)
+            final_amount = round(monthly_amount * share_ratio, 2)
+            time_period = date.strftime("%b-%Y") if date else None
             if db.insert_data_feed_row(
                 conn, date, entry, subcategory, category, txn_type, amount,
                 merchant, vpa, upi_ref,
+                time_period=time_period,
+                cadence=cadence or "O",
+                divide_by=divide_by,
+                monthly_amount=monthly_amount,
+                shared_expense=shared_expense or "N",
+                share_ratio=share_ratio,
+                final_amount=final_amount,
             ):
                 inserted += 1
 

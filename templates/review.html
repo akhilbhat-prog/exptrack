@@ -271,6 +271,19 @@
   .inline-combo:focus { border-color: var(--teal); }
   .inline-combo:read-only { opacity: 0.6; cursor: default; }
 
+  .num-input {
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 12px;
+    padding: 4px 6px;
+    text-align: right;
+  }
+  .num-input:focus { outline: none; border-color: var(--teal); }
+  .computed-amt { font-size: 12px; color: var(--muted); }
+
   /* ── Custom combo dropdown panel ── */
   .dropdown-panel {
     display: none; position: absolute; top: calc(100% + 2px); left: 0; right: 0; z-index: 1000;
@@ -450,6 +463,12 @@
                 <th style="width:130px">Category</th>
                 <th style="width:150px">Subcategory</th>
                 <th style="width:110px">Type</th>
+                <th style="width:60px">Cadence</th>
+                <th class="right" style="width:60px">Div By</th>
+                <th style="width:52px">Shared</th>
+                <th class="right" style="width:70px">Share %</th>
+                <th class="right" style="width:90px">Mo. Amt</th>
+                <th class="right" style="width:90px">Final Amt</th>
                 <th style="width:72px">Source</th>
                 <th style="width:56px"></th>
               </tr>
@@ -664,7 +683,7 @@ function renderItems(items) {
   const body = document.getElementById('itemsBody');
   if (!items.length) {
     body.innerHTML =
-      '<tr><td colspan="8"><div class="empty-state"><span class="icon">📭</span>No items in this batch.</div></td></tr>';
+      '<tr><td colspan="14"><div class="empty-state"><span class="icon">📭</span>No items in this batch.</div></td></tr>';
     return;
   }
 
@@ -682,6 +701,10 @@ function renderItems(items) {
       ? `<div class="confidence">${(item.pred_confidence * 100).toFixed(0)}%</div>` : '';
 
     if (isComplete) {
+      const divBy = item.divide_by || 1;
+      const ratio = item.share_ratio != null ? item.share_ratio : 1.0;
+      const moAmt = item.amount != null ? (item.amount / divBy).toFixed(2) : '—';
+      const finAmt = item.amount != null ? (item.amount / divBy * ratio).toFixed(2) : '—';
       return `<tr data-txn="${txnId}">
         <td class="date-cell">${fmtDateShort(item.date)}</td>
         <td>
@@ -692,11 +715,21 @@ function renderItems(items) {
         <td><span style="font-size:12px">${escHtml(item.category) || '—'}</span>${predHintCat}</td>
         <td><span style="font-size:12px">${escHtml(item.subcategory) || '—'}</span>${predHintSub}</td>
         <td><span style="font-size:12px">${escHtml(item.type) || '—'}</span></td>
+        <td><span style="font-size:12px">${escHtml(item.cadence) || 'O'}</span></td>
+        <td class="right"><span style="font-size:12px">${divBy}</span></td>
+        <td><span style="font-size:12px">${item.shared_expense === 'Y' ? 'Y' : 'N'}</span></td>
+        <td class="right"><span style="font-size:12px">${ratio}</span></td>
+        <td class="right"><span style="font-size:12px">${moAmt}</span></td>
+        <td class="right"><span style="font-size:12px">${finAmt}</span></td>
         <td><span class="source-badge source-${item.pred_source || 'none'}">${item.pred_source || 'none'}</span>${conf}</td>
         <td></td>
       </tr>`;
     }
 
+    const divBy = item.divide_by || 1;
+    const ratio = item.share_ratio != null ? item.share_ratio : 1.0;
+    const moAmt = item.amount != null ? (item.amount / divBy).toFixed(2) : '—';
+    const finAmt = item.amount != null ? (item.amount / divBy * ratio).toFixed(2) : '—';
     return `<tr data-txn="${txnId}">
       <td class="date-cell">${fmtDateShort(item.date)}</td>
       <td>
@@ -737,6 +770,24 @@ function renderItems(items) {
         </div>
       </td>
       <td>
+        <input type="text" class="num-input" style="width:50px" data-field="cadence" data-txn="${txnId}"
+               value="${escHtml(item.cadence || 'O')}" onchange="onFieldChange(this)">
+      </td>
+      <td class="right">
+        <input type="number" class="num-input" style="width:44px" data-field="divide_by" data-txn="${txnId}"
+               value="${divBy}" min="1" step="1" onchange="onNumericFieldChange(this)">
+      </td>
+      <td>
+        <input type="checkbox" data-field="shared_expense" data-txn="${txnId}"
+               ${item.shared_expense === 'Y' ? 'checked' : ''} onchange="onFieldChange(this)">
+      </td>
+      <td class="right">
+        <input type="number" class="num-input" style="width:54px" data-field="share_ratio" data-txn="${txnId}"
+               value="${ratio}" min="0" max="1" step="0.01" onchange="onNumericFieldChange(this)">
+      </td>
+      <td class="right"><span class="computed-amt" data-computed="monthly_amount" data-txn="${txnId}">${moAmt}</span></td>
+      <td class="right"><span class="computed-amt" data-computed="final_amount" data-txn="${txnId}">${finAmt}</span></td>
+      <td>
         <span class="source-badge source-${item.pred_source || 'none'}">${item.pred_source || 'none'}</span>
         ${conf}
       </td>
@@ -752,6 +803,18 @@ function renderItems(items) {
 }
 
 /* ── Field change → auto-save ── */
+function recomputeAmounts(txnId, item, row) {
+  const divBy = item.divide_by || 1;
+  const ratio = item.share_ratio != null ? item.share_ratio : 1.0;
+  const amt   = item.amount != null ? item.amount : 0;
+  const moAmt = (amt / divBy).toFixed(2);
+  const finAmt = (amt / divBy * ratio).toFixed(2);
+  const moEl  = row.querySelector(`[data-computed="monthly_amount"][data-txn="${txnId}"]`);
+  const finEl = row.querySelector(`[data-computed="final_amount"][data-txn="${txnId}"]`);
+  if (moEl)  moEl.textContent  = moAmt;
+  if (finEl) finEl.textContent = finAmt;
+}
+
 function onFieldChange(el) {
   const txnId = parseInt(el.dataset.txn);
   const field  = el.dataset.field;
@@ -759,7 +822,11 @@ function onFieldChange(el) {
   const item   = currentItems.find(i => i.transaction_id === txnId);
   if (!item) return;
 
-  item[field] = el.value;
+  if (field === 'shared_expense') {
+    item[field] = el.checked ? 'Y' : 'N';
+  } else {
+    item[field] = el.value;
+  }
 
   // Update pred-hint changed indicator for category and subcategory
   if (field === 'category' || field === 'subcategory') {
@@ -767,10 +834,21 @@ function onFieldChange(el) {
     if (hint) hint.classList.toggle('changed', item[field] !== (item[`pred_${field}`] || ''));
   }
 
-  saveItem(txnId, item.category, item.subcategory, item.type, row);
+  saveItem(txnId, item, row);
 }
 
-async function saveItem(txnId, category, subcategory, type, row) {
+function onNumericFieldChange(el) {
+  const txnId = parseInt(el.dataset.txn);
+  const field  = el.dataset.field;
+  const row    = el.closest('tr');
+  const item   = currentItems.find(i => i.transaction_id === txnId);
+  if (!item) return;
+  item[field] = field === 'divide_by' ? parseInt(el.value) || 1 : parseFloat(el.value) || 1.0;
+  recomputeAmounts(txnId, item, row);
+  saveItem(txnId, item, row);
+}
+
+async function saveItem(txnId, item, row) {
   if (!currentBatch) return;
   row.classList.add('saving');
   try {
@@ -779,7 +857,15 @@ async function saveItem(txnId, category, subcategory, type, row) {
       {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ category, subcategory, type }),
+        body: JSON.stringify({
+          category:       item.category,
+          subcategory:    item.subcategory,
+          type:           item.type,
+          cadence:        item.cadence || 'O',
+          divide_by:      item.divide_by || 1,
+          shared_expense: item.shared_expense || 'N',
+          share_ratio:    item.share_ratio != null ? item.share_ratio : 1.0,
+        }),
       }
     );
     if (!resp.ok) throw new Error('Save failed');
@@ -813,7 +899,7 @@ async function revertItem(txnId) {
   // All values now match prediction — clear changed indicators
   row.querySelectorAll('.pred-hint').forEach(el => el.classList.remove('changed'));
 
-  await saveItem(txnId, item.category, item.subcategory, item.type, row);
+  await saveItem(txnId, item, row);
 }
 
 /* ── Delete row from batch ── */

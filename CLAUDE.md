@@ -214,17 +214,24 @@ notes            TEXT
 
 ### `data_feed_history` — labeled training data & final categorized transactions
 ```
-id           SERIAL PRIMARY KEY
-entry_date   DATE NOT NULL
-entry_text   TEXT NOT NULL
-sub_category TEXT
-category     TEXT
-spend_type   VARCHAR(20)         -- 'Expense', 'Investment', 'Saving' (capitalised)
-amount       NUMERIC(12, 2) NOT NULL
-merchant     TEXT
-vpa          TEXT
-upi_ref      TEXT
-created_at   TIMESTAMPTZ DEFAULT NOW()
+id             SERIAL PRIMARY KEY
+entry_date     DATE NOT NULL
+entry_text     TEXT NOT NULL
+sub_category   TEXT
+category       TEXT
+spend_type     VARCHAR(20)         -- 'Expense', 'Investment', 'Saving' (capitalised)
+amount         NUMERIC(12, 2) NOT NULL
+merchant       TEXT
+vpa            TEXT
+upi_ref        TEXT
+created_at     TIMESTAMPTZ DEFAULT NOW()
+time_period    VARCHAR(10)         -- e.g. 'May-2026', derived from entry_date
+cadence        VARCHAR(20) DEFAULT 'O'
+divide_by      INTEGER DEFAULT 1
+monthly_amount NUMERIC(12,2)       -- computed: amount / divide_by
+shared_expense CHAR(1) DEFAULT 'N' -- 'Y' or 'N'
+share_ratio    NUMERIC(6,4) DEFAULT 1.0
+final_amount   NUMERIC(12,2)       -- computed: monthly_amount * share_ratio
 ```
 
 ### `transaction_batches` — batch lifecycle management
@@ -248,6 +255,10 @@ pred_source      VARCHAR             -- 'memory', 'rule', 'ml', 'none'
 category         VARCHAR             -- editable by human before commit
 subcategory      VARCHAR             -- editable by human before commit
 type             VARCHAR             -- editable by human before commit
+cadence          VARCHAR(20) DEFAULT 'O'
+divide_by        INTEGER DEFAULT 1
+shared_expense   CHAR(1) DEFAULT 'N' -- 'Y' or 'N'
+share_ratio      NUMERIC(6,4) DEFAULT 1.0
 ```
 
 **Idempotency:** `processed_emails` tracks every attempted message ID (including failed ones). `transactions` has a UNIQUE constraint on `gmail_message_id`. UPI duplicates are detected by `upi_ref`; others by `(amount, date, format, merchant)`.

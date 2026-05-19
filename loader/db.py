@@ -50,6 +50,11 @@ def create_tables(conn) -> None:
                 status           VARCHAR(10),
                 notes            TEXT
             );
+
+            ALTER TABLE IF EXISTS transaction_batch_items ADD COLUMN IF NOT EXISTS cadence VARCHAR(20) DEFAULT 'O';
+            ALTER TABLE IF EXISTS transaction_batch_items ADD COLUMN IF NOT EXISTS divide_by INTEGER DEFAULT 1;
+            ALTER TABLE IF EXISTS transaction_batch_items ADD COLUMN IF NOT EXISTS shared_expense CHAR(1) DEFAULT 'N';
+            ALTER TABLE IF EXISTS transaction_batch_items ADD COLUMN IF NOT EXISTS share_ratio NUMERIC(6,4) DEFAULT 1.0;
         """)
     conn.commit()
     logger.debug("Tables verified / created.")
@@ -106,6 +111,14 @@ def create_data_feed_table(conn) -> None:
                 upi_ref      TEXT,
                 created_at   TIMESTAMPTZ DEFAULT NOW()
             );
+
+            ALTER TABLE IF EXISTS data_feed_history ADD COLUMN IF NOT EXISTS time_period VARCHAR(10);
+            ALTER TABLE IF EXISTS data_feed_history ADD COLUMN IF NOT EXISTS cadence VARCHAR(20) DEFAULT 'O';
+            ALTER TABLE IF EXISTS data_feed_history ADD COLUMN IF NOT EXISTS divide_by INTEGER DEFAULT 1;
+            ALTER TABLE IF EXISTS data_feed_history ADD COLUMN IF NOT EXISTS monthly_amount NUMERIC(12,2);
+            ALTER TABLE IF EXISTS data_feed_history ADD COLUMN IF NOT EXISTS shared_expense CHAR(1) DEFAULT 'N';
+            ALTER TABLE IF EXISTS data_feed_history ADD COLUMN IF NOT EXISTS share_ratio NUMERIC(6,4) DEFAULT 1.0;
+            ALTER TABLE IF EXISTS data_feed_history ADD COLUMN IF NOT EXISTS final_amount NUMERIC(12,2);
         """)
     conn.commit()
 
@@ -121,6 +134,13 @@ def insert_data_feed_row(
     merchant: str | None = None,
     vpa: str | None = None,
     upi_ref: str | None = None,
+    time_period: str | None = None,
+    cadence: str | None = "O",
+    divide_by: int = 1,
+    monthly_amount=None,
+    shared_expense: str | None = "N",
+    share_ratio=None,
+    final_amount=None,
 ) -> bool:
     """Insert one row into data_feed_history. Returns True on success."""
     with conn.cursor() as cur:
@@ -128,11 +148,15 @@ def insert_data_feed_row(
             """
             INSERT INTO data_feed_history
                 (entry_date, entry_text, sub_category, category, spend_type,
-                 amount, merchant, vpa, upi_ref)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 amount, merchant, vpa, upi_ref,
+                 time_period, cadence, divide_by, monthly_amount,
+                 shared_expense, share_ratio, final_amount)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (entry_date, entry_text, sub_category, category, spend_type,
-             amount, merchant, vpa, upi_ref),
+             amount, merchant, vpa, upi_ref,
+             time_period, cadence, divide_by, monthly_amount,
+             shared_expense, share_ratio, final_amount),
         )
     conn.commit()
     return True
