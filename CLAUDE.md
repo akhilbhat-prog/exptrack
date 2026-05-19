@@ -261,9 +261,22 @@ type             VARCHAR             -- editable by human before commit
 pytest tests/ -v
 ```
 
-`tests/conftest.py` adds `loader/` to `sys.path` so tests can import `parser`, `db`, etc. directly.
+`tests/conftest.py` adds both `loader/` and `categorizer/` to `sys.path`.
 
-Tests that require a real database or heavy mocking (e.g., `db.py`, `categorizer/`) are deferred — do not add database mocks to the test suite.
+**Current test files (147 tests, no DB or network required):**
+
+| File | Covers |
+|---|---|
+| `test_parser.py` | 40+ tests for all 4 email format parsers |
+| `test_gmail_poller.py` | `_strip_html`, `_get_received_at`, `_get_subject` |
+| `test_generate_inserts.py` | SQL migration utility |
+| `test_review.py` | Token auth + `/api/categories` shape (graceful DB fallback) |
+| `test_cleaner.py` | `clean_entry`, `extract_vpa_handle` |
+| `test_merchant.py` | `extract_merchant` + stopword list |
+| `test_rules.py` | `apply_rules`, Uber amount override |
+| `test_memory.py` | `MerchantMemory` lookup/update |
+
+**Deferred (require real PostgreSQL):** `db.py` functions, `categorizer/` ML pipeline and ingestion layer — do not add database mocks to the test suite.
 
 ---
 

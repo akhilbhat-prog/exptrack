@@ -69,16 +69,16 @@ on-demand HTTP requests.
 cp .env.example .env   # or create manually
 
 # 2. Install dependencies
-pip install -r requirements.txt
+pip install -r requirements.txt pytest
 
-# 3. Run the parser unit tests (no network or DB required)
-python parser.py
+# 3. Run the unit tests (no network or DB required)
+pytest tests/ -v
 
 # 4. Run the full pipeline (also sends the summary email)
-python gmail_poller.py
+python loader/gmail_poller.py
 
 # 5. Test the HTTP server locally
-PORT=8080 python gmail_poller.py
+PORT=8080 python loader/app.py
 # In another terminal:
 curl -X POST http://localhost:8080/
 ```
@@ -277,11 +277,23 @@ LIMIT 10;
 
 ```
 hdfc-statement-loader/
-├── parser.py          # Email format detection and field extraction
-├── db.py              # PostgreSQL schema, queries, idempotency helpers
-├── gmail_poller.py    # Gmail API polling, HTTP server, email notifications
-├── auth.py            # One-time OAuth2 flow to obtain refresh token
-├── Dockerfile         # python:3.12-slim image
-├── requirements.txt   # Pinned Python dependencies
+├── loader/                    # Gmail polling + email parsing pipeline
+│   ├── app.py                 # Flask app entry point (Cloud Run)
+│   ├── gmail_poller.py        # Gmail API polling and email parsing
+│   ├── review.py              # Batch review Flask Blueprint (7 routes)
+│   ├── parser.py              # Email format detection and field extraction
+│   ├── db.py                  # PostgreSQL schema, queries, idempotency helpers
+│   └── auth.py                # One-time OAuth2 flow to obtain refresh token
+├── categorizer/               # Transaction classification pipeline
+│   ├── batch_process.py       # Batch classification CLI entry point
+│   ├── main.py                # Full model training pipeline
+│   ├── processing/            # cleaner, merchant, rules, memory
+│   ├── models/                # LightGBM train/predict/registry
+│   └── config/rules.json      # Keyword → category mapping rules
+├── templates/
+│   └── review.html            # Batch review UI (vanilla HTML/CSS/JS)
+├── tests/                     # pytest suite (147 tests, no DB required)
+├── Dockerfile                 # python:3.12-slim image
+├── requirements.txt           # Loader Python dependencies
 └── README.md
 ```
