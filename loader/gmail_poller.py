@@ -229,6 +229,7 @@ def run_parser_tests() -> str:
         [sys.executable, "parser.py"],
         capture_output=True,
         text=True,
+        cwd=os.path.dirname(os.path.abspath(__file__)),
     )
     return (result.stdout + result.stderr).strip()
 
@@ -237,7 +238,7 @@ def run_parser_tests() -> str:
 # Summary email
 # ---------------------------------------------------------------------------
 
-def send_summary_email(service, summary: dict, test_output: str) -> None:
+def send_summary_email(service, summary: dict, test_output: str, categorization_status: str = "ok") -> None:
     recipient = os.environ.get("NOTIFICATION_EMAIL", "")
     if not recipient:
         logger.warning("NOTIFICATION_EMAIL not set — skipping summary email.")
@@ -277,6 +278,10 @@ def send_summary_email(service, summary: dict, test_output: str) -> None:
             )
 
     lines += [
+        "",
+        "Categorization",
+        "-" * 40,
+        categorization_status,
         "",
         "Parser Test Results",
         "-" * 40,
@@ -424,10 +429,11 @@ def main(service) -> dict:
 # Categorization (spend-tracker integration)
 # ---------------------------------------------------------------------------
 
-def run_categorization() -> None:
+def run_categorization() -> str:
     """Run the spend-tracker batch classification on any unprocessed transactions.
 
     Imported lazily so a missing/broken categorizer never crashes the email loader.
+    Returns "ok" on success or a "FAILED: <reason>" string on error.
     """
     try:
         _cat_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "categorizer")
@@ -435,8 +441,10 @@ def run_categorization() -> None:
             sys.path.insert(0, _cat_dir)
         from batch_process import cmd_process
         cmd_process()
-    except Exception:
+        return "ok"
+    except Exception as exc:
         logger.exception("Categorization batch failed — email loading was successful.")
+        return f"FAILED: {exc}"
 
 
 # ---------------------------------------------------------------------------
@@ -446,9 +454,9 @@ def run_categorization() -> None:
 if __name__ == "__main__":
     svc = _build_gmail_service()
     summary = main(svc)
-    run_categorization()
+    cat_status = run_categorization()
     test_output = run_parser_tests()
-    send_summary_email(svc, summary, test_output)
+    send_summary_email(svc, summary, test_output, categorization_status=cat_status)
     print(
         f"Summary: {summary['processed']} processed, "
         f"{summary['skipped']} skipped, {summary['failed']} failed"

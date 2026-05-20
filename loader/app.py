@@ -38,9 +38,9 @@ def handle_http_exception(e):
 def trigger():
     service = _build_gmail_service()
     summary = main(service)
-    run_categorization()
+    cat_status = run_categorization()
     test_output = run_parser_tests()
-    send_summary_email(service, summary, test_output)
+    send_summary_email(service, summary, test_output, categorization_status=cat_status)
 
     no_transactions = summary["processed"] == 0 and summary["skipped"] == 0
     return jsonify({
