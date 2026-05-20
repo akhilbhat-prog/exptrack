@@ -274,14 +274,16 @@ pytest tests/ -v
 
 `tests/conftest.py` adds both `loader/` and `categorizer/` to `sys.path`.
 
-**Current test files (147 tests, no DB or network required):**
+**Current test files (201 tests, no DB or network required):**
 
 | File | Covers |
 |---|---|
 | `test_parser.py` | 40+ tests for all 4 email format parsers |
-| `test_gmail_poller.py` | `_strip_html`, `_get_received_at`, `_get_subject` |
+| `test_gmail_poller.py` | `_strip_html`, `_get_received_at`, `_get_subject`, `run_parser_tests`, `run_categorization`, `send_summary_email` |
 | `test_generate_inserts.py` | SQL migration utility |
-| `test_review.py` | Token auth + `/api/categories` shape (graceful DB fallback) |
+| `test_review.py` | Token auth, `/api/categories` shape, all 7 review API routes (list/get/patch/delete/mark-reviewed/complete) |
+| `test_app.py` | Flask trigger route, blueprint wiring, categorization status passthrough to summary email |
+| `test_batch_process.py` | Batch pipeline: chunking logic, model load failure, `process_dataframe` call count |
 | `test_cleaner.py` | `clean_entry`, `extract_vpa_handle` |
 | `test_merchant.py` | `extract_merchant` + stopword list |
 | `test_rules.py` | `apply_rules`, Uber amount override |
@@ -297,7 +299,7 @@ Workflow: `.github/workflows/deploy.yml` — triggered on push to `main`.
 
 **Job 1 — `test`** (ubuntu-latest):
 1. Setup Python 3.12
-2. `pip install -r requirements.txt pytest`
+2. `pip install -r requirements.txt -r categorizer/requirements.txt pytest`
 3. `pytest tests/ -v`
 
 **Job 2 — `deploy`** (runs only if `test` passes):
@@ -341,6 +343,10 @@ Each format has its own `parse_*()` function. The main `parse()` entry point ret
 
 Model bundle is stored in GCS (`GCS_MODEL_BUCKET` env var, path `models/spend-classifier/champion.joblib`). If no model exists in GCS, `batch_process.py` will raise `FileNotFoundError` — run `python main.py` from the `categorizer/` directory with `GCS_MODEL_BUCKET` set to seed it. In Cloud Run, the service account authenticates to GCS automatically via IAM.
 
+**Categorization status in nightly email:** `run_categorization()` in `loader/gmail_poller.py` returns `"ok"` on success or `"FAILED: <reason>"` on exception. This status is passed to `send_summary_email()` and included in a Categorization section in the nightly summary email, making batch failures visible without requiring Cloud Run log access.
+
+**Parser test path fix:** `run_parser_tests()` uses `cwd=os.path.dirname(os.path.abspath(__file__))` so the subprocess resolves `parser.py` relative to `loader/` — required in the Docker container where `WORKDIR=/app` and `parser.py` lives at `/app/loader/parser.py`, not `/app/parser.py`.
+
 ### Batch Review Workflow
 The old manual SQL approach has been replaced by a web UI. Current workflow:
 
@@ -377,6 +383,10 @@ The old manual SQL approach has been replaced by a web UI. Current workflow:
 - Delete button (🗑) removes the row from the batch entirely (DELETE API + live row count update)
 - Sidebar "Show all" toggle reveals completed batches; selecting a completed batch shows a read-only view with no action buttons
 - Complete Batch button is disabled until the batch is marked reviewed
+- Column headers for Date, Merchant, Amount, Category, Subcategory, and Type are sortable — click to toggle asc/desc; active sort shown with ▲/▼ icon
+- First column is a checkbox for multi-select; header has a select-all checkbox
+- A fixed bulk action bar slides up from the bottom when rows are selected; requires all three of category + subcategory + type to be filled before applying bulk edit; also has a bulk delete button
+- Complete batches are fully read-only: no checkboxes, no bulk bar, no Mark Reviewed / Complete Batch buttons; the checkbox column is hidden via CSS class `batch-complete` on `<table>`
 
 
 ### SQL Migration Scripts
