@@ -219,18 +219,6 @@
   /* Hide checkbox column on complete (read-only) batches */
   table.batch-complete .chk-cell { display: none; }
 
-  /* Filter row */
-  .filter-row th {
-    padding: 4px 6px; background: var(--bg);
-    border-bottom: 1px solid var(--border);
-  }
-  .filter-input {
-    width: 100%; background: var(--surface2); border: 1px solid var(--border);
-    border-radius: 4px; color: var(--text); font-size: 11px; padding: 3px 6px;
-    font-family: var(--font); outline: none; font-weight: 400;
-  }
-  .filter-input:focus { border-color: var(--teal); }
-
   tbody tr {
     border-bottom: 1px solid var(--border);
     transition: background var(--transition);
@@ -469,16 +457,7 @@
                 <th style="width:68px">Source</th>
                 <th style="width:54px"></th>
               </tr>
-              <tr class="filter-row" id="filterRow">
-                <th></th>
-                <th><input class="filter-input" placeholder="date…" oninput="applyFilter('date', this.value)"></th>
-                <th><input class="filter-input" placeholder="merchant…" oninput="applyFilter('merchant', this.value)"></th>
-                <th></th>
-                <th><input class="filter-input" placeholder="category…" oninput="applyFilter('category', this.value)"></th>
-                <th><input class="filter-input" placeholder="subcategory…" oninput="applyFilter('subcategory', this.value)"></th>
-                <th><input class="filter-input" placeholder="type…" oninput="applyFilter('type', this.value)"></th>
-                <th></th><th></th><th></th><th></th><th></th><th></th><th></th><th></th>
-              </tr>
+
             </thead>
             <tbody id="itemsBody"></tbody>
           </table>
@@ -530,7 +509,6 @@ let currentItems  = [];
 let showAllBatches = false;
 let sortCol = null;
 let sortDir = 'asc';
-let filters = { date: '', merchant: '', category: '', subcategory: '', type: '' };
 let selectedIds = new Set();
 
 /* ── API helpers ── */
@@ -595,21 +573,9 @@ function updateSortHeaders() {
   });
 }
 
-/* ── Filtering ── */
-function applyFilter(col, val) {
-  filters[col] = val.toLowerCase().trim();
-  renderTable();
-}
-
-/* ── Compute display items (filter + sort) ── */
+/* ── Compute display items (sort) ── */
 function getDisplayItems() {
   let items = [...currentItems];
-
-  if (filters.date)        items = items.filter(i => fmtDateShort(i.date).toLowerCase().includes(filters.date));
-  if (filters.merchant)    items = items.filter(i => (i.merchant || '').toLowerCase().includes(filters.merchant));
-  if (filters.category)    items = items.filter(i => (i.category || '').toLowerCase().includes(filters.category));
-  if (filters.subcategory) items = items.filter(i => (i.subcategory || '').toLowerCase().includes(filters.subcategory));
-  if (filters.type)        items = items.filter(i => (i.type || '').toLowerCase().includes(filters.type));
 
   if (sortCol) {
     items.sort((a, b) => {
@@ -837,10 +803,7 @@ function updateBatchHeader() {
   document.getElementById('btnMarkReviewed').disabled = !isPending;
   document.getElementById('btnComplete').disabled     = !isReviewed;
 
-  // Hide checkbox column and filter row for completed batches
-  const isReadOnly = isComplete;
   document.querySelector('#batchView table').classList.toggle('batch-complete', isComplete);
-  document.getElementById('filterRow').style.display = isReadOnly ? 'none' : '';
 }
 
 /* ── Custom combo dropdown ── */
