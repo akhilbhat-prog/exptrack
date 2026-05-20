@@ -887,7 +887,7 @@ function renderItems(items) {
 
     if (isComplete) {
       return `<tr data-txn="${txnId}">
-        <td></td>
+        <td class="chk-cell"></td>
         <td class="date-cell">${fmtDateShort(item.date)}</td>
         <td>
           <div class="merchant-name">${escHtml(item.merchant) || '—'}</div>
