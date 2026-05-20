@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>History · FinTrack</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f0f14;
+    --surface: #1a1a24;
+    --surface2: #21212e;
+    --border: #2a2a38;
+    --border2: #33334a;
+    --text: #f0f0f5;
+    --muted: #7878a0;
+    --muted2: #555570;
+    --green: #22c55e;
+    --red: #ef4444;
+    --teal: #2dd4bf;
+    --blue: #60a5fa;
+    --yellow: #facc15;
+    --orange: #fb923c;
+    --green-dim: rgba(34,197,94,0.12);
+    --red-dim: rgba(239,68,68,0.12);
+    --teal-dim: rgba(45,212,191,0.12);
+    --blue-dim: rgba(96,165,250,0.12);
+    --yellow-dim: rgba(250,204,21,0.12);
+    --orange-dim: rgba(251,146,60,0.12);
+    --row-hover: #1f1f2e;
+    --font: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --radius: 10px;
+    --radius-sm: 6px;
+    --transition: 0.18s ease;
+  }
+
+  body.light {
+    --bg: #f4f4f8;
+    --surface: #ffffff;
+    --surface2: #f0f0f5;
+    --border: #e2e2ec;
+    --border2: #d0d0de;
+    --text: #111118;
+    --muted: #7070a0;
+    --muted2: #9090b8;
+    --green: #16a34a;
+    --red: #dc2626;
+    --teal: #0d9488;
+    --blue: #2563eb;
+    --yellow: #ca8a04;
+    --orange: #ea580c;
+    --green-dim: rgba(22,163,74,0.10);
+    --red-dim: rgba(220,38,38,0.10);
+    --teal-dim: rgba(13,148,136,0.10);
+    --blue-dim: rgba(37,99,235,0.10);
+    --yellow-dim: rgba(202,138,4,0.10);
+    --orange-dim: rgba(234,88,12,0.10);
+    --row-hover: #f0f0f8;
+  }
+
+  body, body * {
+    transition: background-color 0.35s ease, border-color 0.35s ease, color 0.35s ease;
+  }
+  .toggle-thumb { transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.35s ease !important; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  .page-wrapper { width: 100%; padding: 0 12px 60px; }
+
+  .site-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 0 18px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 18px;
+  }
+  .site-logo { display: flex; align-items: center; gap: 10px; }
+  .logo-icon {
+    width: 32px; height: 32px;
+    background: var(--teal);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .logo-text { font-size: 17px; font-weight: 700; letter-spacing: -0.3px; }
+  .logo-sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .header-right { display: flex; align-items: center; gap: 16px; }
+  .header-date { font-size: 13px; color: var(--muted); }
+
+  .theme-toggle {
+    display: flex; align-items: center; gap: 8px;
+    background: none; border: none; cursor: pointer; padding: 4px; border-radius: 20px;
+  }
+  .toggle-icon { font-size: 14px; line-height: 1; user-select: none; }
+  .toggle-track {
+    position: relative; width: 44px; height: 24px;
+    background: var(--border2); border-radius: 100px; border: 1px solid var(--border);
+    transition: background 0.35s ease, border-color 0.35s ease; flex-shrink: 0;
+  }
+  body.light .toggle-track { background: var(--teal); border-color: var(--teal); }
+  .toggle-thumb {
+    position: absolute; top: 2px; left: 2px; width: 18px; height: 18px;
+    border-radius: 50%; background: var(--text);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+  }
+  body.light .toggle-thumb { transform: translateX(20px); background: #ffffff; }
+
+  .content-layout {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 16px;
+    align-items: start;
+  }
+
+  .sidebar {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    position: sticky;
+    top: 12px;
+  }
+  .sidebar-header {
+    padding: 12px 14px 8px;
+    font-size: 11px; font-weight: 700; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.7px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+  }
+  .batch-item {
+    display: flex; flex-direction: column; gap: 4px;
+    padding: 10px 14px; cursor: pointer;
+    border-bottom: 1px solid var(--border);
+    transition: background var(--transition);
+  }
+  .batch-item:last-child { border-bottom: none; }
+  .batch-item:hover { background: var(--row-hover); }
+  .batch-item.active { background: var(--teal-dim); border-left: 3px solid var(--teal); padding-left: 11px; }
+  .batch-item-title { font-size: 13px; font-weight: 600; }
+  .batch-item-meta { font-size: 11px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+  .batch-empty { padding: 24px 14px; text-align: center; font-size: 12px; color: var(--muted2); }
+
+  .main-panel { min-width: 0; }
+
+  .section-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .section-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px; border-bottom: 1px solid var(--border);
+    flex-wrap: wrap; gap: 10px;
+  }
+  .section-title { font-size: 15px; font-weight: 700; letter-spacing: -0.2px; }
+  .section-subtitle { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 13px; border-radius: var(--radius-sm);
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    border: none; transition: var(--transition); font-family: var(--font);
+  }
+  .btn-ghost {
+    background: transparent; color: var(--muted);
+    border: 1px solid var(--border2);
+  }
+  .btn-ghost:hover:not(:disabled) { background: var(--surface2); color: var(--text); }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+
+  thead th {
+    padding: 8px 10px; text-align: left;
+    font-size: 11px; font-weight: 700; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.6px;
+    background: var(--surface2); border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  thead th.right { text-align: right; }
+
+  thead th.sortable { cursor: pointer; user-select: none; }
+  thead th.sortable:hover { color: var(--text); }
+  .sort-icon { display: inline-block; width: 12px; margin-left: 2px; color: var(--muted2); font-style: normal; }
+  thead th.sort-asc  .sort-icon::after { content: '▲'; color: var(--teal); }
+  thead th.sort-desc .sort-icon::after { content: '▼'; color: var(--teal); }
+
+  tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background var(--transition);
+  }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--row-hover); }
+  tbody tr.saving { opacity: 0.6; }
+  tbody tr.saved { background: var(--green-dim) !important; }
+
+  td { padding: 8px 10px; font-size: 13px; vertical-align: middle; }
+  td.right { text-align: right; }
+  td.date-cell { white-space: nowrap; color: var(--muted); font-size: 12px; }
+
+  .merchant-name { font-weight: 600; font-size: 13px; }
+  .merchant-entry { font-size: 11px; color: var(--muted2); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+
+  .combo-wrap { position: relative; }
+  .combo-arrow {
+    position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+    font-size: 10px; color: var(--muted2); pointer-events: none; user-select: none;
+  }
+  .combo-arrow.clickable { pointer-events: all; cursor: pointer; }
+  .inline-combo {
+    background: var(--surface2); border: 1px solid var(--border2);
+    border-radius: var(--radius-sm); color: var(--text);
+    padding: 5px 22px 5px 8px; font-size: 12px;
+    font-family: var(--font); font-weight: 500; outline: none;
+    width: 100%; min-width: 80px; cursor: pointer;
+    transition: border-color var(--transition), background var(--transition);
+  }
+  .inline-combo:focus { border-color: var(--teal); }
+
+  input[type=number]::-webkit-inner-spin-button,
+  input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; }
+  input[type=number] { -moz-appearance: textfield; }
+
+  .num-input {
+    background: var(--surface2); border: 1px solid var(--border2);
+    border-radius: var(--radius-sm); color: var(--text);
+    font-family: var(--font); font-size: 12px; padding: 4px 6px; text-align: right;
+  }
+  .num-input:focus { outline: none; border-color: var(--teal); }
+  .computed-amt { font-size: 12px; color: var(--muted); }
+
+  .text-input {
+    background: var(--surface2); border: 1px solid var(--border2);
+    border-radius: var(--radius-sm); color: var(--text);
+    font-family: var(--font); font-size: 12px; padding: 4px 8px;
+    width: 100%;
+  }
+  .text-input:focus { outline: none; border-color: var(--teal); }
+
+  .dropdown-panel {
+    display: none; position: absolute; top: calc(100% + 2px); left: 0; right: 0; z-index: 1000;
+    background: var(--surface2); border: 1px solid var(--teal);
+    border-radius: var(--radius-sm); max-height: 180px; overflow-y: auto;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.5);
+  }
+  .dropdown-item {
+    padding: 6px 10px; font-size: 12px; color: var(--text);
+    cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .dropdown-item:hover, .dropdown-item.focused { background: var(--teal-dim); color: var(--teal); }
+  .dropdown-empty { padding: 6px 10px; font-size: 12px; color: var(--muted2); }
+
+  .empty-state { text-align: center; padding: 48px 20px; color: var(--muted); font-size: 13px; }
+  .empty-state .icon { font-size: 36px; margin-bottom: 10px; opacity: 0.35; display: block; }
+  .loading-state { text-align: center; padding: 36px; color: var(--muted2); font-size: 12px; }
+
+  .row-chk { cursor: pointer; width: 14px; height: 14px; accent-color: var(--teal); }
+
+  .pagination-bar {
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+    padding: 12px 18px; border-top: 1px solid var(--border);
+  }
+  .page-info { font-size: 13px; color: var(--muted); min-width: 160px; text-align: center; }
+
+  .toast {
+    position: fixed; bottom: 24px; right: 24px;
+    background: var(--surface); border: 1px solid var(--border2);
+    border-left: 3px solid var(--teal); border-radius: var(--radius-sm);
+    padding: 10px 16px; font-size: 13px; font-weight: 500; color: var(--text);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    transform: translateX(110%); transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    z-index: 200;
+  }
+  .toast.show  { transform: translateX(0); }
+  .toast.error { border-left-color: var(--red); }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+</style>
+</head>
+<body>
+<div class="page-wrapper">
+
+  <header class="site-header">
+    <div class="site-logo">
+      <div class="logo-icon">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+          <polyline points="2,13 6,8 10,10 16,4" stroke="#0a0a10" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="16" cy="4" r="2" fill="#0a0a10"/>
+        </svg>
+      </div>
+      <div>
+        <div class="logo-text">FinTrack</div>
+        <div class="logo-sub">History</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="header-date" id="headerDate"></div>
+      <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle light/dark theme">
+        <span class="toggle-icon">🌙</span>
+        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        <span class="toggle-icon">☀️</span>
+      </button>
+    </div>
+  </header>
+
+  <div class="content-layout">
+
+    <aside class="sidebar">
+      <div class="sidebar-header"><span>Time Periods</span></div>
+      <div id="periodList"><div class="loading-state">Loading…</div></div>
+    </aside>
+
+    <div class="main-panel">
+
+      <div id="emptyState" class="section-card">
+        <div class="empty-state">
+          <span class="icon">📊</span>
+          Select a time period from the sidebar to browse history.
+        </div>
+      </div>
+
+      <div id="historyView" class="section-card" style="display:none">
+        <div class="section-header">
+          <div>
+            <div class="section-title" id="periodTitle"></div>
+            <div class="section-subtitle" id="periodSubtitle"></div>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table id="historyTable">
+            <thead>
+              <tr>
+                <th class="sortable" data-col="time_period" style="width:90px" onclick="sortBy('time_period')">Period <i class="sort-icon"></i></th>
+                <th class="sortable" data-col="date" style="width:76px" onclick="sortBy('date')">Date <i class="sort-icon"></i></th>
+                <th class="sortable" data-col="merchant" onclick="sortBy('merchant')">Merchant <i class="sort-icon"></i></th>
+                <th class="sortable" data-col="category" style="width:128px" onclick="sortBy('category')">Category <i class="sort-icon"></i></th>
+                <th class="sortable" data-col="sub_category" style="width:148px" onclick="sortBy('sub_category')">Subcategory <i class="sort-icon"></i></th>
+                <th class="sortable" data-col="spend_type" style="width:106px" onclick="sortBy('spend_type')">Type <i class="sort-icon"></i></th>
+                <th class="sortable right" data-col="amount" style="width:90px" onclick="sortBy('amount')">Amount <i class="sort-icon"></i></th>
+                <th style="width:72px">Cadence</th>
+                <th class="right" style="width:54px">Div By</th>
+                <th class="right" style="width:86px">Mo. Amt</th>
+                <th style="width:56px">Shared</th>
+                <th class="right" style="width:66px">Share %</th>
+                <th class="right" style="width:86px">Final Amt</th>
+              </tr>
+            </thead>
+            <tbody id="historyBody"></tbody>
+          </table>
+        </div>
+
+        <div class="pagination-bar" id="paginationBar" style="display:none">
+          <button class="btn btn-ghost" id="btnPrev" onclick="prevPage()" style="font-size:12px;padding:6px 12px">← Prev</button>
+          <span class="page-info" id="pageInfo">Page 1 of 1</span>
+          <button class="btn btn-ghost" id="btnNext" onclick="nextPage()" style="font-size:12px;padding:6px 12px">Next →</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const REVIEW_TOKEN = {{ review_token | tojson }};
+
+let categories    = {};
+let TYPE_OPTIONS  = ['Expense', 'Investment', 'Saving'];
+let CADENCE_OPTIONS = ['O', 'M', 'Q', 'A'];
+
+let currentPeriod = null;
+let currentPage   = 1;
+let totalPages    = 1;
+let totalRows     = 0;
+let currentItems  = [];
+let sortCol = null;
+let sortDir = 'asc';
+
+/* ── API helpers ── */
+function apiUrl(path) {
+  if (!REVIEW_TOKEN) return path;
+  return `${path}${path.includes('?') ? '&' : '?'}token=${encodeURIComponent(REVIEW_TOKEN)}`;
+}
+async function apiCall(path, opts = {}) { return fetch(apiUrl(path), opts); }
+
+/* ── Toast ── */
+function showToast(msg, type = 'success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast' + (type === 'error' ? ' error' : '');
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+/* ── Theme ── */
+function toggleTheme() {
+  document.body.classList.toggle('light');
+  localStorage.setItem('theme', document.body.classList.contains('light') ? 'light' : 'dark');
+}
+function setupTheme() {
+  if (localStorage.getItem('theme') === 'light') document.body.classList.add('light');
+}
+
+/* ── Format helpers ── */
+function fmtDateShort(iso) {
+  if (!iso) return '—';
+  const d = iso.length > 10 ? new Date(iso) : new Date(iso + 'T00:00:00');
+  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+}
+function fmtAmt(n) {
+  if (n == null) return '—';
+  return '₹ ' + Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
+function escHtml(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ── Sorting ── */
+function sortBy(col) {
+  if (sortCol === col) {
+    sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    sortCol = col;
+    sortDir = 'asc';
+  }
+  updateSortHeaders();
+  renderTable();
+}
+
+function updateSortHeaders() {
+  document.querySelectorAll('thead th.sortable').forEach(th => {
+    th.classList.remove('sort-asc', 'sort-desc');
+    if (th.dataset.col === sortCol) th.classList.add(sortDir === 'asc' ? 'sort-asc' : 'sort-desc');
+  });
+}
+
+function getDisplayItems() {
+  let items = [...currentItems];
+  if (sortCol) {
+    items.sort((a, b) => {
+      let va, vb;
+      switch (sortCol) {
+        case 'time_period':  va = a.time_period  || ''; vb = b.time_period  || ''; break;
+        case 'date':         va = a.date         || ''; vb = b.date         || ''; break;
+        case 'merchant':     va = (a.merchant    || '').toLowerCase(); vb = (b.merchant    || '').toLowerCase(); break;
+        case 'category':     va = (a.category    || '').toLowerCase(); vb = (b.category    || '').toLowerCase(); break;
+        case 'sub_category': va = (a.sub_category|| '').toLowerCase(); vb = (b.sub_category|| '').toLowerCase(); break;
+        case 'spend_type':   va = (a.spend_type  || '').toLowerCase(); vb = (b.spend_type  || '').toLowerCase(); break;
+        case 'amount':       va = a.amount || 0; vb = b.amount || 0; break;
+        default: return 0;
+      }
+      if (va < vb) return sortDir === 'asc' ? -1 : 1;
+      if (va > vb) return sortDir === 'asc' ?  1 : -1;
+      return 0;
+    });
+  }
+  return items;
+}
+
+/* ── Sidebar ── */
+async function loadPeriods() {
+  try {
+    const resp = await apiCall('/api/history/periods');
+    if (!resp.ok) throw new Error(resp.statusText);
+    const periods = await resp.json();
+    renderPeriodList(periods);
+    return periods;
+  } catch (e) {
+    document.getElementById('periodList').innerHTML = '<div class="batch-empty">Failed to load.</div>';
+    return [];
+  }
+}
+
+function renderPeriodList(periods) {
+  const el = document.getElementById('periodList');
+  if (!periods.length) {
+    el.innerHTML = '<div class="batch-empty">No history found.</div>';
+    return;
+  }
+  el.innerHTML = periods.map(p =>
+    `<div class="batch-item${currentPeriod === p.period ? ' active' : ''}"
+          onclick="selectPeriod('${escHtml(p.period)}')"
+          data-period="${escHtml(p.period)}">
+      <div class="batch-item-title">${escHtml(p.period)}</div>
+      <div class="batch-item-meta">${p.count} rows</div>
+    </div>`
+  ).join('');
+}
+
+function highlightSidebarItem(period) {
+  document.querySelectorAll('.batch-item').forEach(el =>
+    el.classList.toggle('active', el.dataset.period === period));
+}
+
+/* ── Period selection & pagination ── */
+async function selectPeriod(period) {
+  document.getElementById('emptyState').style.display   = 'none';
+  document.getElementById('historyView').style.display  = '';
+  document.getElementById('historyBody').innerHTML =
+    '<tr><td colspan="13"><div class="loading-state">Loading…</div></td></tr>';
+  document.getElementById('periodTitle').textContent    = period;
+  document.getElementById('periodSubtitle').textContent = '';
+  sortCol = null; sortDir = 'asc';
+  updateSortHeaders();
+  await loadPage(period, 1);
+  highlightSidebarItem(period);
+}
+
+async function loadPage(period, page) {
+  currentPeriod = period;
+  currentPage   = page;
+  try {
+    const resp = await apiCall(
+      `/api/history?period=${encodeURIComponent(period)}&page=${page}`
+    );
+    if (!resp.ok) throw new Error(resp.statusText);
+    const data = await resp.json();
+    currentItems = data.items;
+    totalPages   = data.pages;
+    totalRows    = data.total;
+    document.getElementById('periodSubtitle').textContent =
+      `${data.total} rows · page ${data.page} of ${data.pages}`;
+    renderTable();
+    renderPagination();
+  } catch (e) {
+    document.getElementById('historyBody').innerHTML =
+      '<tr><td colspan="13"><div class="empty-state"><span class="icon">⚠️</span>Failed to load history.</div></td></tr>';
+    document.getElementById('paginationBar').style.display = 'none';
+  }
+}
+
+function prevPage() {
+  if (currentPage > 1) loadPage(currentPeriod, currentPage - 1);
+}
+function nextPage() {
+  if (currentPage < totalPages) loadPage(currentPeriod, currentPage + 1);
+}
+
+function renderPagination() {
+  const bar  = document.getElementById('paginationBar');
+  const info = document.getElementById('pageInfo');
+  const prev = document.getElementById('btnPrev');
+  const next = document.getElementById('btnNext');
+  bar.style.display = totalPages > 1 ? '' : 'none';
+  if (info) info.textContent = `Page ${currentPage} of ${totalPages} · ${totalRows} rows`;
+  if (prev) prev.disabled = currentPage <= 1;
+  if (next) next.disabled = currentPage >= totalPages;
+}
+
+/* ── Table rendering ── */
+function renderTable() {
+  renderItems(getDisplayItems());
+}
+
+function renderItems(items) {
+  const body = document.getElementById('historyBody');
+  if (!items.length) {
+    body.innerHTML = '<tr><td colspan="13"><div class="empty-state"><span class="icon">📭</span>No rows in this period.</div></td></tr>';
+    return;
+  }
+  body.innerHTML = items.map(item => {
+    const rowId  = item.id;
+    const divBy  = item.divide_by || 1;
+    const ratio  = item.share_ratio != null ? item.share_ratio : 1.0;
+    const moAmt  = item.monthly_amount != null
+      ? item.monthly_amount.toFixed(2)
+      : (item.amount != null ? (item.amount / divBy).toFixed(2) : '—');
+    const finAmt = item.final_amount != null
+      ? item.final_amount.toFixed(2)
+      : (item.amount != null ? (item.amount / divBy * ratio).toFixed(2) : '—');
+
+    return `<tr data-row="${rowId}">
+      <td>
+        <input type="text" class="text-input" style="width:84px;font-size:11px"
+               data-field="time_period" data-row="${rowId}"
+               value="${escHtml(item.time_period || '')}"
+               onchange="onFieldChange(this)">
+      </td>
+      <td class="date-cell">${fmtDateShort(item.date)}</td>
+      <td>
+        <div class="merchant-name">${escHtml(item.merchant) || '—'}</div>
+        <div class="merchant-entry" title="${escHtml(item.entry_text)}">${escHtml(item.entry_text)}</div>
+      </td>
+      <td>
+        <div class="combo-wrap">
+          <input class="inline-combo" data-field="category" data-row="${rowId}"
+                 value="${escHtml(item.category)}"
+                 onfocus="openCombo(this, getCatOptions())"
+                 oninput="filterCombo(this)"
+                 onchange="onFieldChange(this)">
+          <span class="combo-arrow clickable" onmousedown="event.preventDefault();this.closest('.combo-wrap').querySelector('input').focus()">▾</span>
+        </div>
+      </td>
+      <td>
+        <div class="combo-wrap">
+          <input class="inline-combo" data-field="sub_category" data-row="${rowId}"
+                 value="${escHtml(item.sub_category)}"
+                 onfocus="openCombo(this, getSubOptions(${rowId}))"
+                 oninput="filterCombo(this)"
+                 onchange="onFieldChange(this)">
+          <span class="combo-arrow clickable" onmousedown="event.preventDefault();this.closest('.combo-wrap').querySelector('input').focus()">▾</span>
+        </div>
+      </td>
+      <td>
+        <div class="combo-wrap">
+          <input class="inline-combo" data-field="spend_type" data-row="${rowId}"
+                 value="${escHtml(item.spend_type)}"
+                 onfocus="openCombo(this, TYPE_OPTIONS)"
+                 oninput="filterCombo(this)"
+                 onchange="onFieldChange(this)">
+          <span class="combo-arrow clickable" onmousedown="event.preventDefault();this.closest('.combo-wrap').querySelector('input').focus()">▾</span>
+        </div>
+      </td>
+      <td class="right"><span style="font-weight:600;font-size:13px">${fmtAmt(item.amount)}</span></td>
+      <td>
+        <div class="combo-wrap">
+          <input class="inline-combo" style="min-width:52px" data-field="cadence" data-row="${rowId}"
+                 value="${escHtml(item.cadence || 'O')}"
+                 onfocus="openCombo(this, CADENCE_OPTIONS)"
+                 oninput="filterCombo(this)"
+                 onchange="onFieldChange(this)">
+          <span class="combo-arrow clickable" onmousedown="event.preventDefault();this.closest('.combo-wrap').querySelector('input').focus()">▾</span>
+        </div>
+      </td>
+      <td class="right">
+        <input type="text" inputmode="numeric" class="num-input" style="width:40px"
+               data-field="divide_by" data-row="${rowId}"
+               value="${divBy}"
+               onchange="onNumericFieldChange(this)">
+      </td>
+      <td class="right"><span class="computed-amt" data-computed="monthly_amount" data-row="${rowId}">${moAmt}</span></td>
+      <td style="text-align:center">
+        <input type="checkbox" class="row-chk" data-field="shared_expense" data-row="${rowId}"
+               ${item.shared_expense === 'Y' ? 'checked' : ''}
+               onchange="onFieldChange(this)">
+      </td>
+      <td class="right">
+        <input type="text" inputmode="decimal" class="num-input" style="width:50px"
+               data-field="share_ratio" data-row="${rowId}"
+               value="${ratio}"
+               onchange="onNumericFieldChange(this)">
+      </td>
+      <td class="right"><span class="computed-amt" data-computed="final_amount" data-row="${rowId}">${finAmt}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+/* ── Custom combo dropdown ── */
+function getCatOptions() { return Object.keys(categories).sort(); }
+function getSubOptions(rowId) {
+  const item = currentItems.find(i => i.id === rowId);
+  return item ? (categories[item.category] || []) : [];
+}
+
+function openCombo(input, options) {
+  closeAllCombos();
+  const wrap  = input.closest('.combo-wrap');
+  let panel   = wrap.querySelector('.dropdown-panel');
+  if (!panel) { panel = document.createElement('div'); panel.className = 'dropdown-panel'; wrap.appendChild(panel); }
+  input._comboOptions = options;
+  renderComboItems(panel, options, '');
+  panel.style.display = 'block';
+}
+
+function renderComboItems(panel, options, q) {
+  const filtered = q ? options.filter(o => o.toLowerCase().includes(q.toLowerCase())) : options;
+  panel.innerHTML = filtered.length
+    ? filtered.map(o => `<div class="dropdown-item" onmousedown="pickCombo(this)">${escHtml(o)}</div>`).join('')
+    : '<div class="dropdown-empty">No matches — type freely</div>';
+}
+
+function filterCombo(input) {
+  const panel = input.closest('.combo-wrap')?.querySelector('.dropdown-panel');
+  if (panel && input._comboOptions) renderComboItems(panel, input._comboOptions, input.value.trim());
+}
+
+function pickCombo(item) {
+  const wrap  = item.closest('.combo-wrap');
+  const input = wrap.querySelector('input');
+  input.value = item.textContent;
+  wrap.querySelector('.dropdown-panel').style.display = 'none';
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function closeAllCombos() {
+  document.querySelectorAll('.dropdown-panel').forEach(p => p.style.display = 'none');
+}
+document.addEventListener('click', e => { if (!e.target.closest('.combo-wrap')) closeAllCombos(); });
+
+/* ── Field change → auto-save ── */
+function recomputeAmounts(rowId, item, row) {
+  const divBy = item.divide_by || 1;
+  const ratio = item.share_ratio != null ? item.share_ratio : 1.0;
+  const amt   = item.amount != null ? item.amount : 0;
+  const moEl  = row.querySelector(`[data-computed="monthly_amount"][data-row="${rowId}"]`);
+  const finEl = row.querySelector(`[data-computed="final_amount"][data-row="${rowId}"]`);
+  if (moEl)  moEl.textContent  = (amt / divBy).toFixed(2);
+  if (finEl) finEl.textContent = (amt / divBy * ratio).toFixed(2);
+}
+
+function onFieldChange(el) {
+  const rowId = parseInt(el.dataset.row);
+  const field = el.dataset.field;
+  const row   = el.closest('tr');
+  const item  = currentItems.find(i => i.id === rowId);
+  if (!item) return;
+  if (field === 'shared_expense') {
+    item[field] = el.checked ? 'Y' : 'N';
+  } else {
+    item[field] = el.value;
+  }
+  saveItem(rowId, item, row);
+}
+
+function onNumericFieldChange(el) {
+  const rowId = parseInt(el.dataset.row);
+  const field = el.dataset.field;
+  const row   = el.closest('tr');
+  const item  = currentItems.find(i => i.id === rowId);
+  if (!item) return;
+  item[field] = field === 'divide_by' ? (parseInt(el.value) || 1) : (parseFloat(el.value) || 1.0);
+  recomputeAmounts(rowId, item, row);
+  saveItem(rowId, item, row);
+}
+
+async function saveItem(rowId, item, row) {
+  row.classList.add('saving');
+  try {
+    const resp = await apiCall(`/api/history/${rowId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        time_period:    item.time_period,
+        category:       item.category,
+        sub_category:   item.sub_category,
+        spend_type:     item.spend_type,
+        cadence:        item.cadence || 'O',
+        divide_by:      item.divide_by || 1,
+        shared_expense: item.shared_expense || 'N',
+        share_ratio:    item.share_ratio != null ? item.share_ratio : 1.0,
+      }),
+    });
+    if (!resp.ok) throw new Error('Save failed');
+    const data = await resp.json();
+    const moEl  = row.querySelector(`[data-computed="monthly_amount"][data-row="${rowId}"]`);
+    const finEl = row.querySelector(`[data-computed="final_amount"][data-row="${rowId}"]`);
+    if (moEl  && data.monthly_amount != null) moEl.textContent  = data.monthly_amount.toFixed(2);
+    if (finEl && data.final_amount   != null) finEl.textContent = data.final_amount.toFixed(2);
+    row.classList.remove('saving');
+    flashSaved(row);
+  } catch (e) {
+    row.classList.remove('saving');
+    showToast('Failed to save ✗', 'error');
+  }
+}
+
+function flashSaved(row) {
+  row.classList.add('saved');
+  setTimeout(() => row.classList.remove('saved'), 1000);
+}
+
+/* ── Init ── */
+async function init() {
+  setupTheme();
+  document.getElementById('headerDate').textContent =
+    new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+  try {
+    const resp = await apiCall('/api/categories');
+    if (resp.ok) {
+      const data = await resp.json();
+      categories = data.categories || {};
+    }
+  } catch (_) {}
+
+  const periods = await loadPeriods();
+  if (periods.length) await selectPeriod(periods[0].period);
+}
+
+init();
+</script>
+</body>
+</html>

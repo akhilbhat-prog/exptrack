@@ -162,6 +162,117 @@ def insert_data_feed_row(
     return True
 
 
+def get_history_periods(conn) -> list[dict]:
+    """Return [{period, count}, ...] sorted newest-first by calendar month.
+
+    Derives period from entry_date for rows where time_period is unset.
+    """
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT
+                COALESCE(NULLIF(TRIM(time_period), ''), TO_CHAR(entry_date, 'Mon-YYYY')) AS period,
+                COUNT(*) AS cnt
+            FROM data_feed_history
+            WHERE entry_date IS NOT NULL
+            GROUP BY COALESCE(NULLIF(TRIM(time_period), ''), TO_CHAR(entry_date, 'Mon-YYYY'))
+            ORDER BY TO_DATE(
+                COALESCE(NULLIF(TRIM(time_period), ''), TO_CHAR(entry_date, 'Mon-YYYY')),
+                'Mon-YYYY'
+            ) DESC
+        """)
+        rows = cur.fetchall()
+    return [{"period": r[0], "count": r[1]} for r in rows]
+
+
+def get_history_page(conn, period: str, page: int, page_size: int = 50) -> dict:
+    """Return {items, total, page, pages} for one time_period page."""
+    offset = (page - 1) * page_size
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT COUNT(*) FROM data_feed_history
+               WHERE COALESCE(NULLIF(TRIM(time_period), ''), TO_CHAR(entry_date, 'Mon-YYYY')) = %s""",
+            (period,),
+        )
+        total = cur.fetchone()[0]
+        cur.execute("""
+            SELECT id, entry_date, time_period, merchant, entry_text, amount,
+                   category, sub_category, spend_type,
+                   cadence, divide_by, monthly_amount,
+                   shared_expense, share_ratio, final_amount
+            FROM data_feed_history
+            WHERE COALESCE(NULLIF(TRIM(time_period), ''), TO_CHAR(entry_date, 'Mon-YYYY')) = %s
+            ORDER BY entry_date ASC, id ASC
+            LIMIT %s OFFSET %s
+        """, (period, page_size, offset))
+        rows = cur.fetchall()
+    items = [
+        {
+            "id":             r[0],
+            "date":           r[1].isoformat() if r[1] else None,
+            "time_period":    r[2],
+            "merchant":       r[3],
+            "entry_text":     r[4],
+            "amount":         float(r[5]) if r[5] is not None else None,
+            "category":       r[6] or "",
+            "sub_category":   r[7] or "",
+            "spend_type":     r[8] or "",
+            "cadence":        r[9] if r[9] is not None else "O",
+            "divide_by":      r[10] if r[10] is not None else 1,
+            "monthly_amount": float(r[11]) if r[11] is not None else None,
+            "shared_expense": r[12] if r[12] is not None else "N",
+            "share_ratio":    float(r[13]) if r[13] is not None else 1.0,
+            "final_amount":   float(r[14]) if r[14] is not None else None,
+        }
+        for r in rows
+    ]
+    pages = max(1, (total + page_size - 1) // page_size)
+    return {"items": items, "total": total, "page": page, "pages": pages}
+
+
+def update_history_row(conn, row_id: int, fields: dict) -> dict | None:
+    """Update editable fields of a data_feed_history row. Returns computed amounts or None if not found."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT amount FROM data_feed_history WHERE id = %s", (row_id,))
+        row = cur.fetchone()
+        if not row:
+            return None
+        amount = float(row[0]) if row[0] is not None else 0.0
+        divide_by = max(1, int(fields.get("divide_by") or 1))
+        share_ratio = float(fields.get("share_ratio") or 1.0)
+        monthly_amount = round(amount / divide_by, 2)
+        final_amount = round(monthly_amount * share_ratio, 2)
+        cur.execute("""
+            UPDATE data_feed_history
+               SET time_period    = %s,
+                   category       = %s,
+                   sub_category   = %s,
+                   spend_type     = %s,
+                   cadence        = %s,
+                   divide_by      = %s,
+                   shared_expense = %s,
+                   share_ratio    = %s,
+                   monthly_amount = %s,
+                   final_amount   = %s
+             WHERE id = %s
+        """, (
+            fields.get("time_period"),
+            fields.get("category") or None,
+            fields.get("sub_category") or None,
+            fields.get("spend_type") or None,
+            fields.get("cadence") or "O",
+            divide_by,
+            fields.get("shared_expense") or "N",
+            share_ratio,
+            monthly_amount,
+            final_amount,
+            row_id,
+        ))
+        if cur.rowcount == 0:
+            return None
+    conn.commit()
+    return {"monthly_amount": monthly_amount, "final_amount": final_amount}
+
+
 def find_duplicate_transaction(conn, transaction: dict) -> str | None:
     """
     Return the gmail_message_id of an existing transaction that matches the
