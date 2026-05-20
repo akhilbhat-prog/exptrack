@@ -216,6 +216,9 @@
   thead th.sort-asc  .sort-icon::after { content: '▲'; color: var(--teal); }
   thead th.sort-desc .sort-icon::after { content: '▼'; color: var(--teal); }
 
+  /* Hide checkbox column on complete (read-only) batches */
+  table.batch-complete .chk-cell { display: none; }
+
   /* Filter row */
   .filter-row th {
     padding: 4px 6px; background: var(--bg);
@@ -836,7 +839,7 @@ function updateBatchHeader() {
 
   // Hide checkbox column and filter row for completed batches
   const isReadOnly = isComplete;
-  document.getElementById('chk-all').closest('th').style.display = isReadOnly ? 'none' : '';
+  document.querySelector('#batchView table').classList.toggle('batch-complete', isComplete);
   document.getElementById('filterRow').style.display = isReadOnly ? 'none' : '';
 }
 
