@@ -79,16 +79,16 @@
   }
 
   /* ── Layout ── */
-  .page-wrapper { max-width: 1440px; margin: 0 auto; padding: 0 24px 60px; }
+  .page-wrapper { width: 100%; padding: 0 12px 80px; }
 
   /* ── Header ── */
   .site-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 20px 0 24px;
+    padding: 16px 0 18px;
     border-bottom: 1px solid var(--border);
-    margin-bottom: 24px;
+    margin-bottom: 18px;
   }
   .site-logo { display: flex; align-items: center; gap: 10px; }
   .logo-icon {
@@ -124,8 +124,8 @@
   /* ── Two-column content ── */
   .content-layout {
     display: grid;
-    grid-template-columns: 240px 1fr;
-    gap: 20px;
+    grid-template-columns: 220px 1fr;
+    gap: 16px;
     align-items: start;
   }
 
@@ -136,33 +136,28 @@
     border-radius: var(--radius);
     overflow: hidden;
     position: sticky;
-    top: 20px;
+    top: 12px;
   }
   .sidebar-header {
-    padding: 14px 16px 10px;
-    font-size: 11px;
-    font-weight: 700;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 0.7px;
+    padding: 12px 14px 8px;
+    font-size: 11px; font-weight: 700; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.7px;
     border-bottom: 1px solid var(--border);
     background: var(--surface2);
+    display: flex; align-items: center; justify-content: space-between;
   }
   .batch-item {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding: 12px 16px;
-    cursor: pointer;
+    display: flex; flex-direction: column; gap: 4px;
+    padding: 10px 14px; cursor: pointer;
     border-bottom: 1px solid var(--border);
     transition: background var(--transition);
   }
   .batch-item:last-child { border-bottom: none; }
   .batch-item:hover { background: var(--row-hover); }
-  .batch-item.active { background: var(--teal-dim); border-left: 3px solid var(--teal); padding-left: 13px; }
+  .batch-item.active { background: var(--teal-dim); border-left: 3px solid var(--teal); padding-left: 11px; }
   .batch-item-title { font-size: 13px; font-weight: 600; }
   .batch-item-meta { font-size: 11px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
-  .batch-empty { padding: 28px 16px; text-align: center; font-size: 12px; color: var(--muted2); }
+  .batch-empty { padding: 24px 14px; text-align: center; font-size: 12px; color: var(--muted2); }
 
   /* ── Main panel ── */
   .main-panel { min-width: 0; }
@@ -175,13 +170,9 @@
     overflow: hidden;
   }
   .section-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 18px 22px;
-    border-bottom: 1px solid var(--border);
-    flex-wrap: wrap;
-    gap: 12px;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px; border-bottom: 1px solid var(--border);
+    flex-wrap: wrap; gap: 10px;
   }
   .section-title { font-size: 15px; font-weight: 700; letter-spacing: -0.2px; }
   .section-subtitle { font-size: 12px; color: var(--muted); margin-top: 2px; }
@@ -190,7 +181,7 @@
   /* ── Buttons ── */
   .btn {
     display: inline-flex; align-items: center; gap: 6px;
-    padding: 8px 14px; border-radius: var(--radius-sm);
+    padding: 7px 13px; border-radius: var(--radius-sm);
     font-size: 13px; font-weight: 600; cursor: pointer;
     border: none; transition: var(--transition); font-family: var(--font);
   }
@@ -208,14 +199,34 @@
   /* ── Table ── */
   .table-wrap { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; }
+
   thead th {
-    padding: 10px 12px; text-align: left;
+    padding: 8px 10px; text-align: left;
     font-size: 11px; font-weight: 700; color: var(--muted);
     text-transform: uppercase; letter-spacing: 0.6px;
     background: var(--surface2); border-bottom: 1px solid var(--border);
     white-space: nowrap;
   }
   thead th.right { text-align: right; }
+
+  /* Sortable headers */
+  thead th.sortable { cursor: pointer; user-select: none; }
+  thead th.sortable:hover { color: var(--text); }
+  .sort-icon { display: inline-block; width: 12px; margin-left: 2px; color: var(--muted2); font-style: normal; }
+  thead th.sort-asc  .sort-icon::after { content: '▲'; color: var(--teal); }
+  thead th.sort-desc .sort-icon::after { content: '▼'; color: var(--teal); }
+
+  /* Filter row */
+  .filter-row th {
+    padding: 4px 6px; background: var(--bg);
+    border-bottom: 1px solid var(--border);
+  }
+  .filter-input {
+    width: 100%; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 4px; color: var(--text); font-size: 11px; padding: 3px 6px;
+    font-family: var(--font); outline: none; font-weight: 400;
+  }
+  .filter-input:focus { border-color: var(--teal); }
 
   tbody tr {
     border-bottom: 1px solid var(--border);
@@ -224,62 +235,54 @@
   tbody tr:last-child { border-bottom: none; }
   tbody tr:hover { background: var(--row-hover); }
   tbody tr.saving { opacity: 0.6; }
-  tbody tr.saved td:first-child::before {
-    content: '✓';
-    position: absolute;
-    left: 4px;
-    font-size: 10px;
-    color: var(--green);
-  }
-  tbody tr.saved { position: relative; }
+  tbody tr.saved { background: var(--green-dim) !important; }
 
-  td {
-    padding: 10px 12px; font-size: 13px; vertical-align: middle;
-  }
+  td { padding: 8px 10px; font-size: 13px; vertical-align: middle; }
   td.right { text-align: right; }
   td.date-cell { white-space: nowrap; color: var(--muted); font-size: 12px; }
+  td.chk-cell { text-align: center; width: 36px; }
+
+  /* Checkbox */
+  .row-chk, #chk-all {
+    cursor: pointer; width: 14px; height: 14px;
+    accent-color: var(--teal); flex-shrink: 0;
+  }
 
   /* ── Merchant cell ── */
   .merchant-name { font-weight: 600; font-size: 13px; }
-  .merchant-entry { font-size: 11px; color: var(--muted2); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+  .merchant-entry { font-size: 11px; color: var(--muted2); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px; }
 
   /* ── Amount ── */
   .amt-debit  { color: var(--red);   font-weight: 600; }
   .amt-credit { color: var(--green); font-weight: 600; }
 
-  /* ── Inline combo (input + datalist) ── */
+  /* ── Inline combo ── */
   .combo-wrap { position: relative; }
   .combo-arrow {
     position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
     font-size: 10px; color: var(--muted2); pointer-events: none; user-select: none;
   }
+  .combo-arrow.clickable { pointer-events: all; cursor: pointer; }
   .inline-combo {
-    background: var(--surface2);
-    border: 1px solid var(--border2);
-    border-radius: var(--radius-sm);
-    color: var(--text);
-    padding: 5px 22px 5px 8px;
-    font-size: 12px;
-    font-family: var(--font);
-    font-weight: 500;
-    outline: none;
-    width: 100%;
-    min-width: 90px;
-    cursor: pointer;
+    background: var(--surface2); border: 1px solid var(--border2);
+    border-radius: var(--radius-sm); color: var(--text);
+    padding: 5px 22px 5px 8px; font-size: 12px;
+    font-family: var(--font); font-weight: 500; outline: none;
+    width: 100%; min-width: 90px; cursor: pointer;
     transition: border-color var(--transition), background var(--transition);
   }
   .inline-combo:focus { border-color: var(--teal); }
   .inline-combo:read-only { opacity: 0.6; cursor: default; }
 
+  /* No steppers on number inputs */
+  input[type=number]::-webkit-inner-spin-button,
+  input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; }
+  input[type=number] { -moz-appearance: textfield; }
+
   .num-input {
-    background: var(--surface2);
-    border: 1px solid var(--border2);
-    border-radius: var(--radius-sm);
-    color: var(--text);
-    font-family: var(--font);
-    font-size: 12px;
-    padding: 4px 6px;
-    text-align: right;
+    background: var(--surface2); border: 1px solid var(--border2);
+    border-radius: var(--radius-sm); color: var(--text);
+    font-family: var(--font); font-size: 12px; padding: 4px 6px; text-align: right;
   }
   .num-input:focus { outline: none; border-color: var(--teal); }
   .computed-amt { font-size: 12px; color: var(--muted); }
@@ -299,12 +302,7 @@
   .dropdown-empty { padding: 6px 10px; font-size: 12px; color: var(--muted2); }
 
   /* ── Pred hint ── */
-  .pred-hint {
-    font-size: 10px;
-    color: var(--muted2);
-    margin-top: 3px;
-    white-space: nowrap;
-  }
+  .pred-hint { font-size: 10px; color: var(--muted2); margin-top: 3px; white-space: nowrap; }
   .pred-hint.changed { color: var(--orange); }
 
   /* ── Source badge ── */
@@ -313,21 +311,19 @@
     padding: 2px 7px; border-radius: 100px;
     font-size: 10px; font-weight: 700; letter-spacing: 0.3px; white-space: nowrap;
   }
-  .source-memory   { background: var(--teal-dim);   color: var(--teal); }
-  .source-rule     { background: var(--blue-dim);   color: var(--blue); }
-  .source-ml       { background: var(--yellow-dim); color: var(--yellow); }
-  .source-none     { background: var(--border);     color: var(--muted); }
+  .source-memory { background: var(--teal-dim);   color: var(--teal); }
+  .source-rule   { background: var(--blue-dim);   color: var(--blue); }
+  .source-ml     { background: var(--yellow-dim); color: var(--yellow); }
+  .source-none   { background: var(--border);     color: var(--muted); }
 
-  /* ── Confidence ── */
   .confidence { font-size: 10px; color: var(--muted2); margin-top: 2px; }
 
-  /* ── Row action buttons (revert / delete) ── */
+  /* ── Row action buttons ── */
   .row-action-btn {
     width: 26px; height: 26px; border-radius: 5px; border: none;
     background: transparent; color: var(--muted2); cursor: pointer;
     display: flex; align-items: center; justify-content: center;
-    font-size: 13px; transition: var(--transition);
-    font-family: var(--font);
+    font-size: 13px; transition: var(--transition); font-family: var(--font);
   }
   .row-action-btn:hover { background: var(--surface2); color: var(--text); }
   .row-action-btn.delete:hover { background: var(--red-dim); color: var(--red); }
@@ -337,20 +333,15 @@
   .sidebar-toggle {
     background: none; border: none; cursor: pointer;
     font-size: 11px; font-weight: 600; color: var(--muted);
-    padding: 0; font-family: var(--font);
-    transition: color var(--transition);
+    padding: 0; font-family: var(--font); transition: color var(--transition);
   }
   .sidebar-toggle:hover { color: var(--text); }
   .sidebar-toggle.active { color: var(--teal); }
 
   /* ── Empty / loading states ── */
-  .empty-state {
-    text-align: center; padding: 52px 20px; color: var(--muted); font-size: 13px;
-  }
+  .empty-state { text-align: center; padding: 48px 20px; color: var(--muted); font-size: 13px; }
   .empty-state .icon { font-size: 36px; margin-bottom: 10px; opacity: 0.35; display: block; }
-  .loading-state {
-    text-align: center; padding: 40px; color: var(--muted2); font-size: 12px;
-  }
+  .loading-state { text-align: center; padding: 36px; color: var(--muted2); font-size: 12px; }
 
   /* ── Pills ── */
   .pill {
@@ -364,18 +355,30 @@
 
   /* ── Toast ── */
   .toast {
-    position: fixed; bottom: 24px; right: 24px;
+    position: fixed; bottom: 72px; right: 24px;
     background: var(--surface); border: 1px solid var(--border2);
-    border-left: 3px solid var(--teal);
-    border-radius: var(--radius-sm); padding: 12px 18px;
-    font-size: 13px; font-weight: 500; color: var(--text);
+    border-left: 3px solid var(--teal); border-radius: var(--radius-sm);
+    padding: 10px 16px; font-size: 13px; font-weight: 500; color: var(--text);
     box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-    transform: translateX(110%);
-    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-    z-index: 999;
+    transform: translateX(110%); transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    z-index: 200;
   }
   .toast.show  { transform: translateX(0); }
   .toast.error { border-left-color: var(--red); }
+
+  /* ── Bulk action bar ── */
+  .bulk-bar {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: var(--surface); border-top: 2px solid var(--teal);
+    padding: 8px 20px; display: flex; align-items: center; gap: 10px;
+    z-index: 150; transform: translateY(100%);
+    transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+    flex-wrap: wrap;
+  }
+  .bulk-bar.visible { transform: translateY(0); }
+  .bulk-count { font-size: 13px; font-weight: 700; color: var(--teal); white-space: nowrap; min-width: 100px; }
+  .bulk-sep { width: 1px; height: 26px; background: var(--border2); flex-shrink: 0; }
+  .bulk-label { font-size: 11px; color: var(--muted); white-space: nowrap; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; }
 
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: var(--bg); }
@@ -403,9 +406,7 @@
       <div class="header-date" id="headerDate"></div>
       <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle light/dark theme">
         <span class="toggle-icon">🌙</span>
-        <span class="toggle-track">
-          <span class="toggle-thumb"></span>
-        </span>
+        <span class="toggle-track"><span class="toggle-thumb"></span></span>
         <span class="toggle-icon">☀️</span>
       </button>
     </div>
@@ -414,21 +415,18 @@
   <!-- Content -->
   <div class="content-layout">
 
-    <!-- Sidebar: batch list -->
+    <!-- Sidebar -->
     <aside class="sidebar">
-      <div class="sidebar-header" style="display:flex;align-items:center;justify-content:space-between">
+      <div class="sidebar-header">
         <span>Batches</span>
         <button class="sidebar-toggle" id="btnShowAll" onclick="toggleShowAll()">Show all</button>
       </div>
-      <div id="batchList">
-        <div class="loading-state">Loading…</div>
-      </div>
+      <div id="batchList"><div class="loading-state">Loading…</div></div>
     </aside>
 
     <!-- Main panel -->
     <div class="main-panel">
 
-      <!-- Empty state (no batch selected) -->
       <div id="emptyState" class="section-card">
         <div class="empty-state">
           <span class="icon">📋</span>
@@ -436,7 +434,6 @@
         </div>
       </div>
 
-      <!-- Batch view (shown when batch is selected) -->
       <div id="batchView" class="section-card" style="display:none">
         <div class="section-header">
           <div>
@@ -444,33 +441,40 @@
             <div class="section-subtitle" id="batchSubtitle"></div>
           </div>
           <div class="section-actions">
-            <button class="btn btn-ghost" id="btnMarkReviewed" onclick="markReviewed()">
-              ✓ Mark Reviewed
-            </button>
-            <button class="btn btn-primary" id="btnComplete" onclick="completeBatch()">
-              ✦ Complete Batch
-            </button>
+            <button class="btn btn-ghost" id="btnMarkReviewed" onclick="markReviewed()">✓ Mark Reviewed</button>
+            <button class="btn btn-primary" id="btnComplete" onclick="completeBatch()">✦ Complete Batch</button>
           </div>
         </div>
 
         <div class="table-wrap">
           <table>
             <thead>
-              <tr>
-                <th style="width:80px">Date</th>
-                <th>Merchant</th>
-                <th class="right" style="width:100px">Amount</th>
-                <th style="width:130px">Category</th>
-                <th style="width:150px">Subcategory</th>
-                <th style="width:110px">Type</th>
-                <th style="width:60px">Cadence</th>
-                <th class="right" style="width:60px">Div By</th>
-                <th style="width:52px">Shared</th>
-                <th class="right" style="width:70px">Share %</th>
-                <th class="right" style="width:90px">Mo. Amt</th>
-                <th class="right" style="width:90px">Final Amt</th>
-                <th style="width:72px">Source</th>
-                <th style="width:56px"></th>
+              <tr id="headerRow">
+                <th class="chk-cell"><input type="checkbox" id="chk-all" onchange="onSelectAll(this)"></th>
+                <th class="sortable" data-col="date" style="width:76px" onclick="sortBy('date')">Date <i class="sort-icon"></i></th>
+                <th class="sortable" data-col="merchant" onclick="sortBy('merchant')">Merchant <i class="sort-icon"></i></th>
+                <th class="sortable right" data-col="amount" style="width:96px" onclick="sortBy('amount')">Amount <i class="sort-icon"></i></th>
+                <th class="sortable" data-col="category" style="width:128px" onclick="sortBy('category')">Category <i class="sort-icon"></i></th>
+                <th class="sortable" data-col="subcategory" style="width:148px" onclick="sortBy('subcategory')">Subcategory <i class="sort-icon"></i></th>
+                <th class="sortable" data-col="type" style="width:106px" onclick="sortBy('type')">Type <i class="sort-icon"></i></th>
+                <th style="width:56px">Cadence</th>
+                <th class="right" style="width:56px">Div By</th>
+                <th style="width:50px">Shared</th>
+                <th class="right" style="width:66px">Share %</th>
+                <th class="right" style="width:86px">Mo. Amt</th>
+                <th class="right" style="width:86px">Final Amt</th>
+                <th style="width:68px">Source</th>
+                <th style="width:54px"></th>
+              </tr>
+              <tr class="filter-row" id="filterRow">
+                <th></th>
+                <th><input class="filter-input" placeholder="date…" oninput="applyFilter('date', this.value)"></th>
+                <th><input class="filter-input" placeholder="merchant…" oninput="applyFilter('merchant', this.value)"></th>
+                <th></th>
+                <th><input class="filter-input" placeholder="category…" oninput="applyFilter('category', this.value)"></th>
+                <th><input class="filter-input" placeholder="subcategory…" oninput="applyFilter('subcategory', this.value)"></th>
+                <th><input class="filter-input" placeholder="type…" oninput="applyFilter('type', this.value)"></th>
+                <th></th><th></th><th></th><th></th><th></th><th></th><th></th><th></th>
               </tr>
             </thead>
             <tbody id="itemsBody"></tbody>
@@ -478,10 +482,38 @@
         </div>
       </div>
 
-    </div><!-- end main-panel -->
-  </div><!-- end content-layout -->
+    </div>
+  </div>
 
 </div><!-- end page-wrapper -->
+
+<!-- Bulk action bar -->
+<div class="bulk-bar" id="bulkBar">
+  <span class="bulk-count" id="bulkCount">0 rows selected</span>
+  <div class="bulk-sep"></div>
+  <span class="bulk-label">Edit:</span>
+  <div class="combo-wrap" style="width:140px">
+    <input class="inline-combo" id="bulkCat" placeholder="Category…"
+           onfocus="openCombo(this, getCatOptions())"
+           oninput="filterCombo(this); syncBulkSub()">
+    <span class="combo-arrow clickable" onmousedown="event.preventDefault();document.getElementById('bulkCat').focus()">▾</span>
+  </div>
+  <div class="combo-wrap" style="width:150px">
+    <input class="inline-combo" id="bulkSub" placeholder="Subcategory…"
+           onfocus="openBulkSubCombo()"
+           oninput="filterCombo(this)">
+    <span class="combo-arrow clickable" onmousedown="event.preventDefault();openBulkSubCombo()">▾</span>
+  </div>
+  <div class="combo-wrap" style="width:120px">
+    <input class="inline-combo" id="bulkType" placeholder="Type…"
+           onfocus="openCombo(this, TYPE_OPTIONS)"
+           oninput="filterCombo(this)">
+    <span class="combo-arrow clickable" onmousedown="event.preventDefault();document.getElementById('bulkType').focus()">▾</span>
+  </div>
+  <button class="btn btn-primary" onclick="applyBulkEdit()" style="font-size:12px;padding:6px 12px">Apply to selected</button>
+  <div class="bulk-sep"></div>
+  <button class="btn btn-danger" onclick="bulkDelete()" style="font-size:12px;padding:6px 12px">🗑 Delete selected</button>
+</div>
 
 <div class="toast" id="toast"></div>
 
@@ -489,20 +521,21 @@
 const REVIEW_TOKEN = {{ review_token | tojson }};
 
 /* ── State ── */
-let categories   = {};    // { "Food": ["Eating Out", "Ordering In"], ... }
-let currentBatch = null;  // { id, row_count, status, created_at }
-let currentItems = [];    // array of item objects
+let categories    = {};
+let currentBatch  = null;
+let currentItems  = [];
 let showAllBatches = false;
+let sortCol = null;
+let sortDir = 'asc';
+let filters = { date: '', merchant: '', category: '', subcategory: '', type: '' };
+let selectedIds = new Set();
 
 /* ── API helpers ── */
 function apiUrl(path) {
   if (!REVIEW_TOKEN) return path;
-  const sep = path.includes('?') ? '&' : '?';
-  return `${path}${sep}token=${encodeURIComponent(REVIEW_TOKEN)}`;
+  return `${path}${path.includes('?') ? '&' : '?'}token=${encodeURIComponent(REVIEW_TOKEN)}`;
 }
-async function apiCall(path, opts = {}) {
-  return fetch(apiUrl(path), opts);
-}
+async function apiCall(path, opts = {}) { return fetch(apiUrl(path), opts); }
 
 /* ── Toast ── */
 function showToast(msg, type = 'success') {
@@ -511,7 +544,7 @@ function showToast(msg, type = 'success') {
   t.className = 'toast' + (type === 'error' ? ' error' : '');
   t.classList.add('show');
   clearTimeout(t._timer);
-  t._timer = setTimeout(() => t.classList.remove('show'), 2400);
+  t._timer = setTimeout(() => t.classList.remove('show'), 2600);
 }
 
 /* ── Theme ── */
@@ -523,23 +556,198 @@ function setupTheme() {
   if (localStorage.getItem('theme') === 'light') document.body.classList.add('light');
 }
 
-/* ── Date ── */
+/* ── Format helpers ── */
 function fmtDate(iso) {
   if (!iso) return '—';
-  const d = new Date(iso);
-  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 function fmtDateShort(iso) {
   if (!iso) return '—';
-  const d = new Date(iso);
-  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+  return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
 }
 function fmtAmt(n) {
-  return '₹ ' + Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  return '₹ ' + Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 function escHtml(s) {
   if (!s) return '';
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+/* ── Sorting ── */
+function sortBy(col) {
+  if (sortCol === col) {
+    sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    sortCol = col;
+    sortDir = 'asc';
+  }
+  updateSortHeaders();
+  renderTable();
+}
+
+function updateSortHeaders() {
+  document.querySelectorAll('thead th.sortable').forEach(th => {
+    th.classList.remove('sort-asc', 'sort-desc');
+    if (th.dataset.col === sortCol) th.classList.add(sortDir === 'asc' ? 'sort-asc' : 'sort-desc');
+  });
+}
+
+/* ── Filtering ── */
+function applyFilter(col, val) {
+  filters[col] = val.toLowerCase().trim();
+  renderTable();
+}
+
+/* ── Compute display items (filter + sort) ── */
+function getDisplayItems() {
+  let items = [...currentItems];
+
+  if (filters.date)        items = items.filter(i => fmtDateShort(i.date).toLowerCase().includes(filters.date));
+  if (filters.merchant)    items = items.filter(i => (i.merchant || '').toLowerCase().includes(filters.merchant));
+  if (filters.category)    items = items.filter(i => (i.category || '').toLowerCase().includes(filters.category));
+  if (filters.subcategory) items = items.filter(i => (i.subcategory || '').toLowerCase().includes(filters.subcategory));
+  if (filters.type)        items = items.filter(i => (i.type || '').toLowerCase().includes(filters.type));
+
+  if (sortCol) {
+    items.sort((a, b) => {
+      let va, vb;
+      switch (sortCol) {
+        case 'date':        va = a.date || '';                          vb = b.date || ''; break;
+        case 'merchant':    va = (a.merchant || '').toLowerCase();      vb = (b.merchant || '').toLowerCase(); break;
+        case 'amount':      va = a.amount || 0;                         vb = b.amount || 0; break;
+        case 'category':    va = (a.category || '').toLowerCase();      vb = (b.category || '').toLowerCase(); break;
+        case 'subcategory': va = (a.subcategory || '').toLowerCase();   vb = (b.subcategory || '').toLowerCase(); break;
+        case 'type':        va = (a.type || '').toLowerCase();          vb = (b.type || '').toLowerCase(); break;
+        default: return 0;
+      }
+      if (va < vb) return sortDir === 'asc' ? -1 : 1;
+      if (va > vb) return sortDir === 'asc' ?  1 : -1;
+      return 0;
+    });
+  }
+  return items;
+}
+
+/* ── Multi-select ── */
+function onRowCheck(chk) {
+  const txnId = parseInt(chk.dataset.txn);
+  if (chk.checked) selectedIds.add(txnId); else selectedIds.delete(txnId);
+  updateSelectAll();
+  updateBulkBar();
+}
+
+function onSelectAll(chk) {
+  document.querySelectorAll('.row-chk').forEach(c => {
+    c.checked = chk.checked;
+    const id = parseInt(c.dataset.txn);
+    if (chk.checked) selectedIds.add(id); else selectedIds.delete(id);
+  });
+  updateSelectAll();
+  updateBulkBar();
+}
+
+function updateSelectAll() {
+  const allChks = document.querySelectorAll('.row-chk');
+  const chkAll  = document.getElementById('chk-all');
+  if (!chkAll || !allChks.length) return;
+  const n = [...allChks].filter(c => c.checked).length;
+  chkAll.checked       = n === allChks.length && allChks.length > 0;
+  chkAll.indeterminate = n > 0 && n < allChks.length;
+}
+
+function updateBulkBar() {
+  const bar = document.getElementById('bulkBar');
+  const n   = selectedIds.size;
+  bar.classList.toggle('visible', n > 0);
+  document.getElementById('bulkCount').textContent = `${n} row${n !== 1 ? 's' : ''} selected`;
+}
+
+function clearSelection() {
+  selectedIds.clear();
+  updateBulkBar();
+}
+
+/* ── Bulk bar: subcategory syncs with category ── */
+function syncBulkSub() {
+  document.getElementById('bulkSub').value = '';
+}
+function openBulkSubCombo() {
+  const cat  = document.getElementById('bulkCat').value;
+  const opts = categories[cat] || [];
+  openCombo(document.getElementById('bulkSub'), opts);
+}
+
+/* ── Bulk edit ── */
+async function applyBulkEdit() {
+  const cat = document.getElementById('bulkCat').value.trim();
+  const sub = document.getElementById('bulkSub').value.trim();
+  const typ = document.getElementById('bulkType').value.trim();
+
+  if (!cat || !sub || !typ) {
+    showToast('Category, subcategory and type are all required before applying.', 'error');
+    return;
+  }
+
+  const ids = [...selectedIds];
+  let updated = 0;
+  for (const txnId of ids) {
+    const item = currentItems.find(i => i.transaction_id === txnId);
+    if (!item) continue;
+    item.category    = cat;
+    item.subcategory = sub;
+    item.type        = typ;
+    try {
+      const resp = await apiCall(
+        `/api/batches/${currentBatch.id}/items/${txnId}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            category: cat, subcategory: sub, type: typ,
+            cadence:        item.cadence || 'O',
+            divide_by:      item.divide_by || 1,
+            shared_expense: item.shared_expense || 'N',
+            share_ratio:    item.share_ratio != null ? item.share_ratio : 1.0,
+          }),
+        }
+      );
+      if (resp.ok) updated++;
+    } catch (_) {}
+  }
+
+  clearSelection();
+  renderTable();
+  showToast(`Updated ${updated} row${updated !== 1 ? 's' : ''} ✓`);
+}
+
+/* ── Bulk delete ── */
+async function bulkDelete() {
+  const n = selectedIds.size;
+  if (!n) return;
+  if (!confirm(`Delete ${n} row${n !== 1 ? 's' : ''} from this batch?`)) return;
+
+  const ids = [...selectedIds];
+  let deleted = 0;
+  for (const txnId of ids) {
+    try {
+      const resp = await apiCall(
+        `/api/batches/${currentBatch.id}/items/${txnId}`,
+        { method: 'DELETE' }
+      );
+      if (resp.ok) {
+        currentItems = currentItems.filter(i => i.transaction_id !== txnId);
+        selectedIds.delete(txnId);
+        currentBatch.row_count = Math.max(0, currentBatch.row_count - 1);
+        deleted++;
+      }
+    } catch (_) {}
+  }
+
+  updateBulkBar();
+  renderTable();
+  updateBatchHeader();
+  showToast(`Deleted ${deleted} row${deleted !== 1 ? 's' : ''} ✓`);
+  await loadBatches();
 }
 
 /* ── Sidebar all-batches toggle ── */
@@ -554,31 +762,24 @@ function toggleShowAll() {
 /* ── Batch list ── */
 async function loadBatches() {
   try {
-    const url = showAllBatches ? '/api/batches?include_complete=1' : '/api/batches';
+    const url  = showAllBatches ? '/api/batches?include_complete=1' : '/api/batches';
     const resp = await apiCall(url);
     if (!resp.ok) throw new Error(resp.statusText);
-    const batches = await resp.json();
-    renderBatchList(batches);
+    renderBatchList(await resp.json());
   } catch (e) {
-    document.getElementById('batchList').innerHTML =
-      '<div class="batch-empty">Failed to load batches.</div>';
+    document.getElementById('batchList').innerHTML = '<div class="batch-empty">Failed to load batches.</div>';
   }
 }
 
 function renderBatchList(batches) {
   const el = document.getElementById('batchList');
-  if (!batches.length) {
-    el.innerHTML = '<div class="batch-empty">No pending batches.</div>';
-    return;
-  }
+  if (!batches.length) { el.innerHTML = '<div class="batch-empty">No pending batches.</div>'; return; }
   el.innerHTML = batches.map(b => {
     const active = currentBatch && currentBatch.id === b.id ? ' active' : '';
-    const statusPill = `<span class="pill pill-${b.status}">${b.status}</span>`;
-    const date = fmtDate(b.created_at);
     return `<div class="batch-item${active}" onclick="selectBatch(${b.id})" data-batch-id="${b.id}">
       <div class="batch-item-title">Batch #${b.id}</div>
-      <div class="batch-item-meta">${b.row_count} items &nbsp;${statusPill}</div>
-      <div class="batch-item-meta">${date}</div>
+      <div class="batch-item-meta">${b.row_count} items &nbsp;<span class="pill pill-${b.status}">${b.status}</span></div>
+      <div class="batch-item-meta">${fmtDate(b.created_at)}</div>
     </div>`;
   }).join('');
 }
@@ -586,12 +787,18 @@ function renderBatchList(batches) {
 /* ── Select & load a batch ── */
 async function selectBatch(id) {
   document.getElementById('emptyState').style.display = 'none';
-  const batchView = document.getElementById('batchView');
-  batchView.style.display = '';
+  document.getElementById('batchView').style.display  = '';
   document.getElementById('itemsBody').innerHTML =
-    '<tr><td colspan="8"><div class="loading-state">Loading items…</div></td></tr>';
-  document.getElementById('batchTitle').textContent = `Batch #${id}`;
+    '<tr><td colspan="15"><div class="loading-state">Loading items…</div></td></tr>';
+  document.getElementById('batchTitle').textContent    = `Batch #${id}`;
   document.getElementById('batchSubtitle').textContent = '';
+
+  // Reset sort / filter / selection when changing batch
+  sortCol = null; sortDir = 'asc';
+  filters = { date: '', merchant: '', category: '', subcategory: '', type: '' };
+  clearSelection();
+  document.querySelectorAll('.filter-input').forEach(el => el.value = '');
+  updateSortHeaders();
 
   try {
     const resp = await apiCall(`/api/batches/${id}`);
@@ -600,35 +807,37 @@ async function selectBatch(id) {
     currentBatch = data.batch;
     currentItems = data.items;
     updateBatchHeader();
-    renderItems(data.items);
+    renderTable();
     highlightSidebarItem(id);
   } catch (e) {
     document.getElementById('itemsBody').innerHTML =
-      '<tr><td colspan="8"><div class="empty-state"><span class="icon">⚠️</span>Failed to load batch items.</div></td></tr>';
+      '<tr><td colspan="15"><div class="empty-state"><span class="icon">⚠️</span>Failed to load batch items.</div></td></tr>';
   }
 }
 
 function highlightSidebarItem(id) {
-  document.querySelectorAll('.batch-item').forEach(el => {
-    el.classList.toggle('active', parseInt(el.dataset.batchId) === id);
-  });
+  document.querySelectorAll('.batch-item').forEach(el =>
+    el.classList.toggle('active', parseInt(el.dataset.batchId) === id));
 }
 
 function updateBatchHeader() {
   if (!currentBatch) return;
-  document.getElementById('batchTitle').textContent =
-    `Batch #${currentBatch.id}`;
-  document.getElementById('batchSubtitle').textContent =
-    `${currentBatch.row_count} items · ${currentBatch.status}`;
+  document.getElementById('batchTitle').textContent    = `Batch #${currentBatch.id}`;
+  document.getElementById('batchSubtitle').textContent = `${currentBatch.row_count} items · ${currentBatch.status}`;
 
-  const isPending    = currentBatch.status === 'pending';
-  const isReviewed   = currentBatch.status === 'reviewed';
-  const isComplete   = currentBatch.status === 'complete';
+  const isPending  = currentBatch.status === 'pending';
+  const isReviewed = currentBatch.status === 'reviewed';
+  const isComplete = currentBatch.status === 'complete';
 
   document.getElementById('btnMarkReviewed').style.display = isComplete ? 'none' : '';
   document.getElementById('btnComplete').style.display     = isComplete ? 'none' : '';
   document.getElementById('btnMarkReviewed').disabled = !isPending;
   document.getElementById('btnComplete').disabled     = !isReviewed;
+
+  // Hide checkbox column and filter row for completed batches
+  const isReadOnly = isComplete;
+  document.getElementById('chk-all').closest('th').style.display = isReadOnly ? 'none' : '';
+  document.getElementById('filterRow').style.display = isReadOnly ? 'none' : '';
 }
 
 /* ── Custom combo dropdown ── */
@@ -642,14 +851,10 @@ function getSubOptions(txnId) {
 function openCombo(input, options) {
   closeAllCombos();
   const wrap = input.closest('.combo-wrap');
-  let panel = wrap.querySelector('.dropdown-panel');
-  if (!panel) {
-    panel = document.createElement('div');
-    panel.className = 'dropdown-panel';
-    wrap.appendChild(panel);
-  }
+  let panel  = wrap.querySelector('.dropdown-panel');
+  if (!panel) { panel = document.createElement('div'); panel.className = 'dropdown-panel'; wrap.appendChild(panel); }
   input._comboOptions = options;
-  renderComboItems(panel, options, '');  // show all on open regardless of current value
+  renderComboItems(panel, options, '');
   panel.style.display = 'block';
 }
 
@@ -666,7 +871,7 @@ function filterCombo(input) {
 }
 
 function pickCombo(item) {
-  const wrap = item.closest('.combo-wrap');
+  const wrap  = item.closest('.combo-wrap');
   const input = wrap.querySelector('input');
   input.value = item.textContent;
   wrap.querySelector('.dropdown-panel').style.display = 'none';
@@ -678,34 +883,45 @@ function closeAllCombos() {
 }
 document.addEventListener('click', e => { if (!e.target.closest('.combo-wrap')) closeAllCombos(); });
 
-/* ── Render items table ── */
+/* ── renderTable(): filter + sort + rebuild tbody ── */
+function renderTable() {
+  renderItems(getDisplayItems());
+  // Restore checkbox state
+  document.querySelectorAll('.row-chk').forEach(chk => {
+    chk.checked = selectedIds.has(parseInt(chk.dataset.txn));
+  });
+  updateSelectAll();
+}
+
+/* ── Build tbody rows ── */
 function renderItems(items) {
-  const body = document.getElementById('itemsBody');
+  const body       = document.getElementById('itemsBody');
+  const isComplete = currentBatch && currentBatch.status === 'complete';
+  const COLS       = 15;
+
   if (!items.length) {
-    body.innerHTML =
-      '<tr><td colspan="14"><div class="empty-state"><span class="icon">📭</span>No items in this batch.</div></td></tr>';
+    body.innerHTML = `<tr><td colspan="${COLS}"><div class="empty-state"><span class="icon">📭</span>No items match the current filter.</div></td></tr>`;
     return;
   }
 
-  const isComplete = currentBatch && currentBatch.status === 'complete';
-
   body.innerHTML = items.map(item => {
-    const txnId = item.transaction_id;
-    const catChanged = item.category !== item.pred_category;
+    const txnId     = item.transaction_id;
+    const catChanged = item.category    !== item.pred_category;
     const subChanged = item.subcategory !== item.pred_subcategory;
     const predHintCat = `<div class="pred-hint ${catChanged ? 'changed' : ''}">ML: ${escHtml(item.pred_category) || '—'}</div>`;
     const predHintSub = `<div class="pred-hint ${subChanged ? 'changed' : ''}">ML: ${escHtml(item.pred_subcategory) || '—'}</div>`;
-    const amtClass = item.type === 'income' ? 'amt-credit' : 'amt-debit';
-    const amtSign  = item.type === 'income' ? '+' : '−';
-    const conf = item.pred_confidence != null
+    const amtClass    = item.type === 'income' ? 'amt-credit' : 'amt-debit';
+    const amtSign     = item.type === 'income' ? '+' : '−';
+    const conf        = item.pred_confidence != null
       ? `<div class="confidence">${(item.pred_confidence * 100).toFixed(0)}%</div>` : '';
+    const divBy  = item.divide_by || 1;
+    const ratio  = item.share_ratio != null ? item.share_ratio : 1.0;
+    const moAmt  = item.amount != null ? (item.amount / divBy).toFixed(2) : '—';
+    const finAmt = item.amount != null ? (item.amount / divBy * ratio).toFixed(2) : '—';
 
     if (isComplete) {
-      const divBy = item.divide_by || 1;
-      const ratio = item.share_ratio != null ? item.share_ratio : 1.0;
-      const moAmt = item.amount != null ? (item.amount / divBy).toFixed(2) : '—';
-      const finAmt = item.amount != null ? (item.amount / divBy * ratio).toFixed(2) : '—';
       return `<tr data-txn="${txnId}">
+        <td></td>
         <td class="date-cell">${fmtDateShort(item.date)}</td>
         <td>
           <div class="merchant-name">${escHtml(item.merchant) || '—'}</div>
@@ -726,11 +942,8 @@ function renderItems(items) {
       </tr>`;
     }
 
-    const divBy = item.divide_by || 1;
-    const ratio = item.share_ratio != null ? item.share_ratio : 1.0;
-    const moAmt = item.amount != null ? (item.amount / divBy).toFixed(2) : '—';
-    const finAmt = item.amount != null ? (item.amount / divBy * ratio).toFixed(2) : '—';
     return `<tr data-txn="${txnId}">
+      <td class="chk-cell"><input type="checkbox" class="row-chk" data-txn="${txnId}" onchange="onRowCheck(this)"></td>
       <td class="date-cell">${fmtDateShort(item.date)}</td>
       <td>
         <div class="merchant-name">${escHtml(item.merchant) || '—'}</div>
@@ -744,7 +957,7 @@ function renderItems(items) {
                  onfocus="openCombo(this, getCatOptions())"
                  oninput="filterCombo(this)"
                  onchange="onFieldChange(this)">
-          <span class="combo-arrow" onmousedown="event.preventDefault(); this.closest('.combo-wrap').querySelector('input').focus()">▾</span>
+          <span class="combo-arrow" onmousedown="event.preventDefault();this.closest('.combo-wrap').querySelector('input').focus()">▾</span>
         </div>
         ${predHintCat}
       </td>
@@ -755,7 +968,7 @@ function renderItems(items) {
                  onfocus="openCombo(this, getSubOptions(${txnId}))"
                  oninput="filterCombo(this)"
                  onchange="onFieldChange(this)">
-          <span class="combo-arrow" onmousedown="event.preventDefault(); this.closest('.combo-wrap').querySelector('input').focus()">▾</span>
+          <span class="combo-arrow" onmousedown="event.preventDefault();this.closest('.combo-wrap').querySelector('input').focus()">▾</span>
         </div>
         ${predHintSub}
       </td>
@@ -766,24 +979,24 @@ function renderItems(items) {
                  onfocus="openCombo(this, TYPE_OPTIONS)"
                  oninput="filterCombo(this)"
                  onchange="onFieldChange(this)">
-          <span class="combo-arrow" onmousedown="event.preventDefault(); this.closest('.combo-wrap').querySelector('input').focus()">▾</span>
+          <span class="combo-arrow" onmousedown="event.preventDefault();this.closest('.combo-wrap').querySelector('input').focus()">▾</span>
         </div>
       </td>
       <td>
-        <input type="text" class="num-input" style="width:50px" data-field="cadence" data-txn="${txnId}"
+        <input type="text" class="num-input" style="width:46px" data-field="cadence" data-txn="${txnId}"
                value="${escHtml(item.cadence || 'O')}" onchange="onFieldChange(this)">
       </td>
       <td class="right">
-        <input type="number" class="num-input" style="width:44px" data-field="divide_by" data-txn="${txnId}"
-               value="${divBy}" min="1" step="1" onchange="onNumericFieldChange(this)">
+        <input type="text" inputmode="numeric" class="num-input" style="width:40px" data-field="divide_by" data-txn="${txnId}"
+               value="${divBy}" onchange="onNumericFieldChange(this)">
       </td>
       <td>
         <input type="checkbox" data-field="shared_expense" data-txn="${txnId}"
                ${item.shared_expense === 'Y' ? 'checked' : ''} onchange="onFieldChange(this)">
       </td>
       <td class="right">
-        <input type="number" class="num-input" style="width:54px" data-field="share_ratio" data-txn="${txnId}"
-               value="${ratio}" min="0" max="1" step="0.01" onchange="onNumericFieldChange(this)">
+        <input type="text" inputmode="decimal" class="num-input" style="width:50px" data-field="share_ratio" data-txn="${txnId}"
+               value="${ratio}" onchange="onNumericFieldChange(this)">
       </td>
       <td class="right"><span class="computed-amt" data-computed="monthly_amount" data-txn="${txnId}">${moAmt}</span></td>
       <td class="right"><span class="computed-amt" data-computed="final_amount" data-txn="${txnId}">${finAmt}</span></td>
@@ -799,20 +1012,17 @@ function renderItems(items) {
       </td>
     </tr>`;
   }).join('');
-
 }
 
 /* ── Field change → auto-save ── */
 function recomputeAmounts(txnId, item, row) {
-  const divBy = item.divide_by || 1;
-  const ratio = item.share_ratio != null ? item.share_ratio : 1.0;
-  const amt   = item.amount != null ? item.amount : 0;
-  const moAmt = (amt / divBy).toFixed(2);
-  const finAmt = (amt / divBy * ratio).toFixed(2);
-  const moEl  = row.querySelector(`[data-computed="monthly_amount"][data-txn="${txnId}"]`);
-  const finEl = row.querySelector(`[data-computed="final_amount"][data-txn="${txnId}"]`);
-  if (moEl)  moEl.textContent  = moAmt;
-  if (finEl) finEl.textContent = finAmt;
+  const divBy  = item.divide_by || 1;
+  const ratio  = item.share_ratio != null ? item.share_ratio : 1.0;
+  const amt    = item.amount != null ? item.amount : 0;
+  const moEl   = row.querySelector(`[data-computed="monthly_amount"][data-txn="${txnId}"]`);
+  const finEl  = row.querySelector(`[data-computed="final_amount"][data-txn="${txnId}"]`);
+  if (moEl)  moEl.textContent  = (amt / divBy).toFixed(2);
+  if (finEl) finEl.textContent = (amt / divBy * ratio).toFixed(2);
 }
 
 function onFieldChange(el) {
@@ -828,7 +1038,6 @@ function onFieldChange(el) {
     item[field] = el.value;
   }
 
-  // Update pred-hint changed indicator for category and subcategory
   if (field === 'category' || field === 'subcategory') {
     const hint = el.closest('td').querySelector('.pred-hint');
     if (hint) hint.classList.toggle('changed', item[field] !== (item[`pred_${field}`] || ''));
@@ -843,7 +1052,7 @@ function onNumericFieldChange(el) {
   const row    = el.closest('tr');
   const item   = currentItems.find(i => i.transaction_id === txnId);
   if (!item) return;
-  item[field] = field === 'divide_by' ? parseInt(el.value) || 1 : parseFloat(el.value) || 1.0;
+  item[field] = field === 'divide_by' ? (parseInt(el.value) || 1) : (parseFloat(el.value) || 1.0);
   recomputeAmounts(txnId, item, row);
   saveItem(txnId, item, row);
 }
@@ -879,14 +1088,14 @@ async function saveItem(txnId, item, row) {
 
 function flashSaved(row) {
   row.classList.add('saved');
-  setTimeout(() => row.classList.remove('saved'), 1200);
+  setTimeout(() => row.classList.remove('saved'), 1000);
 }
 
 /* ── Revert to prediction ── */
 async function revertItem(txnId) {
   const item = currentItems.find(i => i.transaction_id === txnId);
   if (!item) return;
-  const row = document.querySelector(`tr[data-txn="${txnId}"]`);
+  const row  = document.querySelector(`tr[data-txn="${txnId}"]`);
 
   item.category    = item.pred_category    || '';
   item.subcategory = item.pred_subcategory || '';
@@ -895,14 +1104,12 @@ async function revertItem(txnId) {
   row.querySelector('[data-field="category"]').value    = item.category;
   row.querySelector('[data-field="subcategory"]').value = item.subcategory;
   row.querySelector('[data-field="type"]').value        = item.type;
-
-  // All values now match prediction — clear changed indicators
   row.querySelectorAll('.pred-hint').forEach(el => el.classList.remove('changed'));
 
   await saveItem(txnId, item, row);
 }
 
-/* ── Delete row from batch ── */
+/* ── Delete single row ── */
 async function deleteItem(txnId) {
   if (!currentBatch) return;
   if (!confirm('Remove this row from the batch?')) return;
@@ -914,8 +1121,10 @@ async function deleteItem(txnId) {
     if (!resp.ok) throw new Error('Delete failed');
     document.querySelector(`tr[data-txn="${txnId}"]`)?.remove();
     currentItems = currentItems.filter(i => i.transaction_id !== txnId);
+    selectedIds.delete(txnId);
     currentBatch.row_count = Math.max(0, currentBatch.row_count - 1);
     updateBatchHeader();
+    updateBulkBar();
     showToast('Row deleted ✓');
     await loadBatches();
   } catch (e) {
@@ -937,8 +1146,6 @@ async function markReviewed() {
     }
     currentBatch.status = 'reviewed';
     updateBatchHeader();
-    document.getElementById('batchSubtitle').textContent =
-      `${currentBatch.row_count} items · reviewed`;
     showToast('Batch marked as reviewed ✓');
     await loadBatches();
   } catch (e) {
@@ -950,10 +1157,7 @@ async function markReviewed() {
 /* ── Complete batch ── */
 async function completeBatch() {
   if (!currentBatch) return;
-  if (currentBatch.status !== 'reviewed') {
-    showToast('Mark as reviewed first.', 'error');
-    return;
-  }
+  if (currentBatch.status !== 'reviewed') { showToast('Mark as reviewed first.', 'error'); return; }
   const btn = document.getElementById('btnComplete');
   btn.disabled = true;
   btn.textContent = 'Completing…';
@@ -966,11 +1170,9 @@ async function completeBatch() {
     }
     const data = await resp.json();
     showToast(`Batch complete — ${data.inserted} rows saved ✓`);
-
-    // Reset to empty state
-    currentBatch = null;
-    currentItems = [];
-    document.getElementById('batchView').style.display = 'none';
+    currentBatch = null; currentItems = [];
+    clearSelection();
+    document.getElementById('batchView').style.display  = 'none';
     document.getElementById('emptyState').style.display = '';
     await loadBatches();
   } catch (e) {
@@ -990,7 +1192,7 @@ async function init() {
     const resp = await apiCall('/api/categories');
     if (resp.ok) {
       const data = await resp.json();
-      categories = data.categories || {};
+      categories  = data.categories || {};
       if (data.types && data.types.length) TYPE_OPTIONS = data.types;
     }
   } catch (_) {}
