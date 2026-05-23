@@ -18,15 +18,18 @@ hdfc-statement-loader/
 │   ├── app.py                      # ENTRY POINT: Flask app, Cloud Run trigger, review blueprint
 │   ├── gmail_poller.py             # Gmail polling logic + email parsing (CLI runner)
 │   ├── review.py                   # Flask Blueprint: batch review API (7 routes)
+│   ├── history.py                  # Flask Blueprint: history viewer/editor API (5 routes)
 │   ├── parser.py                   # Email format detection & field extraction
 │   ├── db.py                       # PostgreSQL schema creation & queries
 │   ├── auth.py                     # One-time OAuth2 setup (run manually once)
 │   ├── generate_inserts.py         # Excel → SQL migration utility
 │   ├── load_excel.py               # Data feed loading utility
+│   ├── backfill_time_period.py     # One-shot: backfill time_period from entry_date for NULL rows
 │   └── seed_test_batch.py          # One-shot: inserts a test pending batch for UI testing
 │
 ├── templates/
-│   └── review.html                 # Batch review UI (vanilla HTML/CSS/JS)
+│   ├── review.html                 # Batch review UI (vanilla HTML/CSS/JS)
+│   └── view.html                   # History browser/editor UI (vanilla HTML/CSS/JS)
 │
 ├── categorizer/                    # Transaction classification pipeline
 │   ├── main.py                     # Full training pipeline (run to retrain model)
@@ -56,7 +59,8 @@ hdfc-statement-loader/
 │   ├── test_parser.py              # 40+ unit tests for email parsing
 │   ├── test_gmail_poller.py        # Integration tests (mocked)
 │   ├── test_generate_inserts.py    # Migration tool tests
-│   └── test_review.py              # Token auth + /api/categories shape tests
+│   ├── test_review.py              # Token auth + /api/categories shape tests
+│   └── test_history.py             # History blueprint: auth, periods, pagination, PATCH, DELETE
 │
 ├── .github/
 │   └── workflows/
@@ -274,7 +278,7 @@ pytest tests/ -v
 
 `tests/conftest.py` adds both `loader/` and `categorizer/` to `sys.path`.
 
-**Current test files (201 tests, no DB or network required):**
+**Current test files (222 tests, no DB or network required):**
 
 | File | Covers |
 |---|---|
@@ -282,6 +286,7 @@ pytest tests/ -v
 | `test_gmail_poller.py` | `_strip_html`, `_get_received_at`, `_get_subject`, `run_parser_tests`, `run_categorization`, `send_summary_email` |
 | `test_generate_inserts.py` | SQL migration utility |
 | `test_review.py` | Token auth, `/api/categories` shape, all 7 review API routes (list/get/patch/delete/mark-reviewed/complete) |
+| `test_history.py` | Token auth, `/api/history/periods`, `/api/history` pagination, PATCH update, DELETE delete |
 | `test_app.py` | Flask trigger route, blueprint wiring, categorization status passthrough to summary email |
 | `test_batch_process.py` | Batch pipeline: chunking logic, model load failure, `process_dataframe` call count |
 | `test_cleaner.py` | `clean_entry`, `extract_vpa_handle` |
@@ -388,6 +393,40 @@ The old manual SQL approach has been replaced by a web UI. Current workflow:
 - A fixed bulk action bar slides up from the bottom when rows are selected; requires all three of category + subcategory + type to be filled before applying bulk edit; also has a bulk delete button
 - Complete batches are fully read-only: no checkboxes, no bulk bar, no Mark Reviewed / Complete Batch buttons; the checkbox column is hidden via CSS class `batch-complete` on `<table>`
 
+
+### History / View Workflow
+`/view` is a read/edit UI over `data_feed_history` — the canonical table of categorized and finalized transactions. It complements `/review` (which handles pre-approval batches) by letting the user browse and correct already-committed rows.
+
+**Implementation files:**
+- `loader/history.py` — Flask Blueprint registered on the main app; all API logic is here
+- `templates/view.html` — Single-page UI served at `GET /view`
+- Blueprint is registered in `loader/app.py` with `app.register_blueprint(history_bp)`
+
+**History API routes** (all in `loader/history.py`):
+| Route | Description |
+|---|---|
+| `GET /view` | Serves the HTML page |
+| `GET /api/history/periods` | Distinct time_period values with row counts, newest first |
+| `GET /api/history` | Paginated rows for one period (`?period=<p>&page=<n>`), 25 per page |
+| `PATCH /api/history/<id>` | Update editable fields for one row; returns recomputed amounts |
+| `DELETE /api/history/<id>` | Delete a row from data_feed_history |
+
+**`db.py` functions used by history blueprint:**
+- `get_history_periods(conn)` — returns `[{period, count}, ...]`
+- `get_history_page(conn, period, page, page_size=25)` — returns `{items, total, page, pages}`
+- `update_history_row(conn, row_id, fields)` — updates and recomputes amounts
+- `delete_history_row(conn, row_id)` — deletes row, returns bool
+
+**UI behaviour notes:**
+- Sidebar lists time periods; selecting one loads 25 rows per page with prev/next pagination
+- First column is a row-selection checkbox; header has select-all
+- Editing any field marks the row dirty (amber left border) and reveals an **Update** button — **no auto-save**; writes to DB only on explicit Update click
+- Computed columns (Mo. Amt, Final Amt) update live in the browser as Divide By / Share Ratio change
+- A fixed bulk action bar slides up from the bottom when rows are selected; fill Category + Subcategory + Type, then **Apply to Selected** saves all at once; **Delete Selected** removes rows from DB and table
+- Column headers (Period, Date, Merchant, Category, Subcategory, Type, Amount) are sortable client-side
+- Combo dropdowns use a single global `<div id="globalDropdown">` at body level (`position: fixed`, `z-index: 9999`), anchored above the input via `transform: translateY(-100%)` — this escapes all ancestor overflow containers
+
+**Backfill:** `loader/backfill_time_period.py` — one-shot script to populate `time_period` from `entry_date` for rows where it is NULL or empty. Run manually if needed.
 
 ### SQL Migration Scripts
 Never run SQL migration or setup scripts against the database without first asking the user for confirmation and any required inputs (connection strings, target tables, etc.).

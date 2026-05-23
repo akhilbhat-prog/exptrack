@@ -151,7 +151,7 @@ class TestListHistory:
         monkeypatch.delenv("REVIEW_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         captured = {}
-        def fake_page(conn, period, page, page_size=50):
+        def fake_page(conn, period, page, page_size=25):
             captured["page"] = page
             return {"items": [], "total": 0, "page": page, "pages": 1}
         with patch("history.db.get_connection", return_value=mock_conn), \
@@ -163,7 +163,7 @@ class TestListHistory:
         monkeypatch.delenv("REVIEW_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         captured = {}
-        def fake_page(conn, period, page, page_size=50):
+        def fake_page(conn, period, page, page_size=25):
             captured["page"] = page
             return {"items": [], "total": 0, "page": page, "pages": 3}
         with patch("history.db.get_connection", return_value=mock_conn), \
@@ -232,3 +232,30 @@ class TestUpdateHistory:
              patch("history.db.update_history_row", side_effect=fake_update):
             client.patch("/api/history/1", json={**self._payload, "shared_expense": "y"})
         assert captured["fields"]["shared_expense"] == "Y"
+
+
+# ---------------------------------------------------------------------------
+# DELETE /api/history/<id>
+# ---------------------------------------------------------------------------
+
+class TestDeleteHistory:
+    def test_delete_returns_204(self, client, monkeypatch):
+        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        mock_conn, _ = _make_mock_conn()
+        with patch("history.db.get_connection", return_value=mock_conn), \
+             patch("history.db.delete_history_row", return_value=True):
+            resp = client.delete("/api/history/1")
+        assert resp.status_code == 204
+
+    def test_delete_returns_404_when_not_found(self, client, monkeypatch):
+        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        mock_conn, _ = _make_mock_conn()
+        with patch("history.db.get_connection", return_value=mock_conn), \
+             patch("history.db.delete_history_row", return_value=False):
+            resp = client.delete("/api/history/999")
+        assert resp.status_code == 404
+
+    def test_delete_requires_token(self, client, monkeypatch):
+        monkeypatch.setenv("REVIEW_TOKEN", "tok")
+        resp = client.delete("/api/history/1")
+        assert resp.status_code == 401

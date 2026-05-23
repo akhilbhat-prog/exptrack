@@ -72,6 +72,19 @@ def list_history():
         conn.close()
 
 
+@history_bp.route("/api/history/<int:row_id>", methods=["DELETE"])
+@_require_token
+def delete_history(row_id):
+    conn = db.get_connection()
+    try:
+        found = db.delete_history_row(conn, row_id)
+        if not found:
+            abort(404, "Row not found")
+        return ("", 204)
+    finally:
+        conn.close()
+
+
 @history_bp.route("/api/history/<int:row_id>", methods=["PATCH"])
 @_require_token
 def update_history(row_id):

@@ -31,6 +31,8 @@
     --blue-dim: rgba(96,165,250,0.12);
     --yellow-dim: rgba(250,204,21,0.12);
     --orange-dim: rgba(251,146,60,0.12);
+    --amber-dim: rgba(251,191,36,0.10);
+    --amber: #fbbf24;
     --row-hover: #1f1f2e;
     --font: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     --radius: 10px;
@@ -59,6 +61,8 @@
     --blue-dim: rgba(37,99,235,0.10);
     --yellow-dim: rgba(202,138,4,0.10);
     --orange-dim: rgba(234,88,12,0.10);
+    --amber-dim: rgba(245,158,11,0.10);
+    --amber: #d97706;
     --row-hover: #f0f0f8;
   }
 
@@ -78,7 +82,7 @@
     min-height: 100vh;
   }
 
-  .page-wrapper { width: 100%; padding: 0 12px 60px; }
+  .page-wrapper { width: 100%; padding: 0 12px 80px; }
 
   .site-header {
     display: flex;
@@ -180,6 +184,15 @@
     border: 1px solid var(--border2);
   }
   .btn-ghost:hover:not(:disabled) { background: var(--surface2); color: var(--text); }
+  .btn-teal {
+    background: var(--teal); color: #0a0a10;
+  }
+  .btn-teal:hover:not(:disabled) { opacity: 0.88; }
+  .btn-red {
+    background: var(--red-dim); color: var(--red);
+    border: 1px solid var(--red);
+  }
+  .btn-red:hover:not(:disabled) { background: var(--red); color: #fff; }
   .btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
   .table-wrap { overflow-x: auto; }
@@ -193,6 +206,7 @@
     white-space: nowrap;
   }
   thead th.right { text-align: right; }
+  thead th.center { text-align: center; }
 
   thead th.sortable { cursor: pointer; user-select: none; }
   thead th.sortable:hover { color: var(--text); }
@@ -208,9 +222,12 @@
   tbody tr:hover { background: var(--row-hover); }
   tbody tr.saving { opacity: 0.6; }
   tbody tr.saved { background: var(--green-dim) !important; }
+  tbody tr.dirty { border-left: 3px solid var(--amber); }
+  tbody tr.row-selected { background: var(--teal-dim) !important; }
 
   td { padding: 8px 10px; font-size: 13px; vertical-align: middle; }
   td.right { text-align: right; }
+  td.center { text-align: center; }
   td.date-cell { white-space: nowrap; color: var(--muted); font-size: 12px; }
 
   .merchant-name { font-weight: 600; font-size: 13px; }
@@ -253,10 +270,10 @@
   .text-input:focus { outline: none; border-color: var(--teal); }
 
   .dropdown-panel {
-    display: none; position: absolute; top: calc(100% + 2px); left: 0; right: 0; z-index: 1000;
+    display: none; position: fixed; z-index: 9999;
     background: var(--surface2); border: 1px solid var(--teal);
     border-radius: var(--radius-sm); max-height: 180px; overflow-y: auto;
-    box-shadow: 0 6px 16px rgba(0,0,0,0.5);
+    box-shadow: 0 6px 16px rgba(0,0,0,0.5); min-width: 80px;
   }
   .dropdown-item {
     padding: 6px 10px; font-size: 12px; color: var(--text);
@@ -269,13 +286,58 @@
   .empty-state .icon { font-size: 36px; margin-bottom: 10px; opacity: 0.35; display: block; }
   .loading-state { text-align: center; padding: 36px; color: var(--muted2); font-size: 12px; }
 
+  /* row-selection checkbox */
+  .sel-chk { cursor: pointer; width: 14px; height: 14px; accent-color: var(--teal); }
+  /* shared_expense data checkbox */
   .row-chk { cursor: pointer; width: 14px; height: 14px; accent-color: var(--teal); }
+
+  /* per-row update button */
+  .btn-update {
+    display: none;
+    padding: 4px 10px; border-radius: var(--radius-sm);
+    font-size: 11px; font-weight: 700; cursor: pointer;
+    border: 1px solid var(--amber); background: var(--amber-dim);
+    color: var(--amber); font-family: var(--font);
+    white-space: nowrap;
+    transition: background var(--transition), color var(--transition);
+  }
+  .btn-update:hover { background: var(--amber); color: #0a0a10; }
+  tbody tr.dirty .btn-update { display: inline-flex; }
 
   .pagination-bar {
     display: flex; align-items: center; justify-content: center; gap: 12px;
     padding: 12px 18px; border-top: 1px solid var(--border);
   }
   .page-info { font-size: 13px; color: var(--muted); min-width: 160px; text-align: center; }
+
+  /* ── Bulk action bar ── */
+  .bulk-bar {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+    background: var(--surface);
+    border-top: 1px solid var(--border2);
+    box-shadow: 0 -4px 24px rgba(0,0,0,0.4);
+    padding: 10px 20px;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    transform: translateY(100%);
+    transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .bulk-bar.visible { transform: translateY(0); }
+  .bulk-count {
+    font-size: 13px; font-weight: 700; color: var(--teal);
+    min-width: 80px; white-space: nowrap;
+  }
+  .bulk-bar .combo-wrap { min-width: 130px; }
+  .bulk-bar .inline-combo { min-width: 130px; }
+  .bulk-divider {
+    width: 1px; height: 28px;
+    background: var(--border2); flex-shrink: 0; margin: 0 4px;
+  }
+  .bulk-dismiss {
+    margin-left: auto; background: none; border: none;
+    color: var(--muted); font-size: 18px; cursor: pointer; padding: 2px 6px;
+    line-height: 1;
+  }
+  .bulk-dismiss:hover { color: var(--text); }
 
   .toast {
     position: fixed; bottom: 24px; right: 24px;
@@ -348,6 +410,9 @@
           <table id="historyTable">
             <thead>
               <tr>
+                <th class="center" style="width:32px">
+                  <input type="checkbox" class="sel-chk" id="selAll" onchange="onSelectAll(this)" title="Select all">
+                </th>
                 <th class="sortable" data-col="time_period" style="width:90px" onclick="sortBy('time_period')">Period <i class="sort-icon"></i></th>
                 <th class="sortable" data-col="date" style="width:76px" onclick="sortBy('date')">Date <i class="sort-icon"></i></th>
                 <th class="sortable" data-col="merchant" onclick="sortBy('merchant')">Merchant <i class="sort-icon"></i></th>
@@ -358,9 +423,10 @@
                 <th style="width:72px">Cadence</th>
                 <th class="right" style="width:54px">Div By</th>
                 <th class="right" style="width:86px">Mo. Amt</th>
-                <th style="width:56px">Shared</th>
+                <th class="center" style="width:56px">Shared</th>
                 <th class="right" style="width:66px">Share %</th>
                 <th class="right" style="width:86px">Final Amt</th>
+                <th style="width:64px"></th>
               </tr>
             </thead>
             <tbody id="historyBody"></tbody>
@@ -379,6 +445,35 @@
 
 </div>
 
+<!-- Bulk action bar -->
+<div class="bulk-bar" id="bulkBar">
+  <span class="bulk-count" id="bulkCount">0 selected</span>
+  <div class="bulk-divider"></div>
+  <div class="combo-wrap" style="min-width:130px">
+    <input class="inline-combo" id="bulkCat" placeholder="Category"
+           onfocus="openCombo(this, getCatOptions())"
+           oninput="filterCombo(this); onBulkCatChange()">
+    <span class="combo-arrow clickable" onmousedown="event.preventDefault();document.getElementById('bulkCat').focus()">▾</span>
+  </div>
+  <div class="combo-wrap" style="min-width:130px">
+    <input class="inline-combo" id="bulkSub" placeholder="Subcategory"
+           onfocus="openBulkSubCombo()"
+           oninput="filterCombo(this)">
+    <span class="combo-arrow clickable" onmousedown="event.preventDefault();document.getElementById('bulkSub').focus()">▾</span>
+  </div>
+  <div class="combo-wrap" style="min-width:106px">
+    <input class="inline-combo" id="bulkType" placeholder="Type"
+           onfocus="openCombo(this, TYPE_OPTIONS)"
+           oninput="filterCombo(this)">
+    <span class="combo-arrow clickable" onmousedown="event.preventDefault();document.getElementById('bulkType').focus()">▾</span>
+  </div>
+  <div class="bulk-divider"></div>
+  <button class="btn btn-teal" id="btnApplyBulk" onclick="applyBulkEdit()" style="font-size:12px;padding:6px 14px">Apply to Selected</button>
+  <button class="btn btn-red" onclick="bulkDelete()" style="font-size:12px;padding:6px 14px">Delete Selected</button>
+  <button class="bulk-dismiss" onclick="clearSelection()" title="Dismiss">×</button>
+</div>
+
+<div id="globalDropdown" class="dropdown-panel"></div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -387,6 +482,7 @@ const REVIEW_TOKEN = {{ review_token | tojson }};
 let categories    = {};
 let TYPE_OPTIONS  = ['Expense', 'Investment', 'Saving'];
 let CADENCE_OPTIONS = ['O', 'M', 'Q', 'A'];
+let PERIOD_OPTIONS  = [];
 
 let currentPeriod = null;
 let currentPage   = 1;
@@ -395,6 +491,10 @@ let totalRows     = 0;
 let currentItems  = [];
 let sortCol = null;
 let sortDir = 'asc';
+
+let selectedIds  = new Set();
+let dirtyRows    = new Set();
+let _activeInput = null;
 
 /* ── API helpers ── */
 function apiUrl(path) {
@@ -430,7 +530,7 @@ function fmtDateShort(iso) {
 }
 function fmtAmt(n) {
   if (n == null) return '—';
-  return '₹ ' + Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  return '₹ ' + Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 function escHtml(s) {
   if (!s) return '';
@@ -485,6 +585,7 @@ async function loadPeriods() {
     const resp = await apiCall('/api/history/periods');
     if (!resp.ok) throw new Error(resp.statusText);
     const periods = await resp.json();
+    PERIOD_OPTIONS = periods.map(p => p.period);
     renderPeriodList(periods);
     return periods;
   } catch (e) {
@@ -504,7 +605,7 @@ function renderPeriodList(periods) {
           onclick="selectPeriod('${escHtml(p.period)}')"
           data-period="${escHtml(p.period)}">
       <div class="batch-item-title">${escHtml(p.period)}</div>
-      <div class="batch-item-meta">${p.count} rows</div>
+      <div class="batch-item-meta" id="sidebarCount-${escHtml(p.period)}">${p.count} rows</div>
     </div>`
   ).join('');
 }
@@ -514,16 +615,25 @@ function highlightSidebarItem(period) {
     el.classList.toggle('active', el.dataset.period === period));
 }
 
+function adjustSidebarCount(period, delta) {
+  const el = document.getElementById(`sidebarCount-${period}`);
+  if (!el) return;
+  const m = el.textContent.match(/\d+/);
+  if (m) el.textContent = `${Math.max(0, parseInt(m[0]) + delta)} rows`;
+}
+
 /* ── Period selection & pagination ── */
 async function selectPeriod(period) {
   document.getElementById('emptyState').style.display   = 'none';
   document.getElementById('historyView').style.display  = '';
   document.getElementById('historyBody').innerHTML =
-    '<tr><td colspan="13"><div class="loading-state">Loading…</div></td></tr>';
+    '<tr><td colspan="15"><div class="loading-state">Loading…</div></td></tr>';
   document.getElementById('periodTitle').textContent    = period;
   document.getElementById('periodSubtitle').textContent = '';
   sortCol = null; sortDir = 'asc';
   updateSortHeaders();
+  clearSelection();
+  dirtyRows.clear();
   await loadPage(period, 1);
   highlightSidebarItem(period);
 }
@@ -542,11 +652,14 @@ async function loadPage(period, page) {
     totalRows    = data.total;
     document.getElementById('periodSubtitle').textContent =
       `${data.total} rows · page ${data.page} of ${data.pages}`;
+    selectedIds.clear();
+    dirtyRows.clear();
+    updateBulkBar();
     renderTable();
     renderPagination();
   } catch (e) {
     document.getElementById('historyBody').innerHTML =
-      '<tr><td colspan="13"><div class="empty-state"><span class="icon">⚠️</span>Failed to load history.</div></td></tr>';
+      '<tr><td colspan="15"><div class="empty-state"><span class="icon">⚠️</span>Failed to load history.</div></td></tr>';
     document.getElementById('paginationBar').style.display = 'none';
   }
 }
@@ -577,7 +690,7 @@ function renderTable() {
 function renderItems(items) {
   const body = document.getElementById('historyBody');
   if (!items.length) {
-    body.innerHTML = '<tr><td colspan="13"><div class="empty-state"><span class="icon">📭</span>No rows in this period.</div></td></tr>';
+    body.innerHTML = '<tr><td colspan="15"><div class="empty-state"><span class="icon">📭</span>No rows in this period.</div></td></tr>';
     return;
   }
   body.innerHTML = items.map(item => {
@@ -590,13 +703,26 @@ function renderItems(items) {
     const finAmt = item.final_amount != null
       ? item.final_amount.toFixed(2)
       : (item.amount != null ? (item.amount / divBy * ratio).toFixed(2) : '—');
+    const isSelected = selectedIds.has(rowId);
+    const isDirty    = dirtyRows.has(rowId);
 
-    return `<tr data-row="${rowId}">
+    return `<tr data-row="${rowId}"
+                class="${isSelected ? 'row-selected' : ''}${isDirty ? ' dirty' : ''}">
+      <td class="center">
+        <input type="checkbox" class="sel-chk" data-row="${rowId}"
+               ${isSelected ? 'checked' : ''}
+               onchange="onRowSelect(this)">
+      </td>
       <td>
-        <input type="text" class="text-input" style="width:84px;font-size:11px"
-               data-field="time_period" data-row="${rowId}"
-               value="${escHtml(item.time_period || '')}"
-               onchange="onFieldChange(this)">
+        <div class="combo-wrap">
+          <input class="inline-combo" style="width:84px;font-size:11px"
+                 data-field="time_period" data-row="${rowId}"
+                 value="${escHtml(item.time_period || '')}"
+                 onfocus="openCombo(this, PERIOD_OPTIONS)"
+                 oninput="filterCombo(this); onFieldInput(this)">
+          <span class="combo-arrow clickable"
+                onmousedown="event.preventDefault();this.closest('.combo-wrap').querySelector('input').focus()">▾</span>
+        </div>
       </td>
       <td class="date-cell">${fmtDateShort(item.date)}</td>
       <td>
@@ -608,8 +734,7 @@ function renderItems(items) {
           <input class="inline-combo" data-field="category" data-row="${rowId}"
                  value="${escHtml(item.category)}"
                  onfocus="openCombo(this, getCatOptions())"
-                 oninput="filterCombo(this)"
-                 onchange="onFieldChange(this)">
+                 oninput="filterCombo(this); onFieldInput(this)">
           <span class="combo-arrow clickable" onmousedown="event.preventDefault();this.closest('.combo-wrap').querySelector('input').focus()">▾</span>
         </div>
       </td>
@@ -618,8 +743,7 @@ function renderItems(items) {
           <input class="inline-combo" data-field="sub_category" data-row="${rowId}"
                  value="${escHtml(item.sub_category)}"
                  onfocus="openCombo(this, getSubOptions(${rowId}))"
-                 oninput="filterCombo(this)"
-                 onchange="onFieldChange(this)">
+                 oninput="filterCombo(this); onFieldInput(this)">
           <span class="combo-arrow clickable" onmousedown="event.preventDefault();this.closest('.combo-wrap').querySelector('input').focus()">▾</span>
         </div>
       </td>
@@ -628,8 +752,7 @@ function renderItems(items) {
           <input class="inline-combo" data-field="spend_type" data-row="${rowId}"
                  value="${escHtml(item.spend_type)}"
                  onfocus="openCombo(this, TYPE_OPTIONS)"
-                 oninput="filterCombo(this)"
-                 onchange="onFieldChange(this)">
+                 oninput="filterCombo(this); onFieldInput(this)">
           <span class="combo-arrow clickable" onmousedown="event.preventDefault();this.closest('.combo-wrap').querySelector('input').focus()">▾</span>
         </div>
       </td>
@@ -639,8 +762,7 @@ function renderItems(items) {
           <input class="inline-combo" style="min-width:52px" data-field="cadence" data-row="${rowId}"
                  value="${escHtml(item.cadence || 'O')}"
                  onfocus="openCombo(this, CADENCE_OPTIONS)"
-                 oninput="filterCombo(this)"
-                 onchange="onFieldChange(this)">
+                 oninput="filterCombo(this); onFieldInput(this)">
           <span class="combo-arrow clickable" onmousedown="event.preventDefault();this.closest('.combo-wrap').querySelector('input').focus()">▾</span>
         </div>
       </td>
@@ -648,21 +770,24 @@ function renderItems(items) {
         <input type="text" inputmode="numeric" class="num-input" style="width:40px"
                data-field="divide_by" data-row="${rowId}"
                value="${divBy}"
-               onchange="onNumericFieldChange(this)">
+               oninput="onNumericFieldInput(this)">
       </td>
       <td class="right"><span class="computed-amt" data-computed="monthly_amount" data-row="${rowId}">${moAmt}</span></td>
-      <td style="text-align:center">
+      <td class="center">
         <input type="checkbox" class="row-chk" data-field="shared_expense" data-row="${rowId}"
                ${item.shared_expense === 'Y' ? 'checked' : ''}
-               onchange="onFieldChange(this)">
+               onchange="onSharedExpenseChange(this)">
       </td>
       <td class="right">
         <input type="text" inputmode="decimal" class="num-input" style="width:50px"
                data-field="share_ratio" data-row="${rowId}"
                value="${ratio}"
-               onchange="onNumericFieldChange(this)">
+               oninput="onNumericFieldInput(this)">
       </td>
       <td class="right"><span class="computed-amt" data-computed="final_amount" data-row="${rowId}">${finAmt}</span></td>
+      <td class="center">
+        <button class="btn-update" data-row="${rowId}" onclick="saveRow(${rowId})">Update</button>
+      </td>
     </tr>`;
   }).join('');
 }
@@ -676,12 +801,45 @@ function getSubOptions(rowId) {
 
 function openCombo(input, options) {
   closeAllCombos();
-  const wrap  = input.closest('.combo-wrap');
-  let panel   = wrap.querySelector('.dropdown-panel');
-  if (!panel) { panel = document.createElement('div'); panel.className = 'dropdown-panel'; wrap.appendChild(panel); }
+  _activeInput = input;
   input._comboOptions = options;
-  renderComboItems(panel, options, '');
+  const panel = document.getElementById('globalDropdown');
+  renderComboItems(panel, options, input.value.trim());
+
+  const rect       = input.getBoundingClientRect();
+  const MARGIN     = 8;
+  const MAX_H      = 180;
+  const spaceAbove = rect.top - MARGIN;
+  const spaceBelow = window.innerHeight - rect.bottom - MARGIN;
+
+  panel.style.left  = rect.left + 'px';
+  panel.style.width = Math.max(rect.width, 120) + 'px';
+
+  if (spaceAbove >= MAX_H) {
+    panel.style.top       = (rect.top - 2) + 'px';
+    panel.style.transform = 'translateY(-100%)';
+    panel.style.maxHeight = MAX_H + 'px';
+  } else if (spaceBelow >= MAX_H) {
+    panel.style.top       = (rect.bottom + 2) + 'px';
+    panel.style.transform = '';
+    panel.style.maxHeight = MAX_H + 'px';
+  } else if (spaceAbove >= spaceBelow) {
+    panel.style.top       = (rect.top - 2) + 'px';
+    panel.style.transform = 'translateY(-100%)';
+    panel.style.maxHeight = Math.max(60, spaceAbove) + 'px';
+  } else {
+    panel.style.top       = (rect.bottom + 2) + 'px';
+    panel.style.transform = '';
+    panel.style.maxHeight = Math.max(60, spaceBelow) + 'px';
+  }
+
   panel.style.display = 'block';
+}
+
+function openBulkSubCombo() {
+  const catVal = document.getElementById('bulkCat').value.trim();
+  const opts   = categories[catVal] || [];
+  openCombo(document.getElementById('bulkSub'), opts);
 }
 
 function renderComboItems(panel, options, q) {
@@ -692,24 +850,73 @@ function renderComboItems(panel, options, q) {
 }
 
 function filterCombo(input) {
-  const panel = input.closest('.combo-wrap')?.querySelector('.dropdown-panel');
+  if (input !== _activeInput) return;
+  const panel = document.getElementById('globalDropdown');
   if (panel && input._comboOptions) renderComboItems(panel, input._comboOptions, input.value.trim());
 }
 
 function pickCombo(item) {
-  const wrap  = item.closest('.combo-wrap');
-  const input = wrap.querySelector('input');
-  input.value = item.textContent;
-  wrap.querySelector('.dropdown-panel').style.display = 'none';
-  input.dispatchEvent(new Event('change', { bubbles: true }));
+  if (_activeInput) {
+    _activeInput.value = item.textContent;
+    const inp = _activeInput;
+    closeAllCombos();
+    inp.dispatchEvent(new Event('input', { bubbles: true }));
+  } else {
+    closeAllCombos();
+  }
 }
 
 function closeAllCombos() {
-  document.querySelectorAll('.dropdown-panel').forEach(p => p.style.display = 'none');
+  const panel = document.getElementById('globalDropdown');
+  if (panel) panel.style.display = 'none';
+  _activeInput = null;
 }
-document.addEventListener('click', e => { if (!e.target.closest('.combo-wrap')) closeAllCombos(); });
+document.addEventListener('click', e => {
+  if (!e.target.closest('.combo-wrap') && !e.target.closest('#globalDropdown')) closeAllCombos();
+});
 
-/* ── Field change → auto-save ── */
+/* ── Dirty state ── */
+function markDirty(rowId) {
+  dirtyRows.add(rowId);
+  const row = document.querySelector(`tr[data-row="${rowId}"]`);
+  if (row) row.classList.add('dirty');
+}
+
+function clearDirty(rowId) {
+  dirtyRows.delete(rowId);
+  const row = document.querySelector(`tr[data-row="${rowId}"]`);
+  if (row) row.classList.remove('dirty');
+}
+
+/* ── Field input handlers (update in-memory + recompute, but do NOT save) ── */
+function onFieldInput(el) {
+  const rowId = parseInt(el.dataset.row);
+  const field = el.dataset.field;
+  const item  = currentItems.find(i => i.id === rowId);
+  if (!item) return;
+  item[field] = el.value;
+  markDirty(rowId);
+}
+
+function onSharedExpenseChange(el) {
+  const rowId = parseInt(el.dataset.row);
+  const item  = currentItems.find(i => i.id === rowId);
+  if (!item) return;
+  item['shared_expense'] = el.checked ? 'Y' : 'N';
+  markDirty(rowId);
+}
+
+function onNumericFieldInput(el) {
+  const rowId = parseInt(el.dataset.row);
+  const field = el.dataset.field;
+  const row   = el.closest('tr');
+  const item  = currentItems.find(i => i.id === rowId);
+  if (!item) return;
+  item[field] = field === 'divide_by' ? (parseInt(el.value) || 1) : (parseFloat(el.value) || 1.0);
+  recomputeAmounts(rowId, item, row);
+  markDirty(rowId);
+}
+
 function recomputeAmounts(rowId, item, row) {
   const divBy = item.divide_by || 1;
   const ratio = item.share_ratio != null ? item.share_ratio : 1.0;
@@ -720,32 +927,13 @@ function recomputeAmounts(rowId, item, row) {
   if (finEl) finEl.textContent = (amt / divBy * ratio).toFixed(2);
 }
 
-function onFieldChange(el) {
-  const rowId = parseInt(el.dataset.row);
-  const field = el.dataset.field;
-  const row   = el.closest('tr');
-  const item  = currentItems.find(i => i.id === rowId);
+/* ── Save single row (called by per-row Update button) ── */
+async function saveRow(rowId) {
+  const item = currentItems.find(i => i.id === rowId);
   if (!item) return;
-  if (field === 'shared_expense') {
-    item[field] = el.checked ? 'Y' : 'N';
-  } else {
-    item[field] = el.value;
-  }
-  saveItem(rowId, item, row);
-}
-
-function onNumericFieldChange(el) {
-  const rowId = parseInt(el.dataset.row);
-  const field = el.dataset.field;
-  const row   = el.closest('tr');
-  const item  = currentItems.find(i => i.id === rowId);
-  if (!item) return;
-  item[field] = field === 'divide_by' ? (parseInt(el.value) || 1) : (parseFloat(el.value) || 1.0);
-  recomputeAmounts(rowId, item, row);
-  saveItem(rowId, item, row);
-}
-
-async function saveItem(rowId, item, row) {
+  const savedPeriod = currentPeriod;
+  const newPeriod   = (item.time_period || '').trim();
+  const row = document.querySelector(`tr[data-row="${rowId}"]`);
   row.classList.add('saving');
   try {
     const resp = await apiCall(`/api/history/${rowId}`, {
@@ -764,11 +952,24 @@ async function saveItem(rowId, item, row) {
     });
     if (!resp.ok) throw new Error('Save failed');
     const data = await resp.json();
+    row.classList.remove('saving');
+    if (newPeriod && newPeriod !== savedPeriod) {
+      row.remove();
+      currentItems = currentItems.filter(i => i.id !== rowId);
+      dirtyRows.delete(rowId);
+      totalRows = Math.max(0, totalRows - 1);
+      adjustSidebarCount(savedPeriod, -1);
+      adjustSidebarCount(newPeriod, +1);
+      document.getElementById('periodSubtitle').textContent =
+        `${totalRows} rows · page ${currentPage} of ${totalPages}`;
+      showToast(`Moved to ${newPeriod}`);
+      return;
+    }
     const moEl  = row.querySelector(`[data-computed="monthly_amount"][data-row="${rowId}"]`);
     const finEl = row.querySelector(`[data-computed="final_amount"][data-row="${rowId}"]`);
     if (moEl  && data.monthly_amount != null) moEl.textContent  = data.monthly_amount.toFixed(2);
     if (finEl && data.final_amount   != null) finEl.textContent = data.final_amount.toFixed(2);
-    row.classList.remove('saving');
+    clearDirty(rowId);
     flashSaved(row);
   } catch (e) {
     row.classList.remove('saving');
@@ -779,6 +980,157 @@ async function saveItem(rowId, item, row) {
 function flashSaved(row) {
   row.classList.add('saved');
   setTimeout(() => row.classList.remove('saved'), 1000);
+}
+
+/* ── Row selection ── */
+function onRowSelect(el) {
+  const rowId = parseInt(el.dataset.row);
+  const row   = el.closest('tr');
+  if (el.checked) {
+    selectedIds.add(rowId);
+    row.classList.add('row-selected');
+  } else {
+    selectedIds.delete(rowId);
+    row.classList.remove('row-selected');
+  }
+  updateSelectAllCheckbox();
+  updateBulkBar();
+}
+
+function onSelectAll(el) {
+  document.querySelectorAll('tbody .sel-chk').forEach(chk => {
+    const rowId = parseInt(chk.dataset.row);
+    const row   = chk.closest('tr');
+    chk.checked = el.checked;
+    if (el.checked) {
+      selectedIds.add(rowId);
+      row.classList.add('row-selected');
+    } else {
+      selectedIds.delete(rowId);
+      row.classList.remove('row-selected');
+    }
+  });
+  updateBulkBar();
+}
+
+function updateSelectAllCheckbox() {
+  const allChks = document.querySelectorAll('tbody .sel-chk');
+  const selAll  = document.getElementById('selAll');
+  if (!selAll || !allChks.length) return;
+  const checkedCount = [...allChks].filter(c => c.checked).length;
+  selAll.checked       = checkedCount === allChks.length;
+  selAll.indeterminate = checkedCount > 0 && checkedCount < allChks.length;
+}
+
+function clearSelection() {
+  selectedIds.clear();
+  document.querySelectorAll('tbody .sel-chk').forEach(chk => {
+    chk.checked = false;
+    chk.closest('tr')?.classList.remove('row-selected');
+  });
+  const selAll = document.getElementById('selAll');
+  if (selAll) { selAll.checked = false; selAll.indeterminate = false; }
+  updateBulkBar();
+}
+
+/* ── Bulk bar ── */
+function updateBulkBar() {
+  const bar   = document.getElementById('bulkBar');
+  const count = document.getElementById('bulkCount');
+  const n     = selectedIds.size;
+  count.textContent = `${n} selected`;
+  bar.classList.toggle('visible', n > 0);
+  updateApplyButton();
+}
+
+function onBulkCatChange() {
+  const sub = document.getElementById('bulkSub');
+  sub.value = '';
+  updateApplyButton();
+}
+
+function updateApplyButton() {
+  const btn  = document.getElementById('btnApplyBulk');
+  const cat  = document.getElementById('bulkCat').value.trim();
+  const sub  = document.getElementById('bulkSub').value.trim();
+  const type = document.getElementById('bulkType').value.trim();
+  btn.disabled = !(cat && sub && type);
+}
+
+document.getElementById('bulkCat').addEventListener('input',  updateApplyButton);
+document.getElementById('bulkSub').addEventListener('input',  updateApplyButton);
+document.getElementById('bulkType').addEventListener('input', updateApplyButton);
+
+async function applyBulkEdit() {
+  const cat  = document.getElementById('bulkCat').value.trim();
+  const sub  = document.getElementById('bulkSub').value.trim();
+  const type = document.getElementById('bulkType').value.trim();
+  if (!cat || !sub || !type) return;
+
+  const ids = [...selectedIds];
+  let ok = 0;
+  for (const rowId of ids) {
+    const item = currentItems.find(i => i.id === rowId);
+    if (!item) continue;
+    item.category    = cat;
+    item.sub_category = sub;
+    item.spend_type  = type;
+    const row = document.querySelector(`tr[data-row="${rowId}"]`);
+    if (row) {
+      row.querySelector(`[data-field="category"][data-row="${rowId}"]`).value    = cat;
+      row.querySelector(`[data-field="sub_category"][data-row="${rowId}"]`).value = sub;
+      row.querySelector(`[data-field="spend_type"][data-row="${rowId}"]`).value  = type;
+    }
+    try {
+      const resp = await apiCall(`/api/history/${rowId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          time_period:    item.time_period,
+          category:       cat,
+          sub_category:   sub,
+          spend_type:     type,
+          cadence:        item.cadence || 'O',
+          divide_by:      item.divide_by || 1,
+          shared_expense: item.shared_expense || 'N',
+          share_ratio:    item.share_ratio != null ? item.share_ratio : 1.0,
+        }),
+      });
+      if (resp.ok) {
+        ok++;
+        clearDirty(rowId);
+        if (row) flashSaved(row);
+      }
+    } catch (_) {}
+  }
+  showToast(`Updated ${ok} of ${ids.length} rows`);
+  clearSelection();
+}
+
+async function bulkDelete() {
+  const ids = [...selectedIds];
+  if (!ids.length) return;
+  if (!confirm(`Delete ${ids.length} row${ids.length > 1 ? 's' : ''}? This cannot be undone.`)) return;
+
+  let deleted = 0;
+  for (const rowId of ids) {
+    try {
+      const resp = await apiCall(`/api/history/${rowId}`, { method: 'DELETE' });
+      if (resp.ok || resp.status === 204) {
+        deleted++;
+        const row = document.querySelector(`tr[data-row="${rowId}"]`);
+        if (row) row.remove();
+        currentItems = currentItems.filter(i => i.id !== rowId);
+        dirtyRows.delete(rowId);
+        totalRows = Math.max(0, totalRows - 1);
+      }
+    } catch (_) {}
+  }
+  adjustSidebarCount(currentPeriod, -deleted);
+  document.getElementById('periodSubtitle').textContent =
+    `${totalRows} rows · page ${currentPage} of ${totalPages}`;
+  showToast(`Deleted ${deleted} row${deleted !== 1 ? 's' : ''}`);
+  clearSelection();
 }
 
 /* ── Init ── */

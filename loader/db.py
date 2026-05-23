@@ -184,7 +184,7 @@ def get_history_periods(conn) -> list[dict]:
     return [{"period": r[0], "count": r[1]} for r in rows]
 
 
-def get_history_page(conn, period: str, page: int, page_size: int = 50) -> dict:
+def get_history_page(conn, period: str, page: int, page_size: int = 25) -> dict:
     """Return {items, total, page, pages} for one time_period page."""
     offset = (page - 1) * page_size
     with conn.cursor() as cur:
@@ -271,6 +271,15 @@ def update_history_row(conn, row_id: int, fields: dict) -> dict | None:
             return None
     conn.commit()
     return {"monthly_amount": monthly_amount, "final_amount": final_amount}
+
+
+def delete_history_row(conn, row_id: int) -> bool:
+    """Delete a data_feed_history row by id. Returns True if a row was deleted."""
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM data_feed_history WHERE id = %s", (row_id,))
+        deleted = cur.rowcount > 0
+    conn.commit()
+    return deleted
 
 
 def find_duplicate_transaction(conn, transaction: dict) -> str | None:
