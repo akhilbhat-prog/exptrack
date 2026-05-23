@@ -184,15 +184,15 @@
     border: 1px solid var(--border2);
   }
   .btn-ghost:hover:not(:disabled) { background: var(--surface2); color: var(--text); }
-  .btn-teal {
+  .btn-primary {
     background: var(--teal); color: #0a0a10;
   }
-  .btn-teal:hover:not(:disabled) { opacity: 0.88; }
-  .btn-red {
+  .btn-primary:hover:not(:disabled) { opacity: 0.88; }
+  .btn-danger {
     background: var(--red-dim); color: var(--red);
     border: 1px solid var(--red);
   }
-  .btn-red:hover:not(:disabled) { background: var(--red); color: #fff; }
+  .btn-danger:hover:not(:disabled) { background: var(--red); color: #fff; }
   .btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
   .table-wrap { overflow-x: auto; }
@@ -232,6 +232,9 @@
 
   .merchant-name { font-weight: 600; font-size: 13px; }
   .merchant-entry { font-size: 11px; color: var(--muted2); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+
+  .amt-debit  { color: var(--red);   font-weight: 600; }
+  .amt-credit { color: var(--green); font-weight: 600; }
 
   .combo-wrap { position: relative; }
   .combo-arrow {
@@ -314,7 +317,7 @@
   .bulk-bar {
     position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
     background: var(--surface);
-    border-top: 1px solid var(--border2);
+    border-top: 2px solid var(--teal);
     box-shadow: 0 -4px 24px rgba(0,0,0,0.4);
     padding: 10px 20px;
     display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
@@ -328,7 +331,7 @@
   }
   .bulk-bar .combo-wrap { min-width: 130px; }
   .bulk-bar .inline-combo { min-width: 130px; }
-  .bulk-divider {
+  .bulk-sep {
     width: 1px; height: 28px;
     background: var(--border2); flex-shrink: 0; margin: 0 4px;
   }
@@ -340,7 +343,7 @@
   .bulk-dismiss:hover { color: var(--text); }
 
   .toast {
-    position: fixed; bottom: 24px; right: 24px;
+    position: fixed; bottom: 72px; right: 24px;
     background: var(--surface); border: 1px solid var(--border2);
     border-left: 3px solid var(--teal); border-radius: var(--radius-sm);
     padding: 10px 16px; font-size: 13px; font-weight: 500; color: var(--text);
@@ -448,7 +451,7 @@
 <!-- Bulk action bar -->
 <div class="bulk-bar" id="bulkBar">
   <span class="bulk-count" id="bulkCount">0 selected</span>
-  <div class="bulk-divider"></div>
+  <div class="bulk-sep"></div>
   <div class="combo-wrap" style="min-width:130px">
     <input class="inline-combo" id="bulkCat" placeholder="Category"
            onfocus="openCombo(this, getCatOptions())"
@@ -467,9 +470,9 @@
            oninput="filterCombo(this)">
     <span class="combo-arrow clickable" onmousedown="event.preventDefault();toggleCombo(document.getElementById('bulkType'))">▾</span>
   </div>
-  <div class="bulk-divider"></div>
-  <button class="btn btn-teal" id="btnApplyBulk" onclick="applyBulkEdit()" style="font-size:12px;padding:6px 14px">Apply to Selected</button>
-  <button class="btn btn-red" onclick="bulkDelete()" style="font-size:12px;padding:6px 14px">Delete Selected</button>
+  <div class="bulk-sep"></div>
+  <button class="btn btn-primary" id="btnApplyBulk" onclick="applyBulkEdit()" style="font-size:12px;padding:6px 14px">Apply to Selected</button>
+  <button class="btn btn-danger" onclick="bulkDelete()" style="font-size:12px;padding:6px 14px">Delete Selected</button>
   <button class="bulk-dismiss" onclick="clearSelection()" title="Dismiss">×</button>
 </div>
 
@@ -756,7 +759,7 @@ function renderItems(items) {
           <span class="combo-arrow clickable" onmousedown="event.preventDefault();toggleCombo(this.closest('.combo-wrap').querySelector('input'))">▾</span>
         </div>
       </td>
-      <td class="right"><span style="font-weight:600;font-size:13px">${fmtAmt(item.amount)}</span></td>
+      <td class="right"><span class="${item.amount < 0 ? 'amt-credit' : 'amt-debit'}" style="font-size:13px">${fmtAmt(item.amount)}</span></td>
       <td>
         <div class="combo-wrap">
           <input class="inline-combo" style="min-width:52px" data-field="cadence" data-row="${rowId}"

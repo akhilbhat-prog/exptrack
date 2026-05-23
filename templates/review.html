@@ -31,6 +31,8 @@
     --blue-dim: rgba(96,165,250,0.12);
     --yellow-dim: rgba(250,204,21,0.12);
     --orange-dim: rgba(251,146,60,0.12);
+    --amber-dim: rgba(251,191,36,0.10);
+    --amber: #fbbf24;
     --row-hover: #1f1f2e;
     --font: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     --radius: 10px;
@@ -59,6 +61,8 @@
     --blue-dim: rgba(37,99,235,0.10);
     --yellow-dim: rgba(202,138,4,0.10);
     --orange-dim: rgba(234,88,12,0.10);
+    --amber-dim: rgba(245,158,11,0.10);
+    --amber: #d97706;
     --row-hover: #f0f0f8;
   }
 
@@ -227,6 +231,7 @@
   tbody tr:hover { background: var(--row-hover); }
   tbody tr.saving { opacity: 0.6; }
   tbody tr.saved { background: var(--green-dim) !important; }
+  tbody tr.row-dirty { border-left: 3px solid var(--amber); }
 
   td { padding: 8px 10px; font-size: 13px; vertical-align: middle; }
   td.right { text-align: right; }
@@ -370,6 +375,18 @@
   .bulk-count { font-size: 13px; font-weight: 700; color: var(--teal); white-space: nowrap; min-width: 100px; }
   .bulk-sep { width: 1px; height: 26px; background: var(--border2); flex-shrink: 0; }
   .bulk-label { font-size: 11px; color: var(--muted); white-space: nowrap; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; }
+  .bulk-dismiss {
+    margin-left: auto; background: none; border: none;
+    color: var(--muted); font-size: 18px; cursor: pointer; padding: 2px 6px;
+    line-height: 1;
+  }
+  .bulk-dismiss:hover { color: var(--text); }
+
+  .pagination-bar {
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+    padding: 12px 18px; border-top: 1px solid var(--border);
+  }
+  .page-info { font-size: 13px; color: var(--muted); min-width: 160px; text-align: center; }
 
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: var(--bg); }
@@ -457,10 +474,15 @@
                 <th style="width:68px">Source</th>
                 <th style="width:54px"></th>
               </tr>
-
             </thead>
             <tbody id="itemsBody"></tbody>
           </table>
+        </div>
+
+        <div class="pagination-bar" id="reviewPaginationBar" style="display:none">
+          <button class="btn btn-ghost" id="btnReviewPrev" onclick="prevPage()" style="font-size:12px;padding:6px 12px">← Prev</button>
+          <span class="page-info" id="reviewPageInfo">Page 1 of 1</span>
+          <button class="btn btn-ghost" id="btnReviewNext" onclick="nextPage()" style="font-size:12px;padding:6px 12px">Next →</button>
         </div>
       </div>
 
@@ -495,6 +517,7 @@
   <button class="btn btn-primary" onclick="applyBulkEdit()" style="font-size:12px;padding:6px 12px">Apply to selected</button>
   <div class="bulk-sep"></div>
   <button class="btn btn-danger" onclick="bulkDelete()" style="font-size:12px;padding:6px 12px">🗑 Delete selected</button>
+  <button class="bulk-dismiss" onclick="clearSelection()" title="Dismiss">×</button>
 </div>
 
 <div id="globalDropdown" class="dropdown-panel"></div>
@@ -512,6 +535,9 @@ let sortCol = null;
 let sortDir = 'asc';
 let selectedIds  = new Set();
 let _activeInput = null;
+let reviewPage = 1;
+const reviewPageSize = 25;
+let reviewTotalPages = 1;
 
 /* ── API helpers ── */
 function apiUrl(path) {
@@ -564,6 +590,7 @@ function sortBy(col) {
     sortCol = col;
     sortDir = 'asc';
   }
+  reviewPage = 1;
   updateSortHeaders();
   renderTable();
 }
@@ -575,7 +602,7 @@ function updateSortHeaders() {
   });
 }
 
-/* ── Compute display items (sort) ── */
+/* ── Compute display items (sort + paginate) ── */
 function getDisplayItems() {
   let items = [...currentItems];
 
@@ -596,7 +623,28 @@ function getDisplayItems() {
       return 0;
     });
   }
-  return items;
+
+  reviewTotalPages = Math.max(1, Math.ceil(items.length / reviewPageSize));
+  reviewPage = Math.min(reviewPage, reviewTotalPages);
+  const start = (reviewPage - 1) * reviewPageSize;
+  return items.slice(start, start + reviewPageSize);
+}
+
+function prevPage() {
+  if (reviewPage > 1) { reviewPage--; renderTable(); }
+}
+function nextPage() {
+  if (reviewPage < reviewTotalPages) { reviewPage++; renderTable(); }
+}
+function renderPagination() {
+  const bar  = document.getElementById('reviewPaginationBar');
+  const info = document.getElementById('reviewPageInfo');
+  bar.style.display = reviewTotalPages > 1 ? '' : 'none';
+  if (info) info.textContent = `Page ${reviewPage} of ${reviewTotalPages} · ${currentItems.length} items`;
+  const prev = document.getElementById('btnReviewPrev');
+  const next = document.getElementById('btnReviewNext');
+  if (prev) prev.disabled = reviewPage <= 1;
+  if (next) next.disabled = reviewPage >= reviewTotalPages;
 }
 
 /* ── Multi-select ── */
@@ -764,8 +812,9 @@ async function selectBatch(id) {
   document.getElementById('batchTitle').textContent    = `Batch #${id}`;
   document.getElementById('batchSubtitle').textContent = '';
 
-  // Reset sort / filter / selection when changing batch
+  // Reset sort / filter / selection / pagination when changing batch
   sortCol = null; sortDir = 'asc';
+  reviewPage = 1;
   filters = { date: '', merchant: '', category: '', subcategory: '', type: '' };
   clearSelection();
   document.querySelectorAll('.filter-input').forEach(el => el.value = '');
@@ -894,7 +943,7 @@ document.addEventListener('click', e => {
   if (!e.target.closest('.combo-wrap') && !e.target.closest('#globalDropdown')) closeAllCombos();
 });
 
-/* ── renderTable(): filter + sort + rebuild tbody ── */
+/* ── renderTable(): sort + paginate + rebuild tbody ── */
 function renderTable() {
   renderItems(getDisplayItems());
   // Restore checkbox state
@@ -902,6 +951,7 @@ function renderTable() {
     chk.checked = selectedIds.has(parseInt(chk.dataset.txn));
   });
   updateSelectAll();
+  renderPagination();
 }
 
 /* ── Build tbody rows ── */
@@ -930,6 +980,12 @@ function renderItems(items) {
     const moAmt  = item.amount != null ? (item.amount / divBy).toFixed(2) : '—';
     const finAmt = item.amount != null ? (item.amount / divBy * ratio).toFixed(2) : '—';
 
+    const isDirty = !isComplete && (
+      item.category    !== (item.pred_category    || '') ||
+      item.subcategory !== (item.pred_subcategory || '') ||
+      item.type        !== (item.pred_type        || '')
+    );
+
     if (isComplete) {
       return `<tr data-txn="${txnId}">
         <td class="chk-cell"></td>
@@ -953,7 +1009,7 @@ function renderItems(items) {
       </tr>`;
     }
 
-    return `<tr data-txn="${txnId}">
+    return `<tr data-txn="${txnId}"${isDirty ? ' class="row-dirty"' : ''}>
       <td class="chk-cell"><input type="checkbox" class="row-chk" data-txn="${txnId}" onchange="onRowCheck(this)"></td>
       <td class="date-cell">${fmtDateShort(item.date)}</td>
       <td>
@@ -1054,6 +1110,11 @@ function onFieldChange(el) {
     if (hint) hint.classList.toggle('changed', item[field] !== (item[`pred_${field}`] || ''));
   }
 
+  const dirty = item.category    !== (item.pred_category    || '') ||
+                item.subcategory !== (item.pred_subcategory || '') ||
+                item.type        !== (item.pred_type        || '');
+  row.classList.toggle('row-dirty', dirty);
+
   saveItem(txnId, item, row);
 }
 
@@ -1116,6 +1177,7 @@ async function revertItem(txnId) {
   row.querySelector('[data-field="subcategory"]').value = item.subcategory;
   row.querySelector('[data-field="type"]').value        = item.type;
   row.querySelectorAll('.pred-hint').forEach(el => el.classList.remove('changed'));
+  row.classList.remove('row-dirty');
 
   await saveItem(txnId, item, row);
 }
