@@ -453,19 +453,19 @@
     <input class="inline-combo" id="bulkCat" placeholder="Category"
            onfocus="openCombo(this, getCatOptions())"
            oninput="filterCombo(this); onBulkCatChange()">
-    <span class="combo-arrow clickable" onmousedown="event.preventDefault();document.getElementById('bulkCat').focus()">▾</span>
+    <span class="combo-arrow clickable" onmousedown="event.preventDefault();toggleCombo(document.getElementById('bulkCat'))">▾</span>
   </div>
   <div class="combo-wrap" style="min-width:130px">
     <input class="inline-combo" id="bulkSub" placeholder="Subcategory"
            onfocus="openBulkSubCombo()"
            oninput="filterCombo(this)">
-    <span class="combo-arrow clickable" onmousedown="event.preventDefault();document.getElementById('bulkSub').focus()">▾</span>
+    <span class="combo-arrow clickable" onmousedown="event.preventDefault();toggleCombo(document.getElementById('bulkSub'))">▾</span>
   </div>
   <div class="combo-wrap" style="min-width:106px">
     <input class="inline-combo" id="bulkType" placeholder="Type"
            onfocus="openCombo(this, TYPE_OPTIONS)"
            oninput="filterCombo(this)">
-    <span class="combo-arrow clickable" onmousedown="event.preventDefault();document.getElementById('bulkType').focus()">▾</span>
+    <span class="combo-arrow clickable" onmousedown="event.preventDefault();toggleCombo(document.getElementById('bulkType'))">▾</span>
   </div>
   <div class="bulk-divider"></div>
   <button class="btn btn-teal" id="btnApplyBulk" onclick="applyBulkEdit()" style="font-size:12px;padding:6px 14px">Apply to Selected</button>
@@ -721,7 +721,7 @@ function renderItems(items) {
                  onfocus="openCombo(this, PERIOD_OPTIONS)"
                  oninput="filterCombo(this); onFieldInput(this)">
           <span class="combo-arrow clickable"
-                onmousedown="event.preventDefault();this.closest('.combo-wrap').querySelector('input').focus()">▾</span>
+                onmousedown="event.preventDefault();toggleCombo(this.closest('.combo-wrap').querySelector('input'))">▾</span>
         </div>
       </td>
       <td class="date-cell">${fmtDateShort(item.date)}</td>
@@ -735,7 +735,7 @@ function renderItems(items) {
                  value="${escHtml(item.category)}"
                  onfocus="openCombo(this, getCatOptions())"
                  oninput="filterCombo(this); onFieldInput(this)">
-          <span class="combo-arrow clickable" onmousedown="event.preventDefault();this.closest('.combo-wrap').querySelector('input').focus()">▾</span>
+          <span class="combo-arrow clickable" onmousedown="event.preventDefault();toggleCombo(this.closest('.combo-wrap').querySelector('input'))">▾</span>
         </div>
       </td>
       <td>
@@ -744,7 +744,7 @@ function renderItems(items) {
                  value="${escHtml(item.sub_category)}"
                  onfocus="openCombo(this, getSubOptions(${rowId}))"
                  oninput="filterCombo(this); onFieldInput(this)">
-          <span class="combo-arrow clickable" onmousedown="event.preventDefault();this.closest('.combo-wrap').querySelector('input').focus()">▾</span>
+          <span class="combo-arrow clickable" onmousedown="event.preventDefault();toggleCombo(this.closest('.combo-wrap').querySelector('input'))">▾</span>
         </div>
       </td>
       <td>
@@ -753,7 +753,7 @@ function renderItems(items) {
                  value="${escHtml(item.spend_type)}"
                  onfocus="openCombo(this, TYPE_OPTIONS)"
                  oninput="filterCombo(this); onFieldInput(this)">
-          <span class="combo-arrow clickable" onmousedown="event.preventDefault();this.closest('.combo-wrap').querySelector('input').focus()">▾</span>
+          <span class="combo-arrow clickable" onmousedown="event.preventDefault();toggleCombo(this.closest('.combo-wrap').querySelector('input'))">▾</span>
         </div>
       </td>
       <td class="right"><span style="font-weight:600;font-size:13px">${fmtAmt(item.amount)}</span></td>
@@ -763,7 +763,7 @@ function renderItems(items) {
                  value="${escHtml(item.cadence || 'O')}"
                  onfocus="openCombo(this, CADENCE_OPTIONS)"
                  oninput="filterCombo(this); onFieldInput(this)">
-          <span class="combo-arrow clickable" onmousedown="event.preventDefault();this.closest('.combo-wrap').querySelector('input').focus()">▾</span>
+          <span class="combo-arrow clickable" onmousedown="event.preventDefault();toggleCombo(this.closest('.combo-wrap').querySelector('input'))">▾</span>
         </div>
       </td>
       <td class="right">
@@ -870,6 +870,14 @@ function closeAllCombos() {
   const panel = document.getElementById('globalDropdown');
   if (panel) panel.style.display = 'none';
   _activeInput = null;
+}
+function toggleCombo(input) {
+  const panel = document.getElementById('globalDropdown');
+  if (_activeInput === input && panel && panel.style.display !== 'none') {
+    closeAllCombos();
+  } else {
+    input.focus();
+  }
 }
 document.addEventListener('click', e => {
   if (!e.target.closest('.combo-wrap') && !e.target.closest('#globalDropdown')) closeAllCombos();
