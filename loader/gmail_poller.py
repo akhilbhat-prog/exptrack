@@ -277,6 +277,20 @@ def send_summary_email(service, summary: dict, test_output: str, categorization_
                 f"{date_ist.strftime('%d %b %Y %H:%M IST')}"
             )
 
+    failed_details = summary.get("failed_details", [])
+    skipped_details = summary.get("skipped_details", [])
+
+    if failed_details:
+        lines += ["", f"Failed Messages ({len(failed_details)})", "-" * 40]
+        for i, entry in enumerate(failed_details, 1):
+            snippet = f"  ({entry['snippet']})" if entry.get("snippet") else ""
+            lines.append(f"{i}. id={entry['id']}  {entry['reason']}{snippet}")
+
+    if skipped_details:
+        lines += ["", f"Skipped Messages ({len(skipped_details)})", "-" * 40]
+        for i, entry in enumerate(skipped_details, 1):
+            lines.append(f"{i}. id={entry['id']}  {entry['reason']}")
+
     lines += [
         "",
         "Categorization",
@@ -326,10 +340,13 @@ def main(service) -> dict:
 
     if not message_stubs:
         conn.close()
-        return {"processed": 0, "skipped": 0, "failed": 0, "transactions": []}
+        return {"processed": 0, "skipped": 0, "failed": 0, "transactions": [],
+                "failed_details": [], "skipped_details": []}
 
     processed = skipped = failed = 0
     transactions: list[dict] = []
+    failed_details: list[dict] = []
+    skipped_details: list[dict] = []
 
     for stub in message_stubs:
         gmail_message_id = stub["id"]
@@ -339,6 +356,7 @@ def main(service) -> dict:
                 logger.warning(
                     "Message %s already in processed_emails — skipping.", gmail_message_id
                 )
+                skipped_details.append({"id": gmail_message_id, "reason": "already processed"})
                 skipped += 1
                 continue
 
@@ -375,6 +393,7 @@ def main(service) -> dict:
                 if raw_html:
                     logger.warning("Full email body for message %s:\n%s", gmail_message_id, raw_html)
                 db.log_email(conn, gmail_message_id, "failed", "empty body")
+                failed_details.append({"id": gmail_message_id, "reason": "empty body"})
                 failed += 1
                 continue
 
@@ -385,6 +404,11 @@ def main(service) -> dict:
                     body.replace("\n", " "),
                 )
                 db.log_email(conn, gmail_message_id, "failed", "unrecognised format")
+                failed_details.append({
+                    "id": gmail_message_id,
+                    "reason": "unrecognised format",
+                    "snippet": body[:100].replace("\n", " "),
+                })
                 failed += 1
                 continue
 
@@ -396,6 +420,7 @@ def main(service) -> dict:
                     gmail_message_id, existing_id,
                 )
                 db.log_email(conn, gmail_message_id, "skipped", f"duplicate of {existing_id}")
+                skipped_details.append({"id": gmail_message_id, "reason": f"duplicate of {existing_id}"})
                 skipped += 1
                 continue
 
@@ -413,16 +438,25 @@ def main(service) -> dict:
             transactions.append(transaction)
             processed += 1
 
-        except Exception:
+        except Exception as exc:
             logger.exception("Unexpected error processing message %s.", gmail_message_id)
             try:
                 db.log_email(conn, gmail_message_id, "failed", "unexpected error")
             except Exception:
                 pass
+            failed_details.append({
+                "id": gmail_message_id,
+                "reason": f"unexpected error: {type(exc).__name__}: {exc}",
+            })
             failed += 1
 
     conn.close()
-    return {"processed": processed, "skipped": skipped, "failed": failed, "transactions": transactions}
+    return {
+        "processed": processed, "skipped": skipped, "failed": failed,
+        "transactions": transactions,
+        "failed_details": failed_details,
+        "skipped_details": skipped_details,
+    }
 
 
 # ---------------------------------------------------------------------------

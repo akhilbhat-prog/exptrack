@@ -282,6 +282,81 @@ def delete_history_row(conn, row_id: int) -> bool:
     return deleted
 
 
+def get_history_summary(conn, period: str, prev_period: str | None = None) -> dict:
+    """Return top-5 categories by spend for a time period, plus the period grand total.
+
+    When prev_period is supplied each category also includes prev_total (the same
+    category's spend in that period, or None if absent).
+    """
+    with conn.cursor() as cur:
+        if prev_period:
+            cur.execute(
+                """
+                SELECT
+                    cat,
+                    SUM(CASE WHEN period_key = %(cur)s  THEN amt END)  AS cur_total,
+                    SUM(CASE WHEN period_key = %(prev)s THEN amt END)  AS prev_total,
+                    COUNT(CASE WHEN period_key = %(cur)s THEN 1 END)   AS cnt,
+                    SUM(SUM(CASE WHEN period_key = %(cur)s THEN amt END)) OVER () AS period_total
+                FROM (
+                    SELECT
+                        COALESCE(NULLIF(TRIM(category), ''), 'Uncategorised') AS cat,
+                        COALESCE(NULLIF(TRIM(time_period), ''),
+                                 TO_CHAR(entry_date, 'Mon-YYYY'))             AS period_key,
+                        COALESCE(final_amount, amount)                        AS amt
+                    FROM data_feed_history
+                    WHERE COALESCE(NULLIF(TRIM(time_period), ''),
+                                   TO_CHAR(entry_date, 'Mon-YYYY')) IN (%(cur)s, %(prev)s)
+                ) sub
+                GROUP BY cat
+                HAVING COUNT(CASE WHEN period_key = %(cur)s THEN 1 END) > 0
+                ORDER BY cur_total DESC NULLS LAST
+                LIMIT 5
+                """,
+                {"cur": period, "prev": prev_period},
+            )
+            rows = cur.fetchall()
+            period_total = float(rows[0][4]) if rows and rows[0][4] is not None else 0.0
+            return {
+                "top_categories": [
+                    {
+                        "category":   r[0],
+                        "total":      float(r[1]) if r[1] is not None else 0.0,
+                        "prev_total": float(r[2]) if r[2] is not None else None,
+                        "count":      r[3],
+                    }
+                    for r in rows
+                ],
+                "period_total": period_total,
+            }
+        else:
+            cur.execute(
+                """
+                SELECT
+                    COALESCE(NULLIF(TRIM(category), ''), 'Uncategorised') AS category,
+                    SUM(COALESCE(final_amount, amount))                   AS total,
+                    COUNT(*)                                              AS cnt,
+                    SUM(SUM(COALESCE(final_amount, amount))) OVER ()      AS period_total
+                FROM data_feed_history
+                WHERE COALESCE(NULLIF(TRIM(time_period), ''),
+                               TO_CHAR(entry_date, 'Mon-YYYY')) = %s
+                GROUP BY COALESCE(NULLIF(TRIM(category), ''), 'Uncategorised')
+                ORDER BY SUM(COALESCE(final_amount, amount)) DESC
+                LIMIT 5
+                """,
+                (period,),
+            )
+            rows = cur.fetchall()
+            period_total = float(rows[0][3]) if rows and rows[0][3] is not None else 0.0
+            return {
+                "top_categories": [
+                    {"category": r[0], "total": float(r[1]) if r[1] is not None else 0.0, "count": r[2]}
+                    for r in rows
+                ],
+                "period_total": period_total,
+            }
+
+
 def find_duplicate_transaction(conn, transaction: dict) -> str | None:
     """
     Return the gmail_message_id of an existing transaction that matches the

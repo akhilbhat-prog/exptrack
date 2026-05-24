@@ -72,6 +72,21 @@ def list_history():
         conn.close()
 
 
+@history_bp.route("/api/history/summary")
+@_require_token
+def history_summary():
+    period = request.args.get("period", "").strip()
+    if not period:
+        return jsonify({"top_categories": []})
+    prev_period = request.args.get("prev_period", "").strip() or None
+    conn = db.get_connection()
+    try:
+        result = db.get_history_summary(conn, period, prev_period)
+        return jsonify(result)
+    finally:
+        conn.close()
+
+
 @history_bp.route("/api/history/<int:row_id>", methods=["DELETE"])
 @_require_token
 def delete_history(row_id):

@@ -235,3 +235,47 @@ class TestSendSummaryEmail:
         _, body = self._decode_email(svc)
         assert "ok" in body
         assert "PASS  all tests" in body
+
+    def test_failed_details_appear_in_body(self, monkeypatch):
+        monkeypatch.setenv("NOTIFICATION_EMAIL", "test@example.com")
+        svc = self._make_service()
+        summary = self._make_summary(failed=2)
+        summary["failed_details"] = [
+            {"id": "abc123", "reason": "empty body"},
+            {"id": "def456", "reason": "unexpected error: ValueError: bad data",
+             "snippet": "Rs. 100 debit"},
+        ]
+        send_summary_email(svc, summary, "(no output)")
+        _, body = self._decode_email(svc)
+        assert "Failed Messages (2)" in body
+        assert "id=abc123" in body
+        assert "empty body" in body
+        assert "id=def456" in body
+        assert "unexpected error: ValueError: bad data" in body
+        assert "(Rs. 100 debit)" in body
+
+    def test_skipped_details_appear_in_body(self, monkeypatch):
+        monkeypatch.setenv("NOTIFICATION_EMAIL", "test@example.com")
+        svc = self._make_service()
+        summary = self._make_summary(skipped=2)
+        summary["skipped_details"] = [
+            {"id": "ghi789", "reason": "already processed"},
+            {"id": "jkl012", "reason": "duplicate of mno345"},
+        ]
+        send_summary_email(svc, summary, "(no output)")
+        _, body = self._decode_email(svc)
+        assert "Skipped Messages (2)" in body
+        assert "id=ghi789" in body
+        assert "already processed" in body
+        assert "id=jkl012" in body
+        assert "duplicate of mno345" in body
+
+    def test_missing_detail_keys_backward_compat(self, monkeypatch):
+        monkeypatch.setenv("NOTIFICATION_EMAIL", "test@example.com")
+        svc = self._make_service()
+        # Old-style summary dict without failed_details / skipped_details
+        summary = self._make_summary(failed=1, skipped=1)
+        send_summary_email(svc, summary, "(no output)")
+        _, body = self._decode_email(svc)
+        assert "Failed Messages" not in body
+        assert "Skipped Messages" not in body

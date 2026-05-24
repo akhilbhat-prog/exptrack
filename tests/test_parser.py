@@ -63,8 +63,11 @@ def test_is_upi_debit_old_format():
 def test_is_upi_debit_new_format():
     assert is_upi_debit("is debited from your account ending 1750 towards VPA")
 
-def test_is_upi_credit():
+def test_is_upi_credit_old_format():
     assert is_upi_credit("is successfully credited to your account")
+
+def test_is_upi_credit_new_format():
+    assert is_upi_credit("has been successfully credited to your HDFC Bank account ending in 1750")
 
 def test_is_netbanking():
     assert is_netbanking("HDFC Bank NetBanking for payment")
@@ -209,6 +212,50 @@ def test_upi_credit_raw_entry():
 
 def test_upi_credit_date_is_utc():
     r = email_parser.parse(UPI_CREDIT, RECEIVED)
+    assert r["date"].tzinfo == timezone.utc
+
+# ---------------------------------------------------------------------------
+# Format 2b: UPI Credit (new 2026 format)
+# ---------------------------------------------------------------------------
+
+UPI_CREDIT_NEW = (
+    "Dear Customer, Greetings from HDFC Bank! We're writing to inform you that "
+    "Rs.32000.00 has been successfully credited to your HDFC Bank account ending in 1750. "
+    "Transaction Details: a. Date: 23-05-26 b. Sender: ADITI B R (VPA: aditib6@okhdfcbank) "
+    "c. UPI Reference No.: 123561307386"
+)
+
+def test_upi_credit_new_parses():
+    assert email_parser.parse(UPI_CREDIT_NEW, RECEIVED) is not None
+
+def test_upi_credit_new_amount():
+    r = email_parser.parse(UPI_CREDIT_NEW, RECEIVED)
+    assert r["amount"] == 32000.00
+
+def test_upi_credit_new_type_and_format():
+    r = email_parser.parse(UPI_CREDIT_NEW, RECEIVED)
+    assert r["type"] == "credit"
+    assert r["format"] == "upi"
+
+def test_upi_credit_new_account_last4():
+    r = email_parser.parse(UPI_CREDIT_NEW, RECEIVED)
+    assert r["account_last4"] == "1750"
+
+def test_upi_credit_new_vpa_and_merchant():
+    r = email_parser.parse(UPI_CREDIT_NEW, RECEIVED)
+    assert r["vpa"] == "aditib6@okhdfcbank"
+    assert r["merchant"] == "ADITI B R"
+
+def test_upi_credit_new_upi_ref():
+    r = email_parser.parse(UPI_CREDIT_NEW, RECEIVED)
+    assert r["upi_ref"] == "123561307386"
+
+def test_upi_credit_new_raw_entry():
+    r = email_parser.parse(UPI_CREDIT_NEW, RECEIVED)
+    assert r["raw_entry"] == "aditib6@okhdfcbank ADITI B R"
+
+def test_upi_credit_new_date_is_utc():
+    r = email_parser.parse(UPI_CREDIT_NEW, RECEIVED)
     assert r["date"].tzinfo == timezone.utc
 
 # ---------------------------------------------------------------------------

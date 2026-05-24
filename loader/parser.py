@@ -63,7 +63,10 @@ def is_upi_debit(body: str) -> bool:
 
 
 def is_upi_credit(body: str) -> bool:
-    return bool(re.search(r"is successfully credited to your account", body, re.IGNORECASE))
+    return bool(re.search(
+        r"(?:is|has been) successfully credited to your (?:HDFC Bank )?account",
+        body, re.IGNORECASE
+    ))
 
 
 def is_netbanking(body: str) -> bool:
@@ -144,11 +147,42 @@ def parse_upi_debit(body: str, received_at: datetime) -> dict | None:
 
 def parse_upi_credit(body: str, received_at: datetime) -> dict | None:
     """
-    Sample:
+    New format (2026):
+      Rs.32000.00 has been successfully credited to your HDFC Bank account ending in 1750.
+      Transaction Details: a. Date: 23-05-26 b. Sender: ADITI B R (VPA: aditib6@okhdfcbank)
+      c. UPI Reference No.: 123561307386
+
+    Old format:
       Rs. 7000.00 is successfully credited to your account **1750 by VPA
       ktkonceptz-1@okhdfcbank ZABIULLAKHAN H SO HAFIZULLAKHAN on 20-12-25.
       Your UPI transaction reference number is 115932677040.
     """
+    # New format: labelled fields, sender name before VPA.
+    m = re.search(
+        r"Rs\.\s*([\d,]+\.\d{2})\s+has been successfully credited to your HDFC Bank account ending in\s+(\d+)"
+        r".*?a\.\s*Date:\s*(\d{2}-\d{2}-\d{2})"
+        r".*?b\.\s*Sender:\s*(.+?)\s*\(VPA:\s*(\S+?)\)"
+        r".*?c\.\s*UPI Reference No\.:\s*(\d+)",
+        body,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if m:
+        merchant = m.group(4).strip()
+        vpa = m.group(5)
+        return {
+            "amount": _parse_amount(m.group(1)),
+            "type": "credit",
+            "format": "upi",
+            "account_last4": m.group(2)[-4:],
+            "card_last4": None,
+            "vpa": vpa,
+            "merchant": merchant,
+            "raw_entry": f"{vpa} {merchant}",
+            "date": _merge_date_time(_parse_date_ddmmyy(m.group(3)), received_at),
+            "upi_ref": m.group(6),
+        }
+
+    # Old format: inline prose, VPA before merchant name.
     m = re.search(
         r"Rs\.\s*([\d,]+\.\d{2})\s+is successfully credited to your account\s+\**(\d+)"
         r"\s+by VPA\s+(\S+)\s+(.+?)\s+on\s+(\d{2}-\d{2}-\d{2})\."
@@ -343,6 +377,28 @@ if __name__ == "__main__":
     check("F2 upi_ref",              r2 and r2["upi_ref"] == "115932677040")
     check("F2 raw_entry",            r2 and r2["raw_entry"] == "ktkonceptz-1@okhdfcbank ZABIULLAKHAN H SO HAFIZULLAKHAN")
     check("F2 date is UTC",          r2 and r2["date"].tzinfo == timezone.utc)
+    print()
+
+    # -----------------------------------------------------------------------
+    # Format 2b: UPI Credit (new 2026 format)
+    # -----------------------------------------------------------------------
+    b2b = (
+        "Dear Customer, Greetings from HDFC Bank! We're writing to inform you that "
+        "Rs.32000.00 has been successfully credited to your HDFC Bank account ending in 1750. "
+        "Transaction Details: a. Date: 23-05-26 b. Sender: ADITI B R (VPA: aditib6@okhdfcbank) "
+        "c. UPI Reference No.: 123561307386"
+    )
+    r2b = parse(b2b, _received)
+    check("F2b parse not None",      r2b is not None)
+    check("F2b amount",              r2b and r2b["amount"] == 32000.00)
+    check("F2b type",                r2b and r2b["type"] == "credit")
+    check("F2b format",              r2b and r2b["format"] == "upi")
+    check("F2b account_last4",       r2b and r2b["account_last4"] == "1750")
+    check("F2b vpa",                 r2b and r2b["vpa"] == "aditib6@okhdfcbank")
+    check("F2b merchant",            r2b and r2b["merchant"] == "ADITI B R")
+    check("F2b upi_ref",             r2b and r2b["upi_ref"] == "123561307386")
+    check("F2b raw_entry",           r2b and r2b["raw_entry"] == "aditib6@okhdfcbank ADITI B R")
+    check("F2b date is UTC",         r2b and r2b["date"].tzinfo == timezone.utc)
     print()
 
     # -----------------------------------------------------------------------
