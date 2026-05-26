@@ -220,6 +220,21 @@
   thead th.sort-asc  .sort-icon::after { content: '▲'; color: var(--teal); }
   thead th.sort-desc .sort-icon::after { content: '▼'; color: var(--teal); }
 
+  .filter-row th {
+    padding: 3px 4px; background: var(--surface2);
+    border-bottom: 2px solid var(--border2);
+  }
+  .filter-input {
+    width: 100%; min-width: 0;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 4px; color: var(--text);
+    font-family: var(--font); font-size: 11px; padding: 2px 5px;
+    outline: none;
+  }
+  .filter-input:focus { border-color: var(--teal); box-shadow: 0 0 0 2px rgba(45,212,191,0.15); }
+  .filter-input option { background: var(--surface2); }
+  .filter-active { border-color: var(--teal) !important; background: var(--teal-dim) !important; }
+
   /* Hide checkbox column on complete (read-only) batches */
   table.batch-complete .chk-cell { display: none; }
 
@@ -451,6 +466,7 @@
           <div class="section-actions">
             <button class="btn btn-ghost" id="btnMarkReviewed" onclick="markReviewed()">✓ Mark Reviewed</button>
             <button class="btn btn-primary" id="btnComplete" onclick="completeBatch()">✦ Complete Batch</button>
+            <button class="btn btn-danger" id="btnDeleteBatch" onclick="deleteBatch()" style="display:none">🗑 Delete Batch</button>
           </div>
         </div>
 
@@ -465,14 +481,31 @@
                 <th class="sortable" data-col="category" style="width:128px" onclick="sortBy('category')">Category <i class="sort-icon"></i></th>
                 <th class="sortable" data-col="subcategory" style="width:148px" onclick="sortBy('subcategory')">Subcategory <i class="sort-icon"></i></th>
                 <th class="sortable" data-col="type" style="width:106px" onclick="sortBy('type')">Type <i class="sort-icon"></i></th>
-                <th style="width:56px">Cadence</th>
-                <th class="right" style="width:56px">Div By</th>
-                <th style="width:50px">Shared</th>
-                <th class="right" style="width:66px">Share %</th>
-                <th class="right" style="width:86px">Mo. Amt</th>
-                <th class="right" style="width:86px">Final Amt</th>
-                <th style="width:68px">Source</th>
+                <th class="sortable" data-col="cadence" style="width:56px" onclick="sortBy('cadence')">Cadence <i class="sort-icon"></i></th>
+                <th class="sortable right" data-col="divide_by" style="width:56px" onclick="sortBy('divide_by')">Div By <i class="sort-icon"></i></th>
+                <th class="sortable" data-col="shared_expense" style="width:50px" onclick="sortBy('shared_expense')">Shared <i class="sort-icon"></i></th>
+                <th class="sortable right" data-col="share_ratio" style="width:66px" onclick="sortBy('share_ratio')">Share % <i class="sort-icon"></i></th>
+                <th class="sortable right" data-col="monthly_amount" style="width:86px" onclick="sortBy('monthly_amount')">Mo. Amt <i class="sort-icon"></i></th>
+                <th class="sortable right" data-col="final_amount" style="width:86px" onclick="sortBy('final_amount')">Final Amt <i class="sort-icon"></i></th>
+                <th class="sortable" data-col="pred_source" style="width:68px" onclick="sortBy('pred_source')">Source <i class="sort-icon"></i></th>
                 <th style="width:54px"></th>
+              </tr>
+              <tr class="filter-row">
+                <th class="chk-cell"></th>
+                <th><input class="filter-input" id="flt-date" data-filter="date" placeholder="e.g. 2026-05" oninput="onFilter()"></th>
+                <th><input class="filter-input" id="flt-merchant" data-filter="merchant" placeholder="Search…" oninput="onFilter()"></th>
+                <th><input class="filter-input" id="flt-amount" data-filter="amount" placeholder="e.g. >500" oninput="onFilter()"></th>
+                <th><select class="filter-input" id="flt-category" data-filter="category" onchange="onFilter()"><option value="">All</option></select></th>
+                <th><select class="filter-input" id="flt-subcategory" data-filter="subcategory" onchange="onFilter()"><option value="">All</option></select></th>
+                <th><select class="filter-input" id="flt-type" data-filter="type" onchange="onFilter()"><option value="">All</option></select></th>
+                <th><select class="filter-input" id="flt-cadence" data-filter="cadence" onchange="onFilter()"><option value="">All</option></select></th>
+                <th></th>
+                <th><select class="filter-input" id="flt-shared_expense" data-filter="shared_expense" onchange="onFilter()"><option value="">All</option><option value="Y">Y</option><option value="N">N</option></select></th>
+                <th></th>
+                <th></th>
+                <th></th>
+                <th><select class="filter-input" id="flt-pred_source" data-filter="pred_source" onchange="onFilter()"><option value="">All</option></select></th>
+                <th></th>
               </tr>
             </thead>
             <tbody id="itemsBody"></tbody>
@@ -533,6 +566,10 @@ let currentItems  = [];
 let showAllBatches = false;
 let sortCol = null;
 let sortDir = 'asc';
+let filters = {
+  date: '', merchant: '', amount: '', category: '',
+  subcategory: '', type: '', cadence: '', shared_expense: '', pred_source: ''
+};
 let selectedIds  = new Set();
 let _activeInput = null;
 let reviewPage = 1;
@@ -595,6 +632,42 @@ function sortBy(col) {
   renderTable();
 }
 
+function onFilter() {
+  document.querySelectorAll('.filter-input[data-filter]').forEach(el => {
+    filters[el.dataset.filter] = el.value;
+    el.classList.toggle('filter-active', !!el.value);
+  });
+  reviewPage = 1;
+  renderTable();
+}
+
+function populateFilterOptions() {
+  function setOpts(id, key) {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const cur = sel.value;
+    const vals = [...new Set(currentItems.map(i => i[key] || '').filter(Boolean))].sort();
+    sel.innerHTML = '<option value="">All</option>' +
+      vals.map(v => `<option value="${escHtml(v)}"${v === cur ? ' selected' : ''}>${escHtml(v)}</option>`).join('');
+  }
+  setOpts('flt-category',    'category');
+  setOpts('flt-subcategory', 'subcategory');
+  setOpts('flt-type',        'type');
+  setOpts('flt-cadence',     'cadence');
+  setOpts('flt-pred_source', 'pred_source');
+}
+
+function resetFilters() {
+  filters = {
+    date: '', merchant: '', amount: '', category: '',
+    subcategory: '', type: '', cadence: '', shared_expense: '', pred_source: ''
+  };
+  document.querySelectorAll('.filter-input').forEach(el => {
+    if (el.tagName === 'SELECT') el.selectedIndex = 0; else el.value = '';
+    el.classList.remove('filter-active');
+  });
+}
+
 function updateSortHeaders() {
   document.querySelectorAll('thead th.sortable').forEach(th => {
     th.classList.remove('sort-asc', 'sort-desc');
@@ -602,20 +675,54 @@ function updateSortHeaders() {
   });
 }
 
-/* ── Compute display items (sort + paginate) ── */
+/* ── Filter + sort + paginate ── */
+function filterRows(items) {
+  const f = filters;
+  return items.filter(item => {
+    if (f.date     && !(item.date || '').includes(f.date))       return false;
+    if (f.merchant && !(item.merchant || '').toLowerCase().includes(f.merchant.toLowerCase())) return false;
+    if (f.category    && (item.category    || '') !== f.category)    return false;
+    if (f.subcategory && (item.subcategory || '') !== f.subcategory) return false;
+    if (f.type        && (item.type        || '') !== f.type)        return false;
+    if (f.cadence     && (item.cadence     || 'O') !== f.cadence)    return false;
+    if (f.shared_expense && (item.shared_expense || 'N') !== f.shared_expense) return false;
+    if (f.pred_source && (item.pred_source || '') !== f.pred_source) return false;
+    if (f.amount) {
+      const amt = item.amount || 0;
+      const v = f.amount.trim();
+      if      (v.startsWith('>=')) { if (amt <  parseFloat(v.slice(2))) return false; }
+      else if (v.startsWith('<=')) { if (amt >  parseFloat(v.slice(2))) return false; }
+      else if (v.startsWith('>'))  { if (amt <= parseFloat(v.slice(1))) return false; }
+      else if (v.startsWith('<'))  { if (amt >= parseFloat(v.slice(1))) return false; }
+      else { const n = parseFloat(v); if (!isNaN(n) && Math.abs(amt - n) > 0.01) return false; }
+    }
+    return true;
+  });
+}
+
 function getDisplayItems() {
-  let items = [...currentItems];
+  let items = filterRows([...currentItems]);
 
   if (sortCol) {
     items.sort((a, b) => {
       let va, vb;
+      const divA = a.divide_by || 1, divB = b.divide_by || 1;
+      const ratA = a.share_ratio != null ? a.share_ratio : 1;
+      const ratB = b.share_ratio != null ? b.share_ratio : 1;
       switch (sortCol) {
-        case 'date':        va = a.date || '';                          vb = b.date || ''; break;
-        case 'merchant':    va = (a.merchant || '').toLowerCase();      vb = (b.merchant || '').toLowerCase(); break;
-        case 'amount':      va = a.amount || 0;                         vb = b.amount || 0; break;
-        case 'category':    va = (a.category || '').toLowerCase();      vb = (b.category || '').toLowerCase(); break;
-        case 'subcategory': va = (a.subcategory || '').toLowerCase();   vb = (b.subcategory || '').toLowerCase(); break;
-        case 'type':        va = (a.type || '').toLowerCase();          vb = (b.type || '').toLowerCase(); break;
+        case 'date':          va = a.date || '';                           vb = b.date || ''; break;
+        case 'merchant':      va = (a.merchant || '').toLowerCase();       vb = (b.merchant || '').toLowerCase(); break;
+        case 'amount':        va = a.amount || 0;                          vb = b.amount || 0; break;
+        case 'category':      va = (a.category    || '').toLowerCase();    vb = (b.category    || '').toLowerCase(); break;
+        case 'subcategory':   va = (a.subcategory || '').toLowerCase();    vb = (b.subcategory || '').toLowerCase(); break;
+        case 'type':          va = (a.type        || '').toLowerCase();    vb = (b.type        || '').toLowerCase(); break;
+        case 'cadence':       va = (a.cadence     || 'O');                 vb = (b.cadence     || 'O'); break;
+        case 'divide_by':     va = divA;                                   vb = divB; break;
+        case 'shared_expense': va = a.shared_expense || 'N';              vb = b.shared_expense || 'N'; break;
+        case 'share_ratio':   va = ratA;                                   vb = ratB; break;
+        case 'monthly_amount': va = (a.amount || 0) / divA;               vb = (b.amount || 0) / divB; break;
+        case 'final_amount':  va = (a.amount || 0) / divA * ratA;         vb = (b.amount || 0) / divB * ratB; break;
+        case 'pred_source':   va = (a.pred_source || '').toLowerCase();    vb = (b.pred_source || '').toLowerCase(); break;
         default: return 0;
       }
       if (va < vb) return sortDir === 'asc' ? -1 : 1;
@@ -815,9 +922,8 @@ async function selectBatch(id) {
   // Reset sort / filter / selection / pagination when changing batch
   sortCol = null; sortDir = 'asc';
   reviewPage = 1;
-  filters = { date: '', merchant: '', category: '', subcategory: '', type: '' };
+  resetFilters();
   clearSelection();
-  document.querySelectorAll('.filter-input').forEach(el => el.value = '');
   updateSortHeaders();
 
   try {
@@ -826,6 +932,7 @@ async function selectBatch(id) {
     const data = await resp.json();
     currentBatch = data.batch;
     currentItems = data.items;
+    populateFilterOptions();
     updateBatchHeader();
     renderTable();
     highlightSidebarItem(id);
@@ -851,6 +958,7 @@ function updateBatchHeader() {
 
   document.getElementById('btnMarkReviewed').style.display = isComplete ? 'none' : '';
   document.getElementById('btnComplete').style.display     = isComplete ? 'none' : '';
+  document.getElementById('btnDeleteBatch').style.display  = isComplete ? 'none' : '';
   document.getElementById('btnMarkReviewed').disabled = !isPending;
   document.getElementById('btnComplete').disabled     = !isReviewed;
 
@@ -1251,6 +1359,32 @@ async function completeBatch() {
   } catch (e) {
     btn.disabled = false;
     btn.textContent = '✦ Complete Batch';
+    showToast(`Error: ${e.message}`, 'error');
+  }
+}
+
+async function deleteBatch() {
+  if (!currentBatch) return;
+  if (!confirm(`Delete Batch #${currentBatch.id} and all its items? This cannot be undone.`)) return;
+  const btn = document.getElementById('btnDeleteBatch');
+  btn.disabled = true;
+  btn.textContent = 'Deleting…';
+  try {
+    const resp = await apiCall(`/api/batches/${currentBatch.id}`, { method: 'DELETE' });
+    if (!resp.ok) {
+      let msg = 'Failed';
+      try { msg = (await resp.json()).error || msg; } catch (_) {}
+      throw new Error(msg);
+    }
+    showToast(`Batch #${currentBatch.id} deleted ✓`);
+    currentBatch = null; currentItems = [];
+    clearSelection();
+    document.getElementById('batchView').style.display  = 'none';
+    document.getElementById('emptyState').style.display = '';
+    await loadBatches();
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = '🗑 Delete Batch';
     showToast(`Error: ${e.message}`, 'error');
   }
 }

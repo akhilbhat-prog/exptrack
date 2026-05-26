@@ -214,6 +214,21 @@
   thead th.sort-asc  .sort-icon::after { content: '▲'; color: var(--teal); }
   thead th.sort-desc .sort-icon::after { content: '▼'; color: var(--teal); }
 
+  .filter-row th {
+    padding: 3px 4px; background: var(--surface2);
+    border-bottom: 2px solid var(--border2);
+  }
+  .filter-input {
+    width: 100%; min-width: 0;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 4px; color: var(--text);
+    font-family: var(--font); font-size: 11px; padding: 2px 5px;
+    outline: none;
+  }
+  .filter-input:focus { border-color: var(--teal); box-shadow: 0 0 0 2px rgba(45,212,191,0.15); }
+  .filter-input option { background: var(--surface2); }
+  .filter-active { border-color: var(--teal) !important; background: var(--teal-dim) !important; }
+
   tbody tr {
     border-bottom: 1px solid var(--border);
     transition: background var(--transition);
@@ -442,6 +457,7 @@
             <div class="section-title" id="periodTitle"></div>
             <div class="section-subtitle" id="periodSubtitle"></div>
           </div>
+          <button class="btn btn-ghost" onclick="openAddEntryModal()">+ Add Entry</button>
         </div>
 
         <div class="table-wrap">
@@ -458,13 +474,30 @@
                 <th class="sortable" data-col="sub_category" style="width:148px" onclick="sortBy('sub_category')">Subcategory <i class="sort-icon"></i></th>
                 <th class="sortable" data-col="spend_type" style="width:106px" onclick="sortBy('spend_type')">Type <i class="sort-icon"></i></th>
                 <th class="sortable right" data-col="amount" style="width:90px" onclick="sortBy('amount')">Amount <i class="sort-icon"></i></th>
-                <th style="width:72px">Cadence</th>
-                <th class="right" style="width:54px">Div By</th>
-                <th class="right" style="width:86px">Mo. Amt</th>
-                <th class="center" style="width:56px">Shared</th>
-                <th class="right" style="width:66px">Share %</th>
-                <th class="right" style="width:86px">Final Amt</th>
+                <th class="sortable" data-col="cadence" style="width:72px" onclick="sortBy('cadence')">Cadence <i class="sort-icon"></i></th>
+                <th class="sortable right" data-col="divide_by" style="width:54px" onclick="sortBy('divide_by')">Div By <i class="sort-icon"></i></th>
+                <th class="sortable right" data-col="monthly_amount" style="width:86px" onclick="sortBy('monthly_amount')">Mo. Amt <i class="sort-icon"></i></th>
+                <th class="sortable center" data-col="shared_expense" style="width:56px" onclick="sortBy('shared_expense')">Shared <i class="sort-icon"></i></th>
+                <th class="sortable right" data-col="share_ratio" style="width:66px" onclick="sortBy('share_ratio')">Share % <i class="sort-icon"></i></th>
+                <th class="sortable right" data-col="final_amount" style="width:86px" onclick="sortBy('final_amount')">Final Amt <i class="sort-icon"></i></th>
                 <th style="width:64px"></th>
+              </tr>
+              <tr class="filter-row">
+                <th></th>
+                <th><select class="filter-input" id="flt-time_period" data-filter="time_period" onchange="onFilter()"><option value="">All</option></select></th>
+                <th><input class="filter-input" id="flt-date" data-filter="date" placeholder="e.g. 2026-05" oninput="onFilter()"></th>
+                <th><input class="filter-input" id="flt-merchant" data-filter="merchant" placeholder="Search…" oninput="onFilter()"></th>
+                <th><select class="filter-input" id="flt-category" data-filter="category" onchange="onFilter()"><option value="">All</option></select></th>
+                <th><select class="filter-input" id="flt-sub_category" data-filter="sub_category" onchange="onFilter()"><option value="">All</option></select></th>
+                <th><select class="filter-input" id="flt-spend_type" data-filter="spend_type" onchange="onFilter()"><option value="">All</option></select></th>
+                <th><input class="filter-input" id="flt-amount" data-filter="amount" placeholder="e.g. >500" oninput="onFilter()"></th>
+                <th><select class="filter-input" id="flt-cadence" data-filter="cadence" onchange="onFilter()"><option value="">All</option></select></th>
+                <th></th>
+                <th></th>
+                <th><select class="filter-input" id="flt-shared_expense" data-filter="shared_expense" onchange="onFilter()"><option value="">All</option><option value="Y">Y</option><option value="N">N</option></select></th>
+                <th></th>
+                <th></th>
+                <th></th>
               </tr>
             </thead>
             <tbody id="historyBody"></tbody>
@@ -481,6 +514,99 @@
     </div>
   </div>
 
+</div>
+
+<!-- Add Entry modal -->
+<div id="addEntryModal" onclick="if(event.target===this)closeAddEntryModal()"
+     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:300;align-items:center;justify-content:center;">
+  <div style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);width:min(560px,95vw);max-height:90vh;display:flex;flex-direction:column;overflow:hidden;">
+    <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+      <div style="font-size:15px;font-weight:700;">Add Manual Entry</div>
+      <button class="row-action-btn" onclick="closeAddEntryModal()" style="font-size:18px;line-height:1;">×</button>
+    </div>
+    <div style="overflow-y:auto;flex:1;padding:16px 18px;display:flex;flex-direction:column;gap:12px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px;">
+          Date <span style="color:var(--red);display:inline">*</span>
+          <input type="date" id="aeDate" class="inline-combo" style="width:100%">
+        </label>
+        <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px;">
+          Amount <span style="color:var(--red);display:inline">*</span>
+          <input type="number" step="0.01" id="aeAmount" class="inline-combo" placeholder="0.00" style="width:100%">
+        </label>
+      </div>
+      <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px;">
+        Description <span style="color:var(--red);display:inline">*</span>
+        <input type="text" id="aeText" class="inline-combo" placeholder="e.g. Cash payment at pharmacy" style="width:100%">
+      </label>
+      <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px;">
+        Merchant
+        <input type="text" id="aeMerchant" class="inline-combo" placeholder="Optional" style="width:100%">
+      </label>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
+        <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px;">
+          Category
+          <div class="combo-wrap">
+            <input class="inline-combo" id="aeCat" placeholder="Category"
+                   onfocus="openCombo(this,getCatOptions())"
+                   oninput="filterCombo(this);onAeCatChange()">
+            <span class="combo-arrow clickable" onmousedown="event.preventDefault();toggleCombo(document.getElementById('aeCat'))">▾</span>
+          </div>
+        </label>
+        <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px;">
+          Subcategory
+          <div class="combo-wrap">
+            <input class="inline-combo" id="aeSub" placeholder="Subcategory"
+                   onfocus="openCombo(this,getAeSubOptions())"
+                   oninput="filterCombo(this)">
+            <span class="combo-arrow clickable" onmousedown="event.preventDefault();toggleCombo(document.getElementById('aeSub'))">▾</span>
+          </div>
+        </label>
+        <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px;">
+          Spend Type
+          <div class="combo-wrap">
+            <input class="inline-combo" id="aeType" placeholder="Type"
+                   onfocus="openCombo(this,TYPE_OPTIONS)"
+                   oninput="filterCombo(this)">
+            <span class="combo-arrow clickable" onmousedown="event.preventDefault();toggleCombo(document.getElementById('aeType'))">▾</span>
+          </div>
+        </label>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;">
+        <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px;">
+          Cadence
+          <div class="combo-wrap">
+            <input class="inline-combo" id="aeCadence" value="O"
+                   onfocus="openCombo(this,CADENCE_OPTIONS)"
+                   oninput="filterCombo(this)">
+            <span class="combo-arrow clickable" onmousedown="event.preventDefault();toggleCombo(document.getElementById('aeCadence'))">▾</span>
+          </div>
+        </label>
+        <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px;">
+          Divide By
+          <input type="number" min="1" id="aeDivideBy" class="inline-combo" value="1" style="width:100%">
+        </label>
+        <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px;">
+          Shared
+          <div class="combo-wrap">
+            <input class="inline-combo" id="aeShared" value="N"
+                   onfocus="openCombo(this,['N','Y'])"
+                   oninput="filterCombo(this)">
+            <span class="combo-arrow clickable" onmousedown="event.preventDefault();toggleCombo(document.getElementById('aeShared'))">▾</span>
+          </div>
+        </label>
+        <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px;">
+          Share Ratio
+          <input type="number" step="0.01" min="0" max="1" id="aeShareRatio" class="inline-combo" value="1.0" style="width:100%">
+        </label>
+      </div>
+      <div id="aeError" style="display:none;color:var(--red);font-size:12px;"></div>
+    </div>
+    <div style="padding:12px 18px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:flex-end;gap:8px;">
+      <button class="btn btn-ghost" onclick="closeAddEntryModal()">Cancel</button>
+      <button class="btn btn-primary" id="btnAddEntrySubmit" onclick="submitAddEntry()">Add Entry</button>
+    </div>
+  </div>
 </div>
 
 <!-- Bulk action bar -->
@@ -523,12 +649,19 @@ let CADENCE_OPTIONS = ['O', 'M', 'Q', 'A'];
 let PERIOD_OPTIONS  = [];
 
 let currentPeriod = null;
-let currentPage   = 1;
-let totalPages    = 1;
+let viewPage      = 1;
+let viewPageSize  = 25;
+let viewTotalPages   = 1;
+let viewFilteredCount = 0;
 let totalRows     = 0;
 let currentItems  = [];
 let sortCol = null;
 let sortDir = 'asc';
+
+let filters = {
+  time_period: '', date: '', merchant: '', category: '',
+  sub_category: '', spend_type: '', amount: '', cadence: '', shared_expense: ''
+};
 
 let selectedIds  = new Set();
 let dirtyRows    = new Set();
@@ -616,6 +749,15 @@ function _renderSummaryCards(cats, periodTotal) {
   }
 }
 
+async function refreshSummaryCards() {
+  if (!currentPeriod) return;
+  const _pp = _prevPeriod(currentPeriod);
+  try {
+    const r = await apiCall(`/api/history/summary?period=${encodeURIComponent(currentPeriod)}&prev_period=${encodeURIComponent(_pp || '')}`);
+    if (r.ok) { const d = await r.json(); _renderSummaryCards(d.top_categories || [], d.period_total || 0); }
+  } catch (_) {}
+}
+
 /* ── Sorting ── */
 function sortBy(col) {
   if (sortCol === col) {
@@ -628,6 +770,49 @@ function sortBy(col) {
   renderTable();
 }
 
+function onFilter() {
+  document.querySelectorAll('.filter-input[data-filter]').forEach(el => {
+    filters[el.dataset.filter] = el.value;
+    el.classList.toggle('filter-active', !!el.value);
+  });
+  viewPage = 1;
+  renderTable();
+  renderPagination();
+  updateSubtitle();
+}
+
+function updateSubtitle() {
+  const filtered = viewFilteredCount !== totalRows ? ` · ${viewFilteredCount} shown` : '';
+  document.getElementById('periodSubtitle').textContent = `${totalRows} rows${filtered}`;
+}
+
+function populateFilterOptions() {
+  function setOpts(id, key) {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const cur = sel.value;
+    const vals = [...new Set(currentItems.map(i => i[key] || '').filter(Boolean))].sort();
+    sel.innerHTML = '<option value="">All</option>' +
+      vals.map(v => `<option value="${escHtml(v)}"${v === cur ? ' selected' : ''}>${escHtml(v)}</option>`).join('');
+  }
+  setOpts('flt-time_period', 'time_period');
+  setOpts('flt-category',    'category');
+  setOpts('flt-sub_category','sub_category');
+  setOpts('flt-spend_type',  'spend_type');
+  setOpts('flt-cadence',     'cadence');
+}
+
+function resetFilters() {
+  filters = {
+    time_period: '', date: '', merchant: '', category: '',
+    sub_category: '', spend_type: '', amount: '', cadence: '', shared_expense: ''
+  };
+  document.querySelectorAll('.filter-input').forEach(el => {
+    if (el.tagName === 'SELECT') el.selectedIndex = 0; else el.value = '';
+    el.classList.remove('filter-active');
+  });
+}
+
 function updateSortHeaders() {
   document.querySelectorAll('thead th.sortable').forEach(th => {
     th.classList.remove('sort-asc', 'sort-desc');
@@ -635,19 +820,49 @@ function updateSortHeaders() {
   });
 }
 
+function filterRows(items) {
+  const f = filters;
+  return items.filter(item => {
+    if (f.time_period && (item.time_period || '') !== f.time_period) return false;
+    if (f.date       && !(item.date || '').includes(f.date))         return false;
+    if (f.merchant   && !(item.merchant || '').toLowerCase().includes(f.merchant.toLowerCase())) return false;
+    if (f.category      && (item.category    || '') !== f.category)      return false;
+    if (f.sub_category  && (item.sub_category|| '') !== f.sub_category)  return false;
+    if (f.spend_type    && (item.spend_type  || '') !== f.spend_type)    return false;
+    if (f.cadence       && (item.cadence || 'O')    !== f.cadence)       return false;
+    if (f.shared_expense && (item.shared_expense || 'N') !== f.shared_expense) return false;
+    if (f.amount) {
+      const amt = item.amount || 0;
+      const v = f.amount.trim();
+      if      (v.startsWith('>=')) { if (amt <  parseFloat(v.slice(2))) return false; }
+      else if (v.startsWith('<=')) { if (amt >  parseFloat(v.slice(2))) return false; }
+      else if (v.startsWith('>'))  { if (amt <= parseFloat(v.slice(1))) return false; }
+      else if (v.startsWith('<'))  { if (amt >= parseFloat(v.slice(1))) return false; }
+      else { const n = parseFloat(v); if (!isNaN(n) && Math.abs(amt - n) > 0.01) return false; }
+    }
+    return true;
+  });
+}
+
 function getDisplayItems() {
-  let items = [...currentItems];
+  let items = filterRows([...currentItems]);
   if (sortCol) {
     items.sort((a, b) => {
       let va, vb;
       switch (sortCol) {
-        case 'time_period':  va = a.time_period  || ''; vb = b.time_period  || ''; break;
-        case 'date':         va = a.date         || ''; vb = b.date         || ''; break;
-        case 'merchant':     va = (a.merchant    || '').toLowerCase(); vb = (b.merchant    || '').toLowerCase(); break;
-        case 'category':     va = (a.category    || '').toLowerCase(); vb = (b.category    || '').toLowerCase(); break;
-        case 'sub_category': va = (a.sub_category|| '').toLowerCase(); vb = (b.sub_category|| '').toLowerCase(); break;
-        case 'spend_type':   va = (a.spend_type  || '').toLowerCase(); vb = (b.spend_type  || '').toLowerCase(); break;
-        case 'amount':       va = a.amount || 0; vb = b.amount || 0; break;
+        case 'time_period':   va = a.time_period   || ''; vb = b.time_period   || ''; break;
+        case 'date':          va = a.date           || ''; vb = b.date           || ''; break;
+        case 'merchant':      va = (a.merchant     || '').toLowerCase(); vb = (b.merchant     || '').toLowerCase(); break;
+        case 'category':      va = (a.category     || '').toLowerCase(); vb = (b.category     || '').toLowerCase(); break;
+        case 'sub_category':  va = (a.sub_category || '').toLowerCase(); vb = (b.sub_category || '').toLowerCase(); break;
+        case 'spend_type':    va = (a.spend_type   || '').toLowerCase(); vb = (b.spend_type   || '').toLowerCase(); break;
+        case 'amount':        va = a.amount        || 0; vb = b.amount        || 0; break;
+        case 'cadence':       va = (a.cadence      || 'O'); vb = (b.cadence      || 'O'); break;
+        case 'divide_by':     va = a.divide_by     || 1;  vb = b.divide_by     || 1;  break;
+        case 'monthly_amount': va = a.monthly_amount || 0; vb = b.monthly_amount || 0; break;
+        case 'shared_expense': va = a.shared_expense|| 'N'; vb = b.shared_expense|| 'N'; break;
+        case 'share_ratio':   va = a.share_ratio   != null ? a.share_ratio : 1; vb = b.share_ratio != null ? b.share_ratio : 1; break;
+        case 'final_amount':  va = a.final_amount  || 0;  vb = b.final_amount  || 0;  break;
         default: return 0;
       }
       if (va < vb) return sortDir === 'asc' ? -1 : 1;
@@ -655,7 +870,11 @@ function getDisplayItems() {
       return 0;
     });
   }
-  return items;
+  viewFilteredCount = items.length;
+  viewTotalPages = Math.max(1, Math.ceil(items.length / viewPageSize));
+  viewPage = Math.min(viewPage, viewTotalPages);
+  const start = (viewPage - 1) * viewPageSize;
+  return items.slice(start, start + viewPageSize);
 }
 
 /* ── Sidebar ── */
@@ -711,10 +930,11 @@ async function selectPeriod(period) {
   document.getElementById('periodTitle').textContent    = period;
   document.getElementById('periodSubtitle').textContent = '';
   sortCol = null; sortDir = 'asc';
+  resetFilters();
   updateSortHeaders();
   clearSelection();
   dirtyRows.clear();
-  await loadPage(period, 1);
+  await loadAllItems(period);
   highlightSidebarItem(period);
   const _pp = _prevPeriod(period);
   apiCall(`/api/history/summary?period=${encodeURIComponent(period)}&prev_period=${encodeURIComponent(_pp || '')}`)
@@ -723,25 +943,24 @@ async function selectPeriod(period) {
     .catch(() => {});
 }
 
-async function loadPage(period, page) {
+async function loadAllItems(period) {
   currentPeriod = period;
-  currentPage   = page;
+  viewPage = 1;
   try {
     const resp = await apiCall(
-      `/api/history?period=${encodeURIComponent(period)}&page=${page}`
+      `/api/history?period=${encodeURIComponent(period)}&page=1&page_size=5000`
     );
     if (!resp.ok) throw new Error(resp.statusText);
     const data = await resp.json();
     currentItems = data.items;
-    totalPages   = data.pages;
     totalRows    = data.total;
-    document.getElementById('periodSubtitle').textContent =
-      `${data.total} rows · page ${data.page} of ${data.pages}`;
+    populateFilterOptions();
     selectedIds.clear();
     dirtyRows.clear();
     updateBulkBar();
     renderTable();
     renderPagination();
+    updateSubtitle();
   } catch (e) {
     document.getElementById('historyBody').innerHTML =
       '<tr><td colspan="15"><div class="empty-state"><span class="icon">⚠️</span>Failed to load history.</div></td></tr>';
@@ -750,10 +969,10 @@ async function loadPage(period, page) {
 }
 
 function prevPage() {
-  if (currentPage > 1) loadPage(currentPeriod, currentPage - 1);
+  if (viewPage > 1) { viewPage--; renderTable(); renderPagination(); updateSubtitle(); }
 }
 function nextPage() {
-  if (currentPage < totalPages) loadPage(currentPeriod, currentPage + 1);
+  if (viewPage < viewTotalPages) { viewPage++; renderTable(); renderPagination(); updateSubtitle(); }
 }
 
 function renderPagination() {
@@ -761,10 +980,11 @@ function renderPagination() {
   const info = document.getElementById('pageInfo');
   const prev = document.getElementById('btnPrev');
   const next = document.getElementById('btnNext');
-  bar.style.display = totalPages > 1 ? '' : 'none';
-  if (info) info.textContent = `Page ${currentPage} of ${totalPages} · ${totalRows} rows`;
-  if (prev) prev.disabled = currentPage <= 1;
-  if (next) next.disabled = currentPage >= totalPages;
+  bar.style.display = viewTotalPages > 1 ? '' : 'none';
+  const suffix = viewFilteredCount !== totalRows ? ` (${totalRows} total)` : '';
+  if (info) info.textContent = `Page ${viewPage} of ${viewTotalPages} · ${viewFilteredCount} row${viewFilteredCount !== 1 ? 's' : ''}${suffix}`;
+  if (prev) prev.disabled = viewPage <= 1;
+  if (next) next.disabled = viewPage >= viewTotalPages;
 }
 
 /* ── Table rendering ── */
@@ -988,6 +1208,15 @@ function onFieldInput(el) {
   const item  = currentItems.find(i => i.id === rowId);
   if (!item) return;
   item[field] = el.value;
+  if (field === 'cadence' && el.value.toUpperCase() === 'A') {
+    item.divide_by = 12;
+    const row = document.querySelector(`tr[data-row="${rowId}"]`);
+    if (row) {
+      const divByEl = row.querySelector('[data-field="divide_by"]');
+      if (divByEl) divByEl.value = 12;
+      recomputeAmounts(rowId, item, row);
+    }
+  }
   markDirty(rowId);
 }
 
@@ -995,7 +1224,16 @@ function onSharedExpenseChange(el) {
   const rowId = parseInt(el.dataset.row);
   const item  = currentItems.find(i => i.id === rowId);
   if (!item) return;
-  item['shared_expense'] = el.checked ? 'Y' : 'N';
+  const isShared = el.checked;
+  item['shared_expense'] = isShared ? 'Y' : 'N';
+  const newRatio = isShared ? 0.7 : 1.0;
+  item['share_ratio'] = newRatio;
+  const row = document.querySelector(`tr[data-row="${rowId}"]`);
+  if (row) {
+    const ratioEl = row.querySelector('[data-field="share_ratio"]');
+    if (ratioEl) ratioEl.value = newRatio.toFixed(2);
+    recomputeAmounts(rowId, item, row);
+  }
   markDirty(rowId);
 }
 
@@ -1053,9 +1291,10 @@ async function saveRow(rowId) {
       totalRows = Math.max(0, totalRows - 1);
       adjustSidebarCount(savedPeriod, -1);
       adjustSidebarCount(newPeriod, +1);
-      document.getElementById('periodSubtitle').textContent =
-        `${totalRows} rows · page ${currentPage} of ${totalPages}`;
+      renderPagination();
+      updateSubtitle();
       showToast(`Moved to ${newPeriod}`);
+      refreshSummaryCards();
       return;
     }
     const moEl  = row.querySelector(`[data-computed="monthly_amount"][data-row="${rowId}"]`);
@@ -1064,6 +1303,7 @@ async function saveRow(rowId) {
     if (finEl && data.final_amount   != null) finEl.textContent = data.final_amount.toFixed(2);
     clearDirty(rowId);
     flashSaved(row);
+    refreshSummaryCards();
   } catch (e) {
     row.classList.remove('saving');
     showToast('Failed to save ✗', 'error');
@@ -1198,6 +1438,7 @@ async function applyBulkEdit() {
   }
   showToast(`Updated ${ok} of ${ids.length} rows`);
   clearSelection();
+  refreshSummaryCards();
 }
 
 async function bulkDelete() {
@@ -1220,10 +1461,107 @@ async function bulkDelete() {
     } catch (_) {}
   }
   adjustSidebarCount(currentPeriod, -deleted);
-  document.getElementById('periodSubtitle').textContent =
-    `${totalRows} rows · page ${currentPage} of ${totalPages}`;
+  renderTable();
+  renderPagination();
+  updateSubtitle();
   showToast(`Deleted ${deleted} row${deleted !== 1 ? 's' : ''}`);
   clearSelection();
+  refreshSummaryCards();
+}
+
+/* ── Add Entry modal ── */
+function openAddEntryModal() {
+  document.getElementById('aeDate').value = '';
+  document.getElementById('aeAmount').value = '';
+  document.getElementById('aeText').value = '';
+  document.getElementById('aeMerchant').value = '';
+  document.getElementById('aeCat').value = '';
+  document.getElementById('aeSub').value = '';
+  document.getElementById('aeType').value = '';
+  document.getElementById('aeCadence').value = 'O';
+  document.getElementById('aeDivideBy').value = '1';
+  document.getElementById('aeShared').value = 'N';
+  document.getElementById('aeShareRatio').value = '1.0';
+  document.getElementById('aeError').style.display = 'none';
+  const btn = document.getElementById('btnAddEntrySubmit');
+  btn.disabled = false; btn.textContent = 'Add Entry';
+  const modal = document.getElementById('addEntryModal');
+  modal.style.display = 'flex';
+  document.getElementById('aeDate').focus();
+}
+
+function closeAddEntryModal() {
+  document.getElementById('addEntryModal').style.display = 'none';
+}
+
+function getAeSubOptions() {
+  const cat = (document.getElementById('aeCat').value || '').trim();
+  return cat ? (categories[cat] || []) : [];
+}
+
+function onAeCatChange() {
+  document.getElementById('aeSub').value = '';
+}
+
+async function submitAddEntry() {
+  const entry_date  = (document.getElementById('aeDate').value || '').trim();
+  const entry_text  = (document.getElementById('aeText').value || '').trim();
+  const amount_str  = (document.getElementById('aeAmount').value || '').trim();
+  const errEl = document.getElementById('aeError');
+
+  if (!entry_date || !entry_text || !amount_str) {
+    errEl.textContent = 'Date, description, and amount are required.';
+    errEl.style.display = '';
+    return;
+  }
+  const amount = parseFloat(amount_str);
+  if (isNaN(amount)) {
+    errEl.textContent = 'Amount must be a number.';
+    errEl.style.display = '';
+    return;
+  }
+  errEl.style.display = 'none';
+
+  const btn = document.getElementById('btnAddEntrySubmit');
+  btn.disabled = true; btn.textContent = 'Saving…';
+
+  const payload = {
+    entry_date,
+    entry_text,
+    amount,
+    merchant:      (document.getElementById('aeMerchant').value || '').trim() || null,
+    category:      (document.getElementById('aeCat').value || '').trim() || null,
+    sub_category:  (document.getElementById('aeSub').value || '').trim() || null,
+    spend_type:    (document.getElementById('aeType').value || '').trim() || null,
+    cadence:       (document.getElementById('aeCadence').value || 'O').trim(),
+    divide_by:     Math.max(1, parseInt(document.getElementById('aeDivideBy').value || '1', 10)),
+    shared_expense:(document.getElementById('aeShared').value || 'N').trim().toUpperCase().charAt(0),
+    share_ratio:   parseFloat(document.getElementById('aeShareRatio').value || '1.0'),
+  };
+
+  try {
+    const resp = await apiCall('/api/history', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!resp.ok) {
+      let msg = 'Failed to save';
+      try { msg = (await resp.json()).error || msg; } catch (_) {}
+      throw new Error(msg);
+    }
+    closeAddEntryModal();
+    showToast('Entry added ✓');
+    if (currentPeriod) {
+      adjustSidebarCount(currentPeriod, +1);
+      await loadAllItems(currentPeriod);
+      refreshSummaryCards();
+    }
+  } catch (e) {
+    errEl.textContent = `Error: ${e.message}`;
+    errEl.style.display = '';
+    btn.disabled = false; btn.textContent = 'Add Entry';
+  }
 }
 
 /* ── Init ── */

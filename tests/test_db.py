@@ -244,8 +244,8 @@ class TestLogEmail:
 # ---------------------------------------------------------------------------
 
 class TestInsertDataFeedRow:
-    def test_returns_true_on_success(self):
-        mock_conn, _ = _make_mock_conn()
+    def test_returns_row_id_on_success(self):
+        mock_conn, _ = _make_mock_conn(fetchone=(42,))
         result = db.insert_data_feed_row(
             mock_conn,
             entry_date=date(2026, 5, 1),
@@ -255,10 +255,10 @@ class TestInsertDataFeedRow:
             spend_type="Expense",
             amount=Decimal("300.00"),
         )
-        assert result is True
+        assert result == 42
 
     def test_optional_fields_passed_through(self):
-        mock_conn, mock_cursor = _make_mock_conn()
+        mock_conn, mock_cursor = _make_mock_conn(fetchone=(1,))
         db.insert_data_feed_row(
             mock_conn,
             entry_date=date(2026, 5, 1),

@@ -55,6 +55,12 @@ def create_tables(conn) -> None:
             ALTER TABLE IF EXISTS transaction_batch_items ADD COLUMN IF NOT EXISTS divide_by INTEGER DEFAULT 1;
             ALTER TABLE IF EXISTS transaction_batch_items ADD COLUMN IF NOT EXISTS shared_expense CHAR(1) DEFAULT 'N';
             ALTER TABLE IF EXISTS transaction_batch_items ADD COLUMN IF NOT EXISTS share_ratio NUMERIC(6,4) DEFAULT 1.0;
+
+            CREATE TABLE IF NOT EXISTS transaction_exclusions (
+                transaction_id INTEGER PRIMARY KEY REFERENCES transactions(id),
+                excluded_at    TIMESTAMPTZ DEFAULT NOW(),
+                reason         VARCHAR(50) DEFAULT 'user_deleted'
+            );
         """)
     conn.commit()
     logger.debug("Tables verified / created.")
@@ -119,6 +125,7 @@ def create_data_feed_table(conn) -> None:
             ALTER TABLE IF EXISTS data_feed_history ADD COLUMN IF NOT EXISTS shared_expense CHAR(1) DEFAULT 'N';
             ALTER TABLE IF EXISTS data_feed_history ADD COLUMN IF NOT EXISTS share_ratio NUMERIC(6,4) DEFAULT 1.0;
             ALTER TABLE IF EXISTS data_feed_history ADD COLUMN IF NOT EXISTS final_amount NUMERIC(12,2);
+            ALTER TABLE IF EXISTS data_feed_history ADD COLUMN IF NOT EXISTS exclude_from_training BOOLEAN DEFAULT FALSE;
         """)
     conn.commit()
 
@@ -141,8 +148,9 @@ def insert_data_feed_row(
     shared_expense: str | None = "N",
     share_ratio=None,
     final_amount=None,
-) -> bool:
-    """Insert one row into data_feed_history. Returns True on success."""
+    exclude_from_training: bool = False,
+) -> int:
+    """Insert one row into data_feed_history. Returns the new row id."""
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -150,16 +158,18 @@ def insert_data_feed_row(
                 (entry_date, entry_text, sub_category, category, spend_type,
                  amount, merchant, vpa, upi_ref,
                  time_period, cadence, divide_by, monthly_amount,
-                 shared_expense, share_ratio, final_amount)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 shared_expense, share_ratio, final_amount, exclude_from_training)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
             """,
             (entry_date, entry_text, sub_category, category, spend_type,
              amount, merchant, vpa, upi_ref,
              time_period, cadence, divide_by, monthly_amount,
-             shared_expense, share_ratio, final_amount),
+             shared_expense, share_ratio, final_amount, exclude_from_training),
         )
+        row_id = cur.fetchone()[0]
     conn.commit()
-    return True
+    return row_id
 
 
 def get_history_periods(conn) -> list[dict]:

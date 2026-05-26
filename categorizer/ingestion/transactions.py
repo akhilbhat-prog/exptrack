@@ -17,10 +17,10 @@ SELECT
     t.upi_ref     AS upi_ref
 FROM public.transactions t
 WHERE t.id NOT IN (
-    SELECT tbi.transaction_id
-    FROM public.transaction_batch_items tbi
-    JOIN public.transaction_batches tb ON tb.id = tbi.batch_id
-    WHERE tb.status = 'complete'
+    SELECT transaction_id FROM public.transaction_batch_items
+)
+AND t.id NOT IN (
+    SELECT transaction_id FROM public.transaction_exclusions
 )
 ORDER BY t.date, t.id
 """

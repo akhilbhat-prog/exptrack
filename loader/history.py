@@ -2,16 +2,19 @@
 Flask Blueprint for the data_feed_history viewer/editor.
 
 Routes:
-  GET  /view                     — history HTML page
-  GET  /api/history/periods      — distinct time_period values with row counts
-  GET  /api/history              — paginated rows (?period=<p>&page=<n>)
-  PATCH /api/history/<id>        — update editable fields for one row
+  GET   /view                     — history HTML page
+  GET   /api/history/periods      — distinct time_period values with row counts
+  GET   /api/history              — paginated rows (?period=<p>&page=<n>)
+  POST  /api/history              — create a manual entry (exclude_from_training=True)
+  PATCH /api/history/<id>         — update editable fields for one row
+  DELETE /api/history/<id>        — delete a row
 
 Auth: if REVIEW_TOKEN env var is set, all routes require a matching
       ?token= query param or Authorization: Bearer <token> header.
 """
 
 import os
+from datetime import date as _date
 from functools import wraps
 
 from flask import Blueprint, abort, jsonify, render_template, request
@@ -62,11 +65,15 @@ def list_history():
         page = max(1, int(request.args.get("page", 1)))
     except (ValueError, TypeError):
         page = 1
+    try:
+        page_size = min(5000, max(1, int(request.args.get("page_size", 25))))
+    except (ValueError, TypeError):
+        page_size = 25
     if not period:
         return jsonify({"items": [], "total": 0, "page": 1, "pages": 1})
     conn = db.get_connection()
     try:
-        result = db.get_history_page(conn, period, page)
+        result = db.get_history_page(conn, period, page, page_size=page_size)
         return jsonify(result)
     finally:
         conn.close()
@@ -83,6 +90,56 @@ def history_summary():
     try:
         result = db.get_history_summary(conn, period, prev_period)
         return jsonify(result)
+    finally:
+        conn.close()
+
+
+@history_bp.route("/api/history", methods=["POST"])
+@_require_token
+def create_history():
+    data = request.get_json(force=True)
+    entry_date_str = (data.get("entry_date") or "").strip()
+    entry_text = (data.get("entry_text") or "").strip()
+    amount_raw = data.get("amount")
+    if not entry_date_str or not entry_text or amount_raw is None:
+        abort(400, "entry_date, entry_text, and amount are required")
+    try:
+        entry_date = _date.fromisoformat(entry_date_str)
+    except ValueError:
+        abort(400, "entry_date must be YYYY-MM-DD")
+    try:
+        amount = float(amount_raw)
+    except (TypeError, ValueError):
+        abort(400, "amount must be a number")
+
+    merchant = (data.get("merchant") or "").strip() or None
+    category = (data.get("category") or "").strip() or None
+    sub_category = (data.get("sub_category") or "").strip() or None
+    spend_type = (data.get("spend_type") or "").strip() or None
+    cadence = (data.get("cadence") or "O").strip()
+    divide_by = max(1, int(data.get("divide_by") or 1))
+    shared_expense = (data.get("shared_expense") or "N").strip().upper()[:1]
+    share_ratio = float(data.get("share_ratio") or 1.0)
+    monthly_amount = round(amount / divide_by, 2)
+    final_amount = round(monthly_amount * share_ratio, 2)
+    time_period = entry_date.strftime("%b-%Y")
+
+    conn = db.get_connection()
+    try:
+        db.create_data_feed_table(conn)
+        row_id = db.insert_data_feed_row(
+            conn, entry_date, entry_text, sub_category, category, spend_type,
+            amount, merchant, None, None,
+            time_period=time_period,
+            cadence=cadence,
+            divide_by=divide_by,
+            monthly_amount=monthly_amount,
+            shared_expense=shared_expense,
+            share_ratio=share_ratio,
+            final_amount=final_amount,
+            exclude_from_training=True,
+        )
+        return jsonify({"ok": True, "id": row_id}), 201
     finally:
         conn.close()
 

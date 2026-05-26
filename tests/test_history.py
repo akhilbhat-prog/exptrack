@@ -259,3 +259,67 @@ class TestDeleteHistory:
         monkeypatch.setenv("REVIEW_TOKEN", "tok")
         resp = client.delete("/api/history/1")
         assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# POST /api/history
+# ---------------------------------------------------------------------------
+
+class TestCreateHistoryRow:
+    _payload = {
+        "entry_date": "2026-05-20",
+        "entry_text": "Cash payment at pharmacy",
+        "amount": 350.0,
+        "merchant": "Apollo Pharmacy",
+        "category": "Health",
+        "sub_category": "Medicine",
+        "spend_type": "Expense",
+    }
+
+    def test_creates_row_returns_201(self, client, monkeypatch):
+        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        mock_conn, _ = _make_mock_conn()
+        with patch("history.db.get_connection", return_value=mock_conn), \
+             patch("history.db.create_data_feed_table"), \
+             patch("history.db.insert_data_feed_row", return_value=42):
+            resp = client.post("/api/history", json=self._payload)
+        assert resp.status_code == 201
+        data = resp.get_json()
+        assert data["ok"] is True
+        assert data["id"] == 42
+
+    def test_rejects_missing_entry_date(self, client, monkeypatch):
+        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        payload = {**self._payload, "entry_date": ""}
+        resp = client.post("/api/history", json=payload)
+        assert resp.status_code == 400
+
+    def test_rejects_missing_entry_text(self, client, monkeypatch):
+        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        payload = {k: v for k, v in self._payload.items() if k != "entry_text"}
+        resp = client.post("/api/history", json=payload)
+        assert resp.status_code == 400
+
+    def test_rejects_missing_amount(self, client, monkeypatch):
+        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        payload = {k: v for k, v in self._payload.items() if k != "amount"}
+        resp = client.post("/api/history", json=payload)
+        assert resp.status_code == 400
+
+    def test_passes_exclude_from_training_true(self, client, monkeypatch):
+        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        mock_conn, _ = _make_mock_conn()
+        captured = {}
+        def fake_insert(conn, *args, **kwargs):
+            captured["kwargs"] = kwargs
+            return 99
+        with patch("history.db.get_connection", return_value=mock_conn), \
+             patch("history.db.create_data_feed_table"), \
+             patch("history.db.insert_data_feed_row", side_effect=fake_insert):
+            client.post("/api/history", json=self._payload)
+        assert captured["kwargs"].get("exclude_from_training") is True
+
+    def test_requires_token_when_set(self, client, monkeypatch):
+        monkeypatch.setenv("REVIEW_TOKEN", "tok")
+        resp = client.post("/api/history", json=self._payload)
+        assert resp.status_code == 401

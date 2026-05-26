@@ -2,13 +2,15 @@
 Flask Blueprint for the batch review UI.
 
 Routes:
-  GET  /review                              — review HTML page
-  GET  /api/batches                         — list pending/reviewed batches
-  GET  /api/batches/<id>                    — batch details + items
-  PATCH /api/batches/<id>/items/<txn_id>    — save edits (category/subcategory/type)
-  POST /api/batches/<id>/mark-reviewed      — set batch status = 'reviewed'
-  POST /api/batches/<id>/complete           — complete batch, trigger retraining
-  GET  /api/categories                      — {categories, types} merged from rules.json + data_feed_history
+  GET    /review                              — review HTML page
+  GET    /api/batches                         — list pending/reviewed batches
+  GET    /api/batches/<id>                    — batch details + items
+  PATCH  /api/batches/<id>/items/<txn_id>     — save edits (category/subcategory/type)
+  DELETE /api/batches/<id>/items/<txn_id>     — remove item; permanently excludes transaction
+  DELETE /api/batches/<id>                    — delete entire pending/reviewed batch
+  POST   /api/batches/<id>/mark-reviewed      — set batch status = 'reviewed'
+  POST   /api/batches/<id>/complete           — complete batch, trigger retraining
+  GET    /api/categories                      — {categories, types} merged from rules.json + data_feed_history
 
 Auth: if REVIEW_TOKEN env var is set, all routes require a matching
       ?token= query param or Authorization: Bearer <token> header.
@@ -218,7 +220,45 @@ def delete_item(batch_id, txn_id):
             if cur.rowcount == 0:
                 abort(404, "Item not found")
             cur.execute(
+                "INSERT INTO transaction_exclusions (transaction_id, reason) "
+                "VALUES (%s, 'user_deleted') ON CONFLICT (transaction_id) DO NOTHING",
+                (txn_id,),
+            )
+            cur.execute(
                 "UPDATE transaction_batches SET row_count = GREATEST(row_count - 1, 0) WHERE id = %s",
+                (batch_id,),
+            )
+        conn.commit()
+        return jsonify({"ok": True})
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Batch delete
+# ---------------------------------------------------------------------------
+
+@review_bp.route("/api/batches/<int:batch_id>", methods=["DELETE"])
+@_require_token
+def delete_batch(batch_id):
+    conn = db.get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT status FROM transaction_batches WHERE id = %s",
+                (batch_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                abort(404, "Batch not found")
+            if row[0] == "complete":
+                abort(400, "Cannot delete a completed batch")
+            cur.execute(
+                "DELETE FROM transaction_batch_items WHERE batch_id = %s",
+                (batch_id,),
+            )
+            cur.execute(
+                "DELETE FROM transaction_batches WHERE id = %s",
                 (batch_id,),
             )
         conn.commit()

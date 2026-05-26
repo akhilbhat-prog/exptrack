@@ -296,6 +296,49 @@ class TestDeleteItem:
             resp = client.delete("/api/batches/1/items/999")
         assert resp.status_code == 404
 
+    def test_inserts_into_exclusions_on_delete(self, client, monkeypatch):
+        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        mock_conn, mock_cursor = _make_mock_conn(rowcount=1)
+        with patch("review.db.get_connection", return_value=mock_conn):
+            client.delete("/api/batches/1/items/101")
+        sql_calls = " ".join(str(c) for c in mock_cursor.execute.call_args_list)
+        assert "transaction_exclusions" in sql_calls
+
+
+# ---------------------------------------------------------------------------
+# DELETE /api/batches/<id>
+# ---------------------------------------------------------------------------
+
+class TestDeleteBatch:
+    def test_deletes_pending_batch(self, client, monkeypatch):
+        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        mock_conn, _ = _make_mock_conn(fetchone=("pending",), rowcount=1)
+        with patch("review.db.get_connection", return_value=mock_conn):
+            resp = client.delete("/api/batches/1")
+        assert resp.status_code == 200
+        assert resp.get_json()["ok"] is True
+
+    def test_deletes_reviewed_batch(self, client, monkeypatch):
+        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        mock_conn, _ = _make_mock_conn(fetchone=("reviewed",), rowcount=1)
+        with patch("review.db.get_connection", return_value=mock_conn):
+            resp = client.delete("/api/batches/1")
+        assert resp.status_code == 200
+
+    def test_rejects_complete_batch(self, client, monkeypatch):
+        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        mock_conn, _ = _make_mock_conn(fetchone=("complete",))
+        with patch("review.db.get_connection", return_value=mock_conn):
+            resp = client.delete("/api/batches/1")
+        assert resp.status_code == 400
+
+    def test_returns_404_for_missing_batch(self, client, monkeypatch):
+        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        mock_conn, _ = _make_mock_conn(fetchone=None)
+        with patch("review.db.get_connection", return_value=mock_conn):
+            resp = client.delete("/api/batches/999")
+        assert resp.status_code == 404
+
 
 # ---------------------------------------------------------------------------
 # POST /api/batches/<id>/mark-reviewed

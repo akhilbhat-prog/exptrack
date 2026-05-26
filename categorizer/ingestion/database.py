@@ -24,6 +24,7 @@ SELECT
     vpa AS vpa,
     upi_ref AS upi_ref
 FROM {DEFAULT_TABLE_NAME}
+WHERE exclude_from_training IS NOT TRUE
 ORDER BY entry_date, entry_text
 """
 
