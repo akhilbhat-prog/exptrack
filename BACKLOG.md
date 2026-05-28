@@ -2,11 +2,7 @@
 
 ## BL-1 — Fix filter repaging (`/view`)
 
-**Status:** Open
-
-When a filter is applied on `/view`, the filtered result set must re-paginate from page 1. Currently the page cursor is not reset when a filter input changes, so matching rows can be spread across pages (e.g. 15 rows matching a category appearing on pages 1, 2, and 3 instead of all on page 1).
-
-**Fix:** In `templates/view.html`, reset `currentPage = 1` inside the filter-change handler before calling `applyFiltersAndRender()`.
+**Status:** Complete (verified 2026-05-28 — filter correctly resets to page 1 and repaginates from the full in-memory dataset)
 
 ---
 
