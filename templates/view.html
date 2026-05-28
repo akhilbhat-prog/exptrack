@@ -287,6 +287,12 @@
   }
   .text-input:focus { outline: none; border-color: var(--teal); }
 
+  .ae-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .ae-table th { padding: 4px 6px; text-align: left; font-size: 11px; color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--border2); white-space: nowrap; }
+  .ae-table td { padding: 3px 4px; vertical-align: middle; border-bottom: 1px solid var(--border); }
+  .ae-table tr:last-child td { border-bottom: none; }
+  .ae-table input[type="date"], .ae-table input[type="text"], .ae-table input[type="number"] { width: 100%; box-sizing: border-box; }
+
   .dropdown-panel {
     display: none; position: fixed; z-index: 9999;
     background: var(--surface2); border: 1px solid var(--teal);
@@ -519,87 +525,34 @@
 <!-- Add Entry modal -->
 <div id="addEntryModal" onclick="if(event.target===this)closeAddEntryModal()"
      style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:300;align-items:center;justify-content:center;">
-  <div style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);width:min(560px,95vw);max-height:90vh;display:flex;flex-direction:column;overflow:hidden;">
+  <div style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);width:min(1250px,97vw);max-height:90vh;display:flex;flex-direction:column;overflow:hidden;">
     <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
       <div style="font-size:15px;font-weight:700;">Add Manual Entry</div>
       <button class="row-action-btn" onclick="closeAddEntryModal()" style="font-size:18px;line-height:1;">×</button>
     </div>
-    <div style="overflow-y:auto;flex:1;padding:16px 18px;display:flex;flex-direction:column;gap:12px;">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-        <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px;">
-          Date <span style="color:var(--red);display:inline">*</span>
-          <input type="date" id="aeDate" class="inline-combo" style="width:100%">
-        </label>
-        <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px;">
-          Amount <span style="color:var(--red);display:inline">*</span>
-          <input type="number" step="0.01" id="aeAmount" class="inline-combo" placeholder="0.00" style="width:100%">
-        </label>
+    <div style="overflow-y:auto;flex:1;padding:16px 18px;display:flex;flex-direction:column;gap:10px;">
+      <div style="overflow-x:auto;">
+        <table class="ae-table">
+          <colgroup>
+            <col style="min-width:120px"><col style="min-width:160px"><col style="min-width:110px">
+            <col style="min-width:80px"><col style="min-width:115px"><col style="min-width:115px">
+            <col style="min-width:90px"><col style="min-width:70px"><col style="min-width:52px">
+            <col style="min-width:60px"><col style="min-width:58px"><col style="min-width:64px">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>Date <span style="color:var(--red)">*</span></th>
+              <th>Description <span style="color:var(--red)">*</span></th>
+              <th>Merchant</th>
+              <th>Amount <span style="color:var(--red)">*</span></th>
+              <th>Category</th><th>Subcategory</th><th>Type</th>
+              <th>Cadence</th><th>Div</th><th>Shared</th><th>Ratio</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="aeTableBody"></tbody>
+        </table>
       </div>
-      <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px;">
-        Description <span style="color:var(--red);display:inline">*</span>
-        <input type="text" id="aeText" class="inline-combo" placeholder="e.g. Cash payment at pharmacy" style="width:100%">
-      </label>
-      <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px;">
-        Merchant
-        <input type="text" id="aeMerchant" class="inline-combo" placeholder="Optional" style="width:100%">
-      </label>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
-        <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px;">
-          Category
-          <div class="combo-wrap">
-            <input class="inline-combo" id="aeCat" placeholder="Category"
-                   onfocus="openCombo(this,getCatOptions())"
-                   oninput="filterCombo(this);onAeCatChange()">
-            <span class="combo-arrow clickable" onmousedown="event.preventDefault();toggleCombo(document.getElementById('aeCat'))">▾</span>
-          </div>
-        </label>
-        <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px;">
-          Subcategory
-          <div class="combo-wrap">
-            <input class="inline-combo" id="aeSub" placeholder="Subcategory"
-                   onfocus="openCombo(this,getAeSubOptions())"
-                   oninput="filterCombo(this)">
-            <span class="combo-arrow clickable" onmousedown="event.preventDefault();toggleCombo(document.getElementById('aeSub'))">▾</span>
-          </div>
-        </label>
-        <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px;">
-          Spend Type
-          <div class="combo-wrap">
-            <input class="inline-combo" id="aeType" placeholder="Type"
-                   onfocus="openCombo(this,TYPE_OPTIONS)"
-                   oninput="filterCombo(this)">
-            <span class="combo-arrow clickable" onmousedown="event.preventDefault();toggleCombo(document.getElementById('aeType'))">▾</span>
-          </div>
-        </label>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;">
-        <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px;">
-          Cadence
-          <div class="combo-wrap">
-            <input class="inline-combo" id="aeCadence" value="O"
-                   onfocus="openCombo(this,CADENCE_OPTIONS)"
-                   oninput="filterCombo(this)">
-            <span class="combo-arrow clickable" onmousedown="event.preventDefault();toggleCombo(document.getElementById('aeCadence'))">▾</span>
-          </div>
-        </label>
-        <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px;">
-          Divide By
-          <input type="number" min="1" id="aeDivideBy" class="inline-combo" value="1" style="width:100%">
-        </label>
-        <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px;">
-          Shared
-          <div class="combo-wrap">
-            <input class="inline-combo" id="aeShared" value="N"
-                   onfocus="openCombo(this,['N','Y'])"
-                   oninput="filterCombo(this)">
-            <span class="combo-arrow clickable" onmousedown="event.preventDefault();toggleCombo(document.getElementById('aeShared'))">▾</span>
-          </div>
-        </label>
-        <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px;">
-          Share Ratio
-          <input type="number" step="0.01" min="0" max="1" id="aeShareRatio" class="inline-combo" value="1.0" style="width:100%">
-        </label>
-      </div>
+      <button class="btn btn-ghost" onclick="addAeRow()" style="align-self:flex-start;font-size:12px;">+ Add Row</button>
       <div id="aeError" style="display:none;color:var(--red);font-size:12px;"></div>
     </div>
     <div style="padding:12px 18px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:flex-end;gap:8px;">
@@ -1470,92 +1423,166 @@ async function bulkDelete() {
 }
 
 /* ── Add Entry modal ── */
+/* ── Add Entry modal — multi-row ── */
+let _aeRowCounter = 0;
+function _aeNextId() { return ++_aeRowCounter; }
+
+function _aeRowHtml(id, v) {
+  const e = escHtml;
+  const s = (k, d='') => e(v[k] != null ? String(v[k]) : d);
+  return `<tr data-ae-row="${id}">
+    <td><input type="date"   class="inline-combo" data-ae-field="date"          value="${s('date')}"          style="min-width:110px"></td>
+    <td><input type="text"   class="inline-combo" data-ae-field="text"          value="${s('text')}"          placeholder="Description" style="min-width:150px"></td>
+    <td><input type="text"   class="inline-combo" data-ae-field="merchant"      value="${s('merchant')}"      placeholder="Merchant"    style="min-width:100px"></td>
+    <td><input type="number" class="inline-combo" data-ae-field="amount"        value="${s('amount')}"        step="0.01" placeholder="0.00" style="min-width:68px"></td>
+    <td><div class="combo-wrap">
+      <input class="inline-combo" data-ae-field="category" value="${s('category')}" placeholder="Cat"
+             onfocus="openCombo(this,getCatOptions())" oninput="filterCombo(this);_aeOnCatChange(this)" style="min-width:100px">
+      <span class="combo-arrow clickable" onmousedown="event.preventDefault();toggleCombo(this.closest('.combo-wrap').querySelector('input'))">▾</span>
+    </div></td>
+    <td><div class="combo-wrap">
+      <input class="inline-combo" data-ae-field="sub_category" value="${s('sub_category')}" placeholder="Sub"
+             onfocus="openCombo(this,_aeSubOpts(this))" oninput="filterCombo(this)" style="min-width:100px">
+      <span class="combo-arrow clickable" onmousedown="event.preventDefault();toggleCombo(this.closest('.combo-wrap').querySelector('input'))">▾</span>
+    </div></td>
+    <td><div class="combo-wrap">
+      <input class="inline-combo" data-ae-field="spend_type" value="${s('spend_type')}" placeholder="Type"
+             onfocus="openCombo(this,TYPE_OPTIONS)" oninput="filterCombo(this)" style="min-width:78px">
+      <span class="combo-arrow clickable" onmousedown="event.preventDefault();toggleCombo(this.closest('.combo-wrap').querySelector('input'))">▾</span>
+    </div></td>
+    <td><div class="combo-wrap">
+      <input class="inline-combo" data-ae-field="cadence" value="${s('cadence','O')}"
+             onfocus="openCombo(this,CADENCE_OPTIONS)" oninput="filterCombo(this);_aeOnCadence(this)" style="min-width:52px">
+      <span class="combo-arrow clickable" onmousedown="event.preventDefault();toggleCombo(this.closest('.combo-wrap').querySelector('input'))">▾</span>
+    </div></td>
+    <td><input type="number" class="inline-combo" data-ae-field="divide_by" value="${s('divide_by','1')}" min="1" style="min-width:44px"></td>
+    <td><div class="combo-wrap">
+      <input class="inline-combo" data-ae-field="shared_expense" value="${s('shared_expense','N')}"
+             onfocus="openCombo(this,['N','Y'])" oninput="filterCombo(this);_aeOnShared(this)" style="min-width:48px">
+      <span class="combo-arrow clickable" onmousedown="event.preventDefault();toggleCombo(this.closest('.combo-wrap').querySelector('input'))">▾</span>
+    </div></td>
+    <td><input type="number" class="inline-combo" data-ae-field="share_ratio" value="${s('share_ratio','1.0')}" step="0.01" min="0" max="1" style="min-width:46px"></td>
+    <td style="white-space:nowrap">
+      <button class="row-action-btn" title="Duplicate row" onclick="addAeRow(${id})" style="font-size:13px">⧉</button>
+      <button class="row-action-btn ae-del-btn" title="Delete row" onclick="deleteAeRow(${id})" style="font-size:13px">🗑</button>
+    </td>
+  </tr>`;
+}
+
+function _aeSubOpts(input) {
+  const tr = input.closest('tr');
+  const cat = tr ? (tr.querySelector('[data-ae-field="category"]')?.value || '') : '';
+  return cat ? (categories[cat] || []) : [];
+}
+function _aeOnCatChange(input) {
+  const tr = input.closest('tr');
+  if (tr) { const s = tr.querySelector('[data-ae-field="sub_category"]'); if (s) s.value = ''; }
+}
+function _aeOnCadence(input) {
+  if ((input.value || '').toUpperCase() === 'A') {
+    const d = input.closest('tr')?.querySelector('[data-ae-field="divide_by"]');
+    if (d) d.value = 12;
+  }
+}
+function _aeOnShared(input) {
+  if ((input.value || '').toUpperCase() === 'Y') {
+    const r = input.closest('tr')?.querySelector('[data-ae-field="share_ratio"]');
+    if (r) r.value = 0.7;
+  }
+}
+function _aeUpdateDeleteBtns() {
+  const count = document.querySelectorAll('#aeTableBody tr').length;
+  document.querySelectorAll('.ae-del-btn').forEach(b => { b.disabled = count <= 1; });
+}
+
+function addAeRow(srcId = null) {
+  const v = { date: new Date().toISOString().slice(0, 10), cadence: 'O', divide_by: 1, shared_expense: 'N', share_ratio: 1.0 };
+  if (srcId !== null) {
+    const src = document.querySelector(`#aeTableBody tr[data-ae-row="${srcId}"]`);
+    if (src) src.querySelectorAll('[data-ae-field]').forEach(inp => { v[inp.dataset.aeField] = inp.value; });
+  }
+  const id = _aeNextId();
+  document.getElementById('aeTableBody').insertAdjacentHTML('beforeend', _aeRowHtml(id, v));
+  _aeUpdateDeleteBtns();
+}
+
+function deleteAeRow(id) {
+  const tr = document.querySelector(`#aeTableBody tr[data-ae-row="${id}"]`);
+  if (tr) tr.remove();
+  if (!document.querySelector('#aeTableBody tr')) addAeRow();
+  _aeUpdateDeleteBtns();
+}
+
 function openAddEntryModal() {
-  document.getElementById('aeDate').value = '';
-  document.getElementById('aeAmount').value = '';
-  document.getElementById('aeText').value = '';
-  document.getElementById('aeMerchant').value = '';
-  document.getElementById('aeCat').value = '';
-  document.getElementById('aeSub').value = '';
-  document.getElementById('aeType').value = '';
-  document.getElementById('aeCadence').value = 'O';
-  document.getElementById('aeDivideBy').value = '1';
-  document.getElementById('aeShared').value = 'N';
-  document.getElementById('aeShareRatio').value = '1.0';
+  _aeRowCounter = 0;
+  document.getElementById('aeTableBody').innerHTML = '';
   document.getElementById('aeError').style.display = 'none';
   const btn = document.getElementById('btnAddEntrySubmit');
   btn.disabled = false; btn.textContent = 'Add Entry';
-  const modal = document.getElementById('addEntryModal');
-  modal.style.display = 'flex';
-  document.getElementById('aeDate').focus();
+  addAeRow();
+  document.getElementById('addEntryModal').style.display = 'flex';
+  const firstDate = document.querySelector('#aeTableBody [data-ae-field="date"]');
+  if (firstDate) setTimeout(() => firstDate.focus(), 0);
 }
 
 function closeAddEntryModal() {
   document.getElementById('addEntryModal').style.display = 'none';
-}
-
-function getAeSubOptions() {
-  const cat = (document.getElementById('aeCat').value || '').trim();
-  return cat ? (categories[cat] || []) : [];
-}
-
-function onAeCatChange() {
-  document.getElementById('aeSub').value = '';
+  closeAllCombos();
 }
 
 async function submitAddEntry() {
-  const entry_date  = (document.getElementById('aeDate').value || '').trim();
-  const entry_text  = (document.getElementById('aeText').value || '').trim();
-  const amount_str  = (document.getElementById('aeAmount').value || '').trim();
   const errEl = document.getElementById('aeError');
-
-  if (!entry_date || !entry_text || !amount_str) {
-    errEl.textContent = 'Date, description, and amount are required.';
-    errEl.style.display = '';
-    return;
-  }
-  const amount = parseFloat(amount_str);
-  if (isNaN(amount)) {
-    errEl.textContent = 'Amount must be a number.';
-    errEl.style.display = '';
-    return;
-  }
   errEl.style.display = 'none';
+
+  const trs = [...document.querySelectorAll('#aeTableBody tr[data-ae-row]')];
+  if (!trs.length) return;
+
+  const payloads = [];
+  for (let i = 0; i < trs.length; i++) {
+    const get = f => (trs[i].querySelector(`[data-ae-field="${f}"]`)?.value || '').trim();
+    const date = get('date'), text = get('text'), amtStr = get('amount');
+    if (!date || !text || !amtStr) {
+      errEl.textContent = `Row ${i + 1}: date, description, and amount are required.`;
+      errEl.style.display = ''; return;
+    }
+    const amount = parseFloat(amtStr);
+    if (isNaN(amount)) {
+      errEl.textContent = `Row ${i + 1}: amount must be a number.`;
+      errEl.style.display = ''; return;
+    }
+    payloads.push({
+      entry_date:     date,
+      entry_text:     text,
+      amount,
+      merchant:       get('merchant') || null,
+      category:       get('category') || null,
+      sub_category:   get('sub_category') || null,
+      spend_type:     get('spend_type') || null,
+      cadence:        get('cadence') || 'O',
+      divide_by:      Math.max(1, parseInt(get('divide_by') || '1', 10)),
+      shared_expense: (get('shared_expense') || 'N').toUpperCase().charAt(0),
+      share_ratio:    parseFloat(get('share_ratio') || '1.0'),
+    });
+  }
 
   const btn = document.getElementById('btnAddEntrySubmit');
   btn.disabled = true; btn.textContent = 'Saving…';
 
-  const payload = {
-    entry_date,
-    entry_text,
-    amount,
-    merchant:      (document.getElementById('aeMerchant').value || '').trim() || null,
-    category:      (document.getElementById('aeCat').value || '').trim() || null,
-    sub_category:  (document.getElementById('aeSub').value || '').trim() || null,
-    spend_type:    (document.getElementById('aeType').value || '').trim() || null,
-    cadence:       (document.getElementById('aeCadence').value || 'O').trim(),
-    divide_by:     Math.max(1, parseInt(document.getElementById('aeDivideBy').value || '1', 10)),
-    shared_expense:(document.getElementById('aeShared').value || 'N').trim().toUpperCase().charAt(0),
-    share_ratio:   parseFloat(document.getElementById('aeShareRatio').value || '1.0'),
-  };
-
+  let totalCount = 0;
   try {
-    const resp = await apiCall('/api/history', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (!resp.ok) {
-      let msg = 'Failed to save';
-      try { msg = (await resp.json()).error || msg; } catch (_) {}
-      throw new Error(msg);
+    for (const payload of payloads) {
+      const resp = await apiCall('/api/history', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const resData = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(resData.error || 'Failed to save');
+      totalCount += resData.count || 1;
     }
-    const resData = await resp.json().catch(() => ({}));
     closeAddEntryModal();
-    const count = resData.count || 1;
-    showToast(count > 1 ? `${count} entries added (${count} months) ✓` : 'Entry added ✓');
+    showToast(totalCount > 1 ? `${totalCount} entries added ✓` : 'Entry added ✓');
     if (currentPeriod) {
-      adjustSidebarCount(currentPeriod, +1);
+      adjustSidebarCount(currentPeriod, payloads.length);
       await loadAllItems(currentPeriod);
       refreshSummaryCards();
     }
