@@ -8,9 +8,7 @@
 
 ## BL-2 — User test: sort across pages (`/view`)
 
-**Status:** Open (manual verification by user)
-
-Verify that column sorting on `/view` applies to the full in-memory dataset for the period (all rows loaded in the client-side `allRows` array) and not just the rows on the current page. Sort then re-paginate — page 1 should show the globally top-N rows for the chosen sort key.
+**Status:** Complete (verified 2026-05-28 — sort applies to full in-memory dataset and repaginates correctly)
 
 ---
 
