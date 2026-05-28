@@ -1,62 +1,49 @@
-# Backlog — hdfc-statement-loader
+# Backlog
 
-Items to be built in future sessions, in rough priority order.
+## BL-1 — Fix filter repaging (`/view`)
 
----
+**Status:** Open
 
-## BL-1 · Verify filter repaging across the full period (VIEW)
+When a filter is applied on `/view`, the filtered result set must re-paginate from page 1. Currently the page cursor is not reset when a filter input changes, so matching rows can be spread across pages (e.g. 15 rows matching a category appearing on pages 1, 2, and 3 instead of all on page 1).
 
-**Status:** Needs user testing  
-`onFilter()` resets `viewPage=1` and `getDisplayItems()` slices from the fully-filtered array, so rows matching a filter should consolidate to page 1 regardless of which server page they were on. Needs a real-data smoke test on a period with > 25 rows.
-
----
-
-## BL-2 · Verify sort-across-pages (VIEW)
-
-**Status:** Needs user testing  
-Sort operates on the full `currentItems` array (entire period loaded via `page_size=5000`) before slicing. Sorting by Amount desc should always put the highest row on page 1. Needs a real-data smoke test.
+**Fix:** In `templates/view.html`, reset `currentPage = 1` inside the filter-change handler before calling `applyFiltersAndRender()`.
 
 ---
 
-## BL-3 · Monthly autopay / recurring spend tracker
+## BL-2 — User test: sort across pages (`/view`)
 
-**Status:** Not started  
-Track expenses that repeat every month and are set up as autopay (subscriptions, EMIs, rent). Show expected-vs-actual per month and flag if a known recurring item is missing.
+**Status:** Open (manual verification by user)
 
-Rough design:
-- `cadence='A'` rows in `data_feed_history` already represent monthly-recurring semantics
-- Add a sidebar card or dedicated section on `/view` listing all `cadence='A'` items grouped by merchant, showing last-seen date and expected next date
-- "Missing this month" indicator when a recurring item has no matching row in the current period
+Verify that column sorting on `/view` applies to the full in-memory dataset for the period (all rows loaded in the client-side `allRows` array) and not just the rows on the current page. Sort then re-paginate — page 1 should show the globally top-N rows for the chosen sort key.
 
 ---
 
-## BL-4 · Bulk-edit shared & amortised transactions from April 2025
+## BL-3 — Monthly autopay / recurring spend tracker
 
-**Status:** Not started  
-Retroactively mark existing `data_feed_history` rows (April 2025 onwards) with `shared_expense='Y'` and/or `cadence='A'` / `divide_by=12`. Options:
-- Extend the bulk-edit bar on `/view` to include Cadence and Shared fields (server recomputes monthly_amount / final_amount on bulk PATCH)
-- One-shot data migration script (requires user confirmation before running — per SQL-scripts policy)
+**Status:** Open
 
----
-
-## BL-5 · Make default share ratio and autopay divisor configurable
-
-**Status:** Not started  
-Currently hardcoded in `templates/view.html`:
-- Shared toggle on → `share_ratio = 0.7`
-- Cadence `A` → `divide_by = 12`
-
-Work: store user-preferred defaults in `localStorage` (lightweight, no backend needed). Add a small settings panel to `/view` where the user can adjust these. Read them in `onSharedExpenseChange()` and the cadence-A handler.
+Build logic to detect transactions that repeat every month (autopay / standing instructions). Surface them in the UI so the user can mark them as recurring and track them separately from one-off spends. Requirements TBD.
 
 ---
 
-## BL-6 · Shared transaction mirror table
+## BL-4 — Backfill shared & amortised rows from April 2025
 
-**Status:** Awaiting requirements  
-Shared transactions (`shared_expense='Y'`) should be copied to a separate table for tracking (e.g. split-expense reconciliation). Details to be provided by the user in a future session.
+**Status:** Open
 
-Open questions:
-- Table name and schema
-- Trigger: on insert, on PATCH to shared=Y, or manual?
-- Should updates to the source row sync to the mirror?
-- Who/what consumes this table?
+User needs to add and/or edit shared and amortised transactions dating back to the start of tracking (April 2025). Likely a bulk-edit workflow on `/view` or a dedicated import/correction flow.
+
+---
+
+## BL-5 — Configurable share ratio and annual divisor defaults
+
+**Status:** Open
+
+The default share ratio (0.7) and annual cadence divisor (12 for cadence A) are hardcoded in the UI. Make them user-configurable — either via a settings table in the DB, a config file, or a settings endpoint — so the user can change them without a code deploy.
+
+---
+
+## BL-6 — Shared transaction mirror table
+
+**Status:** Open (requirements pending)
+
+When a transaction is marked as shared, copy it to a separate table to track the counterparty's portion independently. Full schema and workflow requirements to be defined.
