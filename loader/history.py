@@ -127,19 +127,43 @@ def create_history():
     conn = db.get_connection()
     try:
         db.create_data_feed_table(conn)
-        row_id = db.insert_data_feed_row(
-            conn, entry_date, entry_text, sub_category, category, spend_type,
-            amount, merchant, None, None,
-            time_period=time_period,
-            cadence=cadence,
-            divide_by=divide_by,
-            monthly_amount=monthly_amount,
-            shared_expense=shared_expense,
-            share_ratio=share_ratio,
-            final_amount=final_amount,
-            exclude_from_training=True,
-        )
-        return jsonify({"ok": True, "id": row_id}), 201
+        if cadence == 'A' and divide_by > 1:
+            ids = []
+            for i in range(divide_by):
+                if i == 0:
+                    period_date = entry_date
+                else:
+                    m = entry_date.month - 1 + i
+                    period_date = _date(entry_date.year + m // 12, m % 12 + 1, 1)
+                tp = period_date.strftime("%b-%Y")
+                row_id = db.insert_data_feed_row(
+                    conn, period_date, entry_text, sub_category, category, spend_type,
+                    amount, merchant, None, None,
+                    time_period=tp,
+                    cadence=cadence,
+                    divide_by=divide_by,
+                    monthly_amount=monthly_amount,
+                    shared_expense=shared_expense,
+                    share_ratio=share_ratio,
+                    final_amount=final_amount,
+                    exclude_from_training=True,
+                )
+                ids.append(row_id)
+            return jsonify({"ok": True, "ids": ids, "count": len(ids)}), 201
+        else:
+            row_id = db.insert_data_feed_row(
+                conn, entry_date, entry_text, sub_category, category, spend_type,
+                amount, merchant, None, None,
+                time_period=time_period,
+                cadence=cadence,
+                divide_by=divide_by,
+                monthly_amount=monthly_amount,
+                shared_expense=shared_expense,
+                share_ratio=share_ratio,
+                final_amount=final_amount,
+                exclude_from_training=True,
+            )
+            return jsonify({"ok": True, "id": row_id, "count": 1}), 201
     finally:
         conn.close()
 

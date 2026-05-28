@@ -6,6 +6,7 @@ API route tests mock db.get_connection() to avoid requiring a real DB.
 """
 
 import os
+from datetime import date as _date
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -323,3 +324,113 @@ class TestCreateHistoryRow:
         monkeypatch.setenv("REVIEW_TOKEN", "tok")
         resp = client.post("/api/history", json=self._payload)
         assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# POST /api/history — cadence A multi-period insert
+# ---------------------------------------------------------------------------
+
+class TestCreateHistoryRowCadenceA:
+    _base = {
+        "entry_date": "2026-05-20",
+        "entry_text": "Annual subscription",
+        "amount": 12000.0,
+        "cadence": "A",
+        "divide_by": 12,
+    }
+
+    def test_cadence_A_creates_N_rows(self, client, monkeypatch):
+        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        mock_conn, _ = _make_mock_conn()
+        mock_insert = MagicMock(side_effect=list(range(1, 13)))
+        with patch("history.db.get_connection", return_value=mock_conn), \
+             patch("history.db.create_data_feed_table"), \
+             patch("history.db.insert_data_feed_row", mock_insert):
+            resp = client.post("/api/history", json=self._base)
+        assert resp.status_code == 201
+        data = resp.get_json()
+        assert data["ok"] is True
+        assert data["count"] == 12
+        assert len(data["ids"]) == 12
+        assert mock_insert.call_count == 12
+
+    def test_cadence_A_divide_by_3_creates_3_rows(self, client, monkeypatch):
+        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        mock_conn, _ = _make_mock_conn()
+        mock_insert = MagicMock(side_effect=[10, 11, 12])
+        with patch("history.db.get_connection", return_value=mock_conn), \
+             patch("history.db.create_data_feed_table"), \
+             patch("history.db.insert_data_feed_row", mock_insert):
+            resp = client.post("/api/history", json={**self._base, "divide_by": 3})
+        assert resp.status_code == 201
+        assert resp.get_json()["count"] == 3
+        assert mock_insert.call_count == 3
+
+    def test_cadence_A_divide_by_1_uses_single_path(self, client, monkeypatch):
+        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        mock_conn, _ = _make_mock_conn()
+        mock_insert = MagicMock(return_value=5)
+        with patch("history.db.get_connection", return_value=mock_conn), \
+             patch("history.db.create_data_feed_table"), \
+             patch("history.db.insert_data_feed_row", mock_insert):
+            resp = client.post("/api/history", json={**self._base, "divide_by": 1})
+        assert resp.status_code == 201
+        data = resp.get_json()
+        assert data["count"] == 1
+        assert "id" in data
+        assert mock_insert.call_count == 1
+
+    def test_cadence_O_divide_by_3_uses_single_path(self, client, monkeypatch):
+        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        mock_conn, _ = _make_mock_conn()
+        mock_insert = MagicMock(return_value=7)
+        with patch("history.db.get_connection", return_value=mock_conn), \
+             patch("history.db.create_data_feed_table"), \
+             patch("history.db.insert_data_feed_row", mock_insert):
+            resp = client.post("/api/history", json={
+                "entry_date": "2026-05-20", "entry_text": "One-off", "amount": 300.0,
+                "cadence": "O", "divide_by": 3,
+            })
+        assert resp.status_code == 201
+        assert resp.get_json()["count"] == 1
+        assert mock_insert.call_count == 1
+
+    def test_cadence_A_entry_dates_and_time_periods(self, client, monkeypatch):
+        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        mock_conn, _ = _make_mock_conn()
+        calls_data = []
+        def capture(conn, entry_date, entry_text, *args, **kwargs):
+            calls_data.append({"entry_date": entry_date, "time_period": kwargs.get("time_period")})
+            return len(calls_data)
+        with patch("history.db.get_connection", return_value=mock_conn), \
+             patch("history.db.create_data_feed_table"), \
+             patch("history.db.insert_data_feed_row", side_effect=capture):
+            client.post("/api/history", json=self._base)
+        assert len(calls_data) == 12
+        assert calls_data[0]["entry_date"] == _date(2026, 5, 20)
+        assert calls_data[0]["time_period"] == "May-2026"
+        assert calls_data[1]["entry_date"] == _date(2026, 6, 1)
+        assert calls_data[1]["time_period"] == "Jun-2026"
+        assert calls_data[11]["entry_date"] == _date(2027, 4, 1)
+        assert calls_data[11]["time_period"] == "Apr-2027"
+
+    def test_cadence_A_year_wrap(self, client, monkeypatch):
+        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        mock_conn, _ = _make_mock_conn()
+        calls_data = []
+        def capture(conn, entry_date, *args, **kwargs):
+            calls_data.append({"entry_date": entry_date, "time_period": kwargs.get("time_period")})
+            return len(calls_data)
+        with patch("history.db.get_connection", return_value=mock_conn), \
+             patch("history.db.create_data_feed_table"), \
+             patch("history.db.insert_data_feed_row", side_effect=capture):
+            client.post("/api/history", json={
+                "entry_date": "2026-12-15", "entry_text": "Annual fee",
+                "amount": 12000.0, "cadence": "A", "divide_by": 12,
+            })
+        assert calls_data[0]["entry_date"] == _date(2026, 12, 15)
+        assert calls_data[0]["time_period"] == "Dec-2026"
+        assert calls_data[1]["entry_date"] == _date(2027, 1, 1)
+        assert calls_data[1]["time_period"] == "Jan-2027"
+        assert calls_data[11]["entry_date"] == _date(2027, 11, 1)
+        assert calls_data[11]["time_period"] == "Nov-2027"

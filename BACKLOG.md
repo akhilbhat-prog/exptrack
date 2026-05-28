@@ -12,11 +12,11 @@
 
 ---
 
-## BL-3 — Monthly autopay / recurring spend tracker
+## BL-3 — Multi-period Add Entry for Cadence = A (`/view`)
 
-**Status:** Open
+**Status:** Complete (2026-05-28)
 
-Build logic to detect transactions that repeat every month (autopay / standing instructions). Surface them in the UI so the user can mark them as recurring and track them separately from one-off spends. Requirements TBD.
+When adding an entry with cadence=A and divide_by=N, the backend now creates N rows automatically: the first with the user's entered date (current period), and the remaining N-1 with entry_date set to the 1st of each subsequent month. All rows are independent — editing or deleting one does not affect the others. Toast confirms "N entries added (N months)".
 
 ---
 

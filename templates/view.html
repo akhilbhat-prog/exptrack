@@ -1550,8 +1550,10 @@ async function submitAddEntry() {
       try { msg = (await resp.json()).error || msg; } catch (_) {}
       throw new Error(msg);
     }
+    const resData = await resp.json().catch(() => ({}));
     closeAddEntryModal();
-    showToast('Entry added ✓');
+    const count = resData.count || 1;
+    showToast(count > 1 ? `${count} entries added (${count} months) ✓` : 'Entry added ✓');
     if (currentPeriod) {
       adjustSidebarCount(currentPeriod, +1);
       await loadAllItems(currentPeriod);
