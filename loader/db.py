@@ -242,18 +242,23 @@ def get_history_page(conn, period: str, page: int, page_size: int = 25) -> dict:
 def update_history_row(conn, row_id: int, fields: dict) -> dict | None:
     """Update editable fields of a data_feed_history row. Returns computed amounts or None if not found."""
     with conn.cursor() as cur:
-        cur.execute("SELECT amount FROM data_feed_history WHERE id = %s", (row_id,))
-        row = cur.fetchone()
-        if not row:
-            return None
-        amount = float(row[0]) if row[0] is not None else 0.0
+        new_amount = fields.get("amount")
+        if new_amount is None:
+            cur.execute("SELECT amount FROM data_feed_history WHERE id = %s", (row_id,))
+            row = cur.fetchone()
+            if not row:
+                return None
+            amount = float(row[0]) if row[0] is not None else 0.0
+        else:
+            amount = float(new_amount)
         divide_by = max(1, int(fields.get("divide_by") or 1))
         share_ratio = float(fields.get("share_ratio") or 1.0)
         monthly_amount = round(amount / divide_by, 2)
         final_amount = round(monthly_amount * share_ratio, 2)
         cur.execute("""
             UPDATE data_feed_history
-               SET time_period    = %s,
+               SET amount         = %s,
+                   time_period    = %s,
                    category       = %s,
                    sub_category   = %s,
                    spend_type     = %s,
@@ -265,6 +270,7 @@ def update_history_row(conn, row_id: int, fields: dict) -> dict | None:
                    final_amount   = %s
              WHERE id = %s
         """, (
+            amount,
             fields.get("time_period"),
             fields.get("category") or None,
             fields.get("sub_category") or None,
@@ -280,7 +286,7 @@ def update_history_row(conn, row_id: int, fields: dict) -> dict | None:
         if cur.rowcount == 0:
             return None
     conn.commit()
-    return {"monthly_amount": monthly_amount, "final_amount": final_amount}
+    return {"amount": amount, "monthly_amount": monthly_amount, "final_amount": final_amount}
 
 
 def delete_history_row(conn, row_id: int) -> bool:

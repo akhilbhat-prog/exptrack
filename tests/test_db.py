@@ -73,18 +73,18 @@ class TestUpdateHistoryRow:
     def test_normal_update_returns_computed_amounts(self):
         mock_conn, _ = _make_mock_conn(fetchone=(Decimal("100.00"),), rowcount=1)
         result = db.update_history_row(mock_conn, 1, {"divide_by": 2, "share_ratio": 0.5})
-        assert result == {"monthly_amount": 50.0, "final_amount": 25.0}
+        assert result == {"amount": 100.0, "monthly_amount": 50.0, "final_amount": 25.0}
 
     def test_divide_by_zero_clamped_to_one(self):
         """divide_by=0 is silently clamped to 1 via max(1, int(0 or 1))."""
         mock_conn, _ = _make_mock_conn(fetchone=(Decimal("200.00"),), rowcount=1)
         result = db.update_history_row(mock_conn, 1, {"divide_by": 0, "share_ratio": 1.0})
-        assert result == {"monthly_amount": 200.0, "final_amount": 200.0}
+        assert result == {"amount": 200.0, "monthly_amount": 200.0, "final_amount": 200.0}
 
     def test_share_ratio_none_defaults_to_one(self):
         mock_conn, _ = _make_mock_conn(fetchone=(Decimal("150.00"),), rowcount=1)
         result = db.update_history_row(mock_conn, 1, {"divide_by": 1, "share_ratio": None})
-        assert result == {"monthly_amount": 150.0, "final_amount": 150.0}
+        assert result == {"amount": 150.0, "monthly_amount": 150.0, "final_amount": 150.0}
 
     def test_row_not_found_returns_none(self):
         mock_conn, _ = _make_mock_conn(fetchone=None)

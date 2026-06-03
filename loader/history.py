@@ -185,7 +185,9 @@ def delete_history(row_id):
 @_require_token
 def update_history(row_id):
     data = request.get_json(force=True)
+    raw_amount = data.get("amount")
     fields = {
+        "amount":         float(raw_amount) if raw_amount is not None else None,
         "time_period":    (data.get("time_period") or "").strip() or None,
         "category":       (data.get("category") or "").strip(),
         "sub_category":   (data.get("sub_category") or "").strip(),

@@ -128,7 +128,8 @@ def get_batch(batch_id):
                        tbi.pred_category, tbi.pred_subcategory, tbi.pred_type,
                        tbi.pred_confidence, tbi.pred_source,
                        tbi.category, tbi.subcategory, tbi.type,
-                       t.date, t.raw_entry, t.amount, t.merchant, t.vpa,
+                       t.date, t.raw_entry, COALESCE(tbi.amount, t.amount) AS amount,
+                       t.merchant, t.vpa,
                        tbi.cadence, tbi.divide_by, tbi.shared_expense, tbi.share_ratio
                 FROM transaction_batch_items tbi
                 JOIN transactions t ON t.id = tbi.transaction_id
@@ -180,6 +181,8 @@ def update_item(batch_id, txn_id):
     divide_by     = int(data.get("divide_by") or 1)
     shared_expense = (data.get("shared_expense") or "N").strip().upper()[:1]
     share_ratio   = float(data.get("share_ratio") or 1.0)
+    raw_amount    = data.get("amount")
+    amount_val    = float(raw_amount) if raw_amount is not None else None
 
     conn = db.get_connection()
     try:
@@ -188,11 +191,12 @@ def update_item(batch_id, txn_id):
                 """
                 UPDATE transaction_batch_items
                 SET category = %s, subcategory = %s, type = %s,
-                    cadence = %s, divide_by = %s, shared_expense = %s, share_ratio = %s
+                    cadence = %s, divide_by = %s, shared_expense = %s, share_ratio = %s,
+                    amount = %s
                 WHERE batch_id = %s AND transaction_id = %s
                 """,
                 (category, subcategory, txn_type,
-                 cadence, divide_by, shared_expense, share_ratio,
+                 cadence, divide_by, shared_expense, share_ratio, amount_val,
                  batch_id, txn_id),
             )
             if cur.rowcount == 0:
@@ -319,7 +323,7 @@ def complete_batch(batch_id):
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT t.date, t.raw_entry, t.amount,
+                SELECT t.date, t.raw_entry, COALESCE(tbi.amount, t.amount) AS amount,
                        COALESCE(NULLIF(TRIM(tbi.category),    ''), tbi.pred_category)    AS category,
                        COALESCE(NULLIF(TRIM(tbi.subcategory), ''), tbi.pred_subcategory) AS subcategory,
                        COALESCE(NULLIF(TRIM(tbi.type),        ''), tbi.pred_type)        AS txn_type,

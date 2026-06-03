@@ -1124,7 +1124,12 @@ function renderItems(items) {
         <div class="merchant-name">${escHtml(item.merchant) || '—'}</div>
         <div class="merchant-entry" title="${escHtml(item.raw_entry)}">${escHtml(item.raw_entry)}</div>
       </td>
-      <td class="right"><span class="${amtClass}">${amtSign}${fmtAmt(item.amount)}</span></td>
+      <td class="right">
+        <input type="text" inputmode="decimal" class="num-input ${amtClass}" style="width:70px"
+               data-field="amount" data-txn="${txnId}"
+               value="${item.amount != null ? item.amount : ''}"
+               onchange="onNumericFieldChange(this)">
+      </td>
       <td>
         <div class="combo-wrap">
           <input class="inline-combo" data-field="category" data-txn="${txnId}"
@@ -1232,7 +1237,9 @@ function onNumericFieldChange(el) {
   const row    = el.closest('tr');
   const item   = currentItems.find(i => i.transaction_id === txnId);
   if (!item) return;
-  item[field] = field === 'divide_by' ? (parseInt(el.value) || 1) : (parseFloat(el.value) || 1.0);
+  item[field] = field === 'divide_by' ? (parseInt(el.value) || 1)
+              : field === 'amount'   ? (parseFloat(el.value) || 0)
+              : (parseFloat(el.value) || 1.0);
   recomputeAmounts(txnId, item, row);
   saveItem(txnId, item, row);
 }
@@ -1247,6 +1254,7 @@ async function saveItem(txnId, item, row) {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          amount:         item.amount,
           category:       item.category,
           subcategory:    item.subcategory,
           type:           item.type,

@@ -1014,7 +1014,12 @@ function renderItems(items) {
           <span class="combo-arrow clickable" onmousedown="event.preventDefault();toggleCombo(this.closest('.combo-wrap').querySelector('input'))">▾</span>
         </div>
       </td>
-      <td class="right"><span class="${item.amount < 0 ? 'amt-credit' : 'amt-debit'}" style="font-size:13px">${fmtAmt(item.amount)}</span></td>
+      <td class="right">
+        <input type="text" inputmode="decimal" class="num-input" style="width:70px"
+               data-field="amount" data-row="${rowId}"
+               value="${item.amount != null ? item.amount : ''}"
+               oninput="onNumericFieldInput(this)">
+      </td>
       <td>
         <div class="combo-wrap">
           <input class="inline-combo" style="min-width:52px" data-field="cadence" data-row="${rowId}"
@@ -1196,7 +1201,11 @@ function onNumericFieldInput(el) {
   const row   = el.closest('tr');
   const item  = currentItems.find(i => i.id === rowId);
   if (!item) return;
-  item[field] = field === 'divide_by' ? (parseInt(el.value) || 1) : (parseFloat(el.value) || 1.0);
+  item[field] = field === 'divide_by'
+    ? (parseInt(el.value) || 1)
+    : field === 'amount'
+      ? (parseFloat(el.value) || 0)
+      : (parseFloat(el.value) || 1.0);
   recomputeAmounts(rowId, item, row);
   markDirty(rowId);
 }
@@ -1224,6 +1233,7 @@ async function saveRow(rowId) {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        amount:         item.amount,
         time_period:    item.time_period,
         category:       item.category,
         sub_category:   item.sub_category,
@@ -1250,6 +1260,7 @@ async function saveRow(rowId) {
       refreshSummaryCards();
       return;
     }
+    if (data.amount != null) item.amount = data.amount;
     const moEl  = row.querySelector(`[data-computed="monthly_amount"][data-row="${rowId}"]`);
     const finEl = row.querySelector(`[data-computed="final_amount"][data-row="${rowId}"]`);
     if (moEl  && data.monthly_amount != null) moEl.textContent  = data.monthly_amount.toFixed(2);
