@@ -202,6 +202,58 @@ def update_history(row_id):
         result = db.update_history_row(conn, row_id, fields)
         if result is None:
             abort(404, "Row not found")
-        return jsonify({"ok": True, **result})
+
+        rows_created = 0
+        if fields["cadence"] == "A" and fields["divide_by"] > 1:
+            existing = db.get_history_row(conn, row_id)
+            if existing and existing.get("entry_date"):
+                base_date = existing["entry_date"]
+                divide_by = fields["divide_by"]
+                share_ratio = fields["share_ratio"]
+                shared_expense = fields["shared_expense"]
+                monthly_amount = result["monthly_amount"]
+                final_amount = result["final_amount"]
+                entry_text = existing["entry_text"]
+
+                # Build all 11 possible future time_periods (covers divide_by up to 12)
+                future_periods = []
+                for i in range(1, 12):
+                    m = base_date.month - 1 + i
+                    fp = _date(base_date.year + m // 12, m % 12 + 1, 1)
+                    future_periods.append(fp.strftime("%b-%Y"))
+
+                # Delete any pre-existing future rows for this entry_text in those periods
+                with conn.cursor() as cur:
+                    placeholders = ",".join(["%s"] * len(future_periods))
+                    cur.execute(
+                        f"DELETE FROM data_feed_history WHERE entry_text = %s AND id != %s AND time_period IN ({placeholders})",
+                        [entry_text, row_id] + future_periods,
+                    )
+                conn.commit()
+
+                # Create new rows for months 2..divide_by
+                sub_category = (data.get("sub_category") or "").strip() or None
+                category = (data.get("category") or "").strip() or None
+                spend_type = (data.get("spend_type") or "").strip() or None
+
+                for i in range(1, divide_by):
+                    m = base_date.month - 1 + i
+                    period_date = _date(base_date.year + m // 12, m % 12 + 1, 1)
+                    db.insert_data_feed_row(
+                        conn,
+                        period_date, entry_text, sub_category, category, spend_type,
+                        monthly_amount,
+                        time_period=period_date.strftime("%b-%Y"),
+                        cadence="A",
+                        divide_by=divide_by,
+                        monthly_amount=monthly_amount,
+                        shared_expense=shared_expense,
+                        share_ratio=share_ratio,
+                        final_amount=final_amount,
+                        exclude_from_training=True,
+                    )
+                    rows_created += 1
+
+        return jsonify({"ok": True, **result, "rows_created": rows_created})
     finally:
         conn.close()

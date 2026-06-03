@@ -434,3 +434,127 @@ class TestCreateHistoryRowCadenceA:
         assert calls_data[1]["time_period"] == "Jan-2027"
         assert calls_data[11]["entry_date"] == _date(2027, 11, 1)
         assert calls_data[11]["time_period"] == "Nov-2027"
+
+
+# ---------------------------------------------------------------------------
+# PATCH /api/history/<id> — cadence A expansion on update
+# ---------------------------------------------------------------------------
+
+class TestUpdateHistoryCadenceA:
+    _existing = {
+        "id": 1,
+        "entry_text": "Annual subscription",
+        "entry_date": _date(2026, 5, 1),
+        "time_period": "May-2026",
+    }
+    _patch_payload = {
+        "amount": 3000.0,
+        "cadence": "A",
+        "divide_by": 3,
+        "time_period": "May-2026",
+        "category": "Expense",
+        "sub_category": "Subscription",
+        "spend_type": "Expense",
+        "shared_expense": "N",
+        "share_ratio": 1.0,
+    }
+
+    def test_annual_cadence_creates_future_rows(self, client, monkeypatch):
+        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        mock_conn, mock_cursor = _make_mock_conn()
+        insert_calls = []
+        def fake_insert(conn, entry_date, *args, **kwargs):
+            insert_calls.append({"entry_date": entry_date, "time_period": kwargs.get("time_period")})
+            return len(insert_calls) + 10
+        with patch("history.db.get_connection", return_value=mock_conn), \
+             patch("history.db.update_history_row",
+                   return_value={"amount": 1000.0, "monthly_amount": 1000.0, "final_amount": 1000.0}), \
+             patch("history.db.get_history_row", return_value=self._existing), \
+             patch("history.db.insert_data_feed_row", side_effect=fake_insert):
+            resp = client.patch("/api/history/1", json=self._patch_payload)
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["ok"] is True
+        assert data["rows_created"] == 2
+        assert len(insert_calls) == 2
+
+    def test_future_row_entry_dates_are_first_of_month(self, client, monkeypatch):
+        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        mock_conn, _ = _make_mock_conn()
+        insert_calls = []
+        def fake_insert(conn, entry_date, *args, **kwargs):
+            insert_calls.append({"entry_date": entry_date, "time_period": kwargs.get("time_period")})
+            return len(insert_calls)
+        with patch("history.db.get_connection", return_value=mock_conn), \
+             patch("history.db.update_history_row",
+                   return_value={"amount": 1000.0, "monthly_amount": 1000.0, "final_amount": 1000.0}), \
+             patch("history.db.get_history_row", return_value=self._existing), \
+             patch("history.db.insert_data_feed_row", side_effect=fake_insert):
+            client.patch("/api/history/1", json=self._patch_payload)
+        assert insert_calls[0]["entry_date"] == _date(2026, 6, 1)
+        assert insert_calls[0]["time_period"] == "Jun-2026"
+        assert insert_calls[1]["entry_date"] == _date(2026, 7, 1)
+        assert insert_calls[1]["time_period"] == "Jul-2026"
+
+    def test_future_rows_not_in_base_period(self, client, monkeypatch):
+        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        mock_conn, _ = _make_mock_conn()
+        insert_calls = []
+        def fake_insert(conn, entry_date, *args, **kwargs):
+            insert_calls.append(kwargs.get("time_period"))
+            return len(insert_calls)
+        with patch("history.db.get_connection", return_value=mock_conn), \
+             patch("history.db.update_history_row",
+                   return_value={"amount": 1000.0, "monthly_amount": 1000.0, "final_amount": 1000.0}), \
+             patch("history.db.get_history_row", return_value=self._existing), \
+             patch("history.db.insert_data_feed_row", side_effect=fake_insert):
+            client.patch("/api/history/1", json=self._patch_payload)
+        assert "May-2026" not in insert_calls
+
+    def test_annual_cadence_divide_by_1_no_expansion(self, client, monkeypatch):
+        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        mock_conn, _ = _make_mock_conn()
+        with patch("history.db.get_connection", return_value=mock_conn), \
+             patch("history.db.update_history_row",
+                   return_value={"amount": 3000.0, "monthly_amount": 3000.0, "final_amount": 3000.0}), \
+             patch("history.db.get_history_row", return_value=self._existing), \
+             patch("history.db.insert_data_feed_row") as mock_insert:
+            resp = client.patch("/api/history/1", json={**self._patch_payload, "divide_by": 1})
+        assert resp.status_code == 200
+        mock_insert.assert_not_called()
+        assert resp.get_json()["rows_created"] == 0
+
+    def test_non_annual_cadence_no_expansion(self, client, monkeypatch):
+        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        mock_conn, _ = _make_mock_conn()
+        with patch("history.db.get_connection", return_value=mock_conn), \
+             patch("history.db.update_history_row",
+                   return_value={"amount": 1000.0, "monthly_amount": 1000.0, "final_amount": 1000.0}), \
+             patch("history.db.get_history_row", return_value=self._existing), \
+             patch("history.db.insert_data_feed_row") as mock_insert:
+            resp = client.patch("/api/history/1", json={**self._patch_payload, "cadence": "M"})
+        assert resp.status_code == 200
+        mock_insert.assert_not_called()
+        assert resp.get_json()["rows_created"] == 0
+
+    def test_year_wrap_creates_correct_periods(self, client, monkeypatch):
+        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        mock_conn, _ = _make_mock_conn()
+        dec_existing = {
+            "id": 5, "entry_text": "Annual fee",
+            "entry_date": _date(2026, 12, 1), "time_period": "Dec-2026",
+        }
+        insert_calls = []
+        def fake_insert(conn, entry_date, *args, **kwargs):
+            insert_calls.append({"entry_date": entry_date, "time_period": kwargs.get("time_period")})
+            return len(insert_calls)
+        with patch("history.db.get_connection", return_value=mock_conn), \
+             patch("history.db.update_history_row",
+                   return_value={"amount": 1000.0, "monthly_amount": 1000.0, "final_amount": 1000.0}), \
+             patch("history.db.get_history_row", return_value=dec_existing), \
+             patch("history.db.insert_data_feed_row", side_effect=fake_insert):
+            client.patch("/api/history/5", json={**self._patch_payload, "divide_by": 3})
+        assert insert_calls[0]["entry_date"] == _date(2027, 1, 1)
+        assert insert_calls[0]["time_period"] == "Jan-2027"
+        assert insert_calls[1]["entry_date"] == _date(2027, 2, 1)
+        assert insert_calls[1]["time_period"] == "Feb-2027"
