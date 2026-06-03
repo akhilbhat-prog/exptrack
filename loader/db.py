@@ -2,13 +2,16 @@
 PostgreSQL helpers for the HDFC statement loader.
 
 Tables managed here:
-  transactions    — one row per parsed bank transaction
-  processed_emails — idempotency log; every Gmail message ID lands here
+  transactions          — one row per parsed bank transaction
+  processed_emails      — idempotency log; every Gmail message ID lands here
+  data_feed_history     — finalised categorised transactions
+  recurring_transactions — user-defined recurring entries auto-generated monthly
 """
 
 import os
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date as _date
+import calendar as _calendar
 
 import psycopg2
 import psycopg2.extras
@@ -239,6 +242,24 @@ def get_history_page(conn, period: str, page: int, page_size: int = 25) -> dict:
     return {"items": items, "total": total, "page": page, "pages": pages}
 
 
+def get_history_row(conn, row_id: int) -> dict | None:
+    """Fetch entry_text, entry_date, and time_period for a single data_feed_history row."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, entry_text, entry_date, time_period FROM data_feed_history WHERE id = %s",
+            (row_id,),
+        )
+        row = cur.fetchone()
+    if row is None:
+        return None
+    return {
+        "id":           row[0],
+        "entry_text":   row[1],
+        "entry_date":   row[2],
+        "time_period":  row[3],
+    }
+
+
 def update_history_row(conn, row_id: int, fields: dict) -> dict | None:
     """Update editable fields of a data_feed_history row. Returns computed amounts or None if not found."""
     with conn.cursor() as cur:
@@ -398,6 +419,205 @@ def find_duplicate_transaction(conn, transaction: dict) -> str | None:
             )
         row = cur.fetchone()
         return row[0] if row else None
+
+
+def create_recurring_table(conn) -> None:
+    """Create the recurring_transactions table if it doesn't exist."""
+    with conn.cursor() as cur:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS recurring_transactions (
+                id              SERIAL PRIMARY KEY,
+                entry_text      TEXT NOT NULL,
+                merchant        TEXT,
+                amount          NUMERIC(12, 2) NOT NULL,
+                category        TEXT,
+                sub_category    TEXT,
+                spend_type      VARCHAR(20),
+                cadence         VARCHAR(20) NOT NULL DEFAULT 'O',
+                divide_by       INTEGER NOT NULL DEFAULT 1,
+                shared_expense  CHAR(1) NOT NULL DEFAULT 'N',
+                share_ratio     NUMERIC(6,4) NOT NULL DEFAULT 1.0,
+                active          BOOLEAN NOT NULL DEFAULT TRUE,
+                last_generated  DATE,
+                created_at      TIMESTAMPTZ DEFAULT NOW()
+            );
+        """)
+    conn.commit()
+
+
+def get_recurring_transactions(conn) -> list[dict]:
+    """Return all recurring transaction definitions, active first."""
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT id, entry_text, merchant, amount, category, sub_category,
+                   spend_type, cadence, divide_by, shared_expense, share_ratio,
+                   active, last_generated, created_at
+            FROM recurring_transactions
+            ORDER BY active DESC, id ASC
+        """)
+        rows = cur.fetchall()
+    return [
+        {
+            "id":             r[0],
+            "entry_text":     r[1],
+            "merchant":       r[2],
+            "amount":         float(r[3]) if r[3] is not None else None,
+            "category":       r[4] or "",
+            "sub_category":   r[5] or "",
+            "spend_type":     r[6] or "",
+            "cadence":        r[7] or "O",
+            "divide_by":      r[8] if r[8] is not None else 1,
+            "shared_expense": r[9] if r[9] is not None else "N",
+            "share_ratio":    float(r[10]) if r[10] is not None else 1.0,
+            "active":         r[11],
+            "last_generated": r[12].isoformat() if r[12] else None,
+            "created_at":     r[13].isoformat() if r[13] else None,
+        }
+        for r in rows
+    ]
+
+
+def upsert_recurring_transaction(conn, data: dict, row_id: int | None = None) -> int | None:
+    """Insert (row_id=None) or update a recurring transaction definition. Returns id or None if not found."""
+    if row_id is None:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO recurring_transactions
+                    (entry_text, merchant, amount, category, sub_category, spend_type,
+                     cadence, divide_by, shared_expense, share_ratio, active)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
+                """,
+                (
+                    data["entry_text"],
+                    data.get("merchant") or None,
+                    data["amount"],
+                    data.get("category") or None,
+                    data.get("sub_category") or None,
+                    data.get("spend_type") or None,
+                    data.get("cadence") or "O",
+                    data.get("divide_by") or 1,
+                    data.get("shared_expense") or "N",
+                    data.get("share_ratio") if data.get("share_ratio") is not None else 1.0,
+                    data.get("active", True),
+                ),
+            )
+            new_id = cur.fetchone()[0]
+        conn.commit()
+        return new_id
+    else:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE recurring_transactions
+                   SET entry_text     = %s,
+                       merchant       = %s,
+                       amount         = %s,
+                       category       = %s,
+                       sub_category   = %s,
+                       spend_type     = %s,
+                       cadence        = %s,
+                       divide_by      = %s,
+                       shared_expense = %s,
+                       share_ratio    = %s,
+                       active         = %s
+                 WHERE id = %s
+                RETURNING id
+                """,
+                (
+                    data["entry_text"],
+                    data.get("merchant") or None,
+                    data["amount"],
+                    data.get("category") or None,
+                    data.get("sub_category") or None,
+                    data.get("spend_type") or None,
+                    data.get("cadence") or "O",
+                    data.get("divide_by") or 1,
+                    data.get("shared_expense") or "N",
+                    data.get("share_ratio") if data.get("share_ratio") is not None else 1.0,
+                    data.get("active", True),
+                    row_id,
+                ),
+            )
+            row = cur.fetchone()
+        if row is None:
+            return None
+        conn.commit()
+        return row[0]
+
+
+def delete_recurring_transaction(conn, row_id: int) -> bool:
+    """Delete a recurring transaction definition. Returns True if deleted."""
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM recurring_transactions WHERE id = %s", (row_id,))
+        deleted = cur.rowcount > 0
+    conn.commit()
+    return deleted
+
+
+def generate_recurring_entries(conn, today: _date | None = None) -> list[dict]:
+    """Insert data_feed_history rows for all active recurring transactions not yet generated this month.
+
+    entry_date is always the 1st of the current month.
+    Returns a list of {id, feed_id, entry_text} for each generated row.
+    """
+    if today is None:
+        today = _date.today()
+
+    entry_date = _date(today.year, today.month, 1)
+    time_period = entry_date.strftime("%b-%Y")
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT id, entry_text, merchant, amount, category, sub_category,
+                   spend_type, cadence, divide_by, shared_expense, share_ratio
+            FROM recurring_transactions
+            WHERE active = TRUE
+              AND (last_generated IS NULL
+                   OR DATE_TRUNC('month', last_generated) < DATE_TRUNC('month', %s::date))
+            """,
+            (today.isoformat(),),
+        )
+        rows = cur.fetchall()
+
+    results = []
+    for row in rows:
+        (rec_id, entry_text, merchant, amount, category, sub_category,
+         spend_type, cadence, divide_by, shared_expense, share_ratio) = row
+
+        amount_f = float(amount)
+        divide_by = max(1, int(divide_by or 1))
+        share_ratio_f = float(share_ratio) if share_ratio is not None else 1.0
+        monthly_amount = round(amount_f / divide_by, 2)
+        final_amount = round(monthly_amount * share_ratio_f, 2)
+
+        feed_id = insert_data_feed_row(
+            conn,
+            entry_date, entry_text, sub_category, category, spend_type,
+            amount,
+            merchant=merchant, vpa=None, upi_ref=None,
+            time_period=time_period,
+            cadence=cadence or "O",
+            divide_by=divide_by,
+            monthly_amount=monthly_amount,
+            shared_expense=shared_expense or "N",
+            share_ratio=share_ratio_f,
+            final_amount=final_amount,
+            exclude_from_training=True,
+        )
+
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE recurring_transactions SET last_generated = %s WHERE id = %s",
+                (today.isoformat(), rec_id),
+            )
+        conn.commit()
+
+        results.append({"id": rec_id, "feed_id": feed_id, "entry_text": entry_text})
+
+    return results
 
 
 def log_email(conn, gmail_message_id: str, status: str, notes: str | None = None) -> None:
