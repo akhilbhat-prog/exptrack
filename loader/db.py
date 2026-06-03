@@ -103,6 +103,53 @@ def insert_transaction(conn, transaction_dict: dict, gmail_message_id: str) -> N
     logger.debug("Inserted transaction for message %s.", gmail_message_id)
 
 
+def create_settings_table(conn) -> None:
+    """Create app_settings table and seed default values if not present."""
+    with conn.cursor() as cur:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS app_settings (
+                key        TEXT PRIMARY KEY,
+                value      TEXT NOT NULL,
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+            );
+            INSERT INTO app_settings (key, value) VALUES ('default_share_ratio', '0.7')
+                ON CONFLICT (key) DO NOTHING;
+            INSERT INTO app_settings (key, value) VALUES ('default_annual_divisor', '12')
+                ON CONFLICT (key) DO NOTHING;
+        """)
+    conn.commit()
+
+
+def get_settings(conn) -> dict:
+    """Return all app settings as a dict with typed values."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT key, value FROM app_settings")
+        rows = cur.fetchall()
+    result = {}
+    for key, value in rows:
+        if key == "default_share_ratio":
+            result[key] = float(value)
+        elif key == "default_annual_divisor":
+            result[key] = int(value)
+        else:
+            result[key] = value
+    return result
+
+
+def update_setting(conn, key: str, value: str) -> None:
+    """Upsert a single setting value."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO app_settings (key, value, updated_at)
+            VALUES (%s, %s, NOW())
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+            """,
+            (key, value),
+        )
+    conn.commit()
+
+
 def create_data_feed_table(conn) -> None:
     """Create the data_feed_history table if it doesn't exist."""
     with conn.cursor() as cur:

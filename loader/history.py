@@ -8,6 +8,8 @@ Routes:
   POST  /api/history              — create a manual entry (exclude_from_training=True)
   PATCH /api/history/<id>         — update editable fields for one row
   DELETE /api/history/<id>        — delete a row
+  GET   /api/settings             — return all app settings
+  PATCH /api/settings             — update one or more settings
 
 Auth: if REVIEW_TOKEN env var is set, all routes require a matching
       ?token= query param or Authorization: Bearer <token> header.
@@ -255,5 +257,57 @@ def update_history(row_id):
                     rows_created += 1
 
         return jsonify({"ok": True, **result, "rows_created": rows_created})
+    finally:
+        conn.close()
+
+
+@history_bp.route("/api/settings")
+@_require_token
+def get_settings():
+    conn = db.get_connection()
+    try:
+        settings = db.get_settings(conn)
+        return jsonify(settings)
+    finally:
+        conn.close()
+
+
+@history_bp.route("/api/settings", methods=["PATCH"])
+@_require_token
+def update_settings():
+    data = request.get_json(force=True)
+    allowed = {"default_share_ratio", "default_annual_divisor"}
+    updates = {k: v for k, v in data.items() if k in allowed}
+    if not updates:
+        abort(400, f"No valid settings keys provided. Allowed: {sorted(allowed)}")
+
+    errors = {}
+    if "default_share_ratio" in updates:
+        try:
+            v = float(updates["default_share_ratio"])
+            if not (0 < v <= 1):
+                errors["default_share_ratio"] = "must be between 0 and 1"
+            else:
+                updates["default_share_ratio"] = v
+        except (TypeError, ValueError):
+            errors["default_share_ratio"] = "must be a number"
+    if "default_annual_divisor" in updates:
+        try:
+            v = int(updates["default_annual_divisor"])
+            if v < 1:
+                errors["default_annual_divisor"] = "must be >= 1"
+            else:
+                updates["default_annual_divisor"] = v
+        except (TypeError, ValueError):
+            errors["default_annual_divisor"] = "must be an integer"
+    if errors:
+        abort(400, str(errors))
+
+    conn = db.get_connection()
+    try:
+        for key, value in updates.items():
+            db.update_setting(conn, key, str(value))
+        settings = db.get_settings(conn)
+        return jsonify({"ok": True, **settings})
     finally:
         conn.close()

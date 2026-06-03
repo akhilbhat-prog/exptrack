@@ -40,6 +40,7 @@ try:
     _db.create_tables(_startup_conn)
     _db.create_data_feed_table(_startup_conn)
     _db.create_recurring_table(_startup_conn)
+    _db.create_settings_table(_startup_conn)
     _startup_conn.close()
 except Exception as _e:
     _logging.getLogger(__name__).warning("DB table setup skipped at startup: %s", _e)

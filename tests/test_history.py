@@ -558,3 +558,69 @@ class TestUpdateHistoryCadenceA:
         assert insert_calls[0]["time_period"] == "Jan-2027"
         assert insert_calls[1]["entry_date"] == _date(2027, 2, 1)
         assert insert_calls[1]["time_period"] == "Feb-2027"
+
+
+# ---------------------------------------------------------------------------
+# GET /api/settings + PATCH /api/settings
+# ---------------------------------------------------------------------------
+
+class TestSettings:
+    def test_get_returns_defaults(self, client, monkeypatch):
+        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        mock_conn, _ = _make_mock_conn()
+        defaults = {"default_share_ratio": 0.7, "default_annual_divisor": 12}
+        with patch("history.db.get_connection", return_value=mock_conn), \
+             patch("history.db.get_settings", return_value=defaults):
+            resp = client.get("/api/settings")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["default_share_ratio"] == 0.7
+        assert data["default_annual_divisor"] == 12
+
+    def test_get_requires_token(self, client, monkeypatch):
+        monkeypatch.setenv("REVIEW_TOKEN", "tok")
+        assert client.get("/api/settings").status_code == 401
+
+    def test_patch_updates_share_ratio(self, client, monkeypatch):
+        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        mock_conn, _ = _make_mock_conn()
+        updated = {"default_share_ratio": 0.5, "default_annual_divisor": 12}
+        with patch("history.db.get_connection", return_value=mock_conn), \
+             patch("history.db.update_setting") as mock_update, \
+             patch("history.db.get_settings", return_value=updated):
+            resp = client.patch("/api/settings", json={"default_share_ratio": 0.5})
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["ok"] is True
+        assert data["default_share_ratio"] == 0.5
+        mock_update.assert_called_once_with(mock_conn, "default_share_ratio", "0.5")
+
+    def test_patch_updates_annual_divisor(self, client, monkeypatch):
+        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        mock_conn, _ = _make_mock_conn()
+        updated = {"default_share_ratio": 0.7, "default_annual_divisor": 4}
+        with patch("history.db.get_connection", return_value=mock_conn), \
+             patch("history.db.update_setting") as mock_update, \
+             patch("history.db.get_settings", return_value=updated):
+            resp = client.patch("/api/settings", json={"default_annual_divisor": 4})
+        assert resp.status_code == 200
+        mock_update.assert_called_once_with(mock_conn, "default_annual_divisor", "4")
+
+    def test_patch_rejects_invalid_share_ratio(self, client, monkeypatch):
+        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        resp = client.patch("/api/settings", json={"default_share_ratio": 1.5})
+        assert resp.status_code == 400
+
+    def test_patch_rejects_zero_divisor(self, client, monkeypatch):
+        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        resp = client.patch("/api/settings", json={"default_annual_divisor": 0})
+        assert resp.status_code == 400
+
+    def test_patch_rejects_unknown_keys(self, client, monkeypatch):
+        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        resp = client.patch("/api/settings", json={"unknown_key": "value"})
+        assert resp.status_code == 400
+
+    def test_patch_requires_token(self, client, monkeypatch):
+        monkeypatch.setenv("REVIEW_TOKEN", "tok")
+        assert client.patch("/api/settings", json={"default_share_ratio": 0.5}).status_code == 401

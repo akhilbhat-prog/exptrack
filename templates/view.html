@@ -431,6 +431,23 @@
     </div>
     <div class="header-right">
       <div class="header-date" id="headerDate"></div>
+      <div style="position:relative">
+        <button class="btn btn-ghost" onclick="toggleSettingsPanel()" title="Defaults" style="font-size:15px;padding:5px 9px">⚙</button>
+        <div id="settingsPanel" style="display:none;position:absolute;right:0;top:calc(100% + 6px);z-index:200;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:14px 16px;min-width:230px;box-shadow:0 8px 24px rgba(0,0,0,0.4)">
+          <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px">Default Values</div>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <label style="display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted);font-weight:600">
+              Share Ratio (when Shared = Y)
+              <input type="number" id="settingShareRatio" min="0.01" max="1" step="0.01" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--font);font-size:13px;padding:5px 8px;outline:none">
+            </label>
+            <label style="display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted);font-weight:600">
+              Annual Divisor (when Cadence = A)
+              <input type="number" id="settingAnnualDivisor" min="1" max="12" step="1" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--font);font-size:13px;padding:5px 8px;outline:none">
+            </label>
+            <button class="btn btn-primary" style="margin-top:2px" onclick="saveSettings()">Save</button>
+          </div>
+        </div>
+      </div>
       <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle light/dark theme">
         <span class="toggle-icon">🌙</span>
         <span class="toggle-track"><span class="toggle-thumb"></span></span>
@@ -595,6 +612,8 @@
 
 <script>
 const REVIEW_TOKEN = {{ review_token | tojson }};
+
+let SETTINGS = { default_share_ratio: 0.7, default_annual_divisor: 12 };
 
 let categories    = {};
 let TYPE_OPTIONS  = ['Expense', 'Investment', 'Saving'];
@@ -1167,11 +1186,11 @@ function onFieldInput(el) {
   if (!item) return;
   item[field] = el.value;
   if (field === 'cadence' && el.value.toUpperCase() === 'A') {
-    item.divide_by = 12;
+    item.divide_by = SETTINGS.default_annual_divisor;
     const row = document.querySelector(`tr[data-row="${rowId}"]`);
     if (row) {
       const divByEl = row.querySelector('[data-field="divide_by"]');
-      if (divByEl) divByEl.value = 12;
+      if (divByEl) divByEl.value = SETTINGS.default_annual_divisor;
       recomputeAmounts(rowId, item, row);
     }
   }
@@ -1184,7 +1203,7 @@ function onSharedExpenseChange(el) {
   if (!item) return;
   const isShared = el.checked;
   item['shared_expense'] = isShared ? 'Y' : 'N';
-  const newRatio = isShared ? 0.7 : 1.0;
+  const newRatio = isShared ? SETTINGS.default_share_ratio : 1.0;
   item['share_ratio'] = newRatio;
   const row = document.querySelector(`tr[data-row="${rowId}"]`);
   if (row) {
@@ -1492,13 +1511,13 @@ function _aeOnCatChange(input) {
 function _aeOnCadence(input) {
   if ((input.value || '').toUpperCase() === 'A') {
     const d = input.closest('tr')?.querySelector('[data-ae-field="divide_by"]');
-    if (d) d.value = 12;
+    if (d) d.value = SETTINGS.default_annual_divisor;
   }
 }
 function _aeOnShared(input) {
   if ((input.value || '').toUpperCase() === 'Y') {
     const r = input.closest('tr')?.querySelector('[data-ae-field="share_ratio"]');
-    if (r) r.value = 0.7;
+    if (r) r.value = SETTINGS.default_share_ratio;
   }
 }
 function _aeUpdateDeleteBtns() {
@@ -1605,10 +1624,47 @@ async function submitAddEntry() {
 }
 
 /* ── Init ── */
+function toggleSettingsPanel() {
+  const panel = document.getElementById('settingsPanel');
+  if (panel.style.display === 'none') {
+    document.getElementById('settingShareRatio').value = SETTINGS.default_share_ratio;
+    document.getElementById('settingAnnualDivisor').value = SETTINGS.default_annual_divisor;
+    panel.style.display = '';
+  } else {
+    panel.style.display = 'none';
+  }
+}
+
+async function saveSettings() {
+  const ratio = parseFloat(document.getElementById('settingShareRatio').value);
+  const divisor = parseInt(document.getElementById('settingAnnualDivisor').value);
+  if (isNaN(ratio) || ratio <= 0 || ratio > 1) { showToast('Share ratio must be between 0 and 1', true); return; }
+  if (isNaN(divisor) || divisor < 1) { showToast('Annual divisor must be >= 1', true); return; }
+  try {
+    const resp = await apiCall('/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ default_share_ratio: ratio, default_annual_divisor: divisor }),
+    });
+    if (!resp.ok) throw new Error();
+    const data = await resp.json();
+    Object.assign(SETTINGS, data);
+    document.getElementById('settingsPanel').style.display = 'none';
+    showToast('Settings saved');
+  } catch (_) {
+    showToast('Failed to save settings', true);
+  }
+}
+
 async function init() {
   setupTheme();
   document.getElementById('headerDate').textContent =
     new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+  try {
+    const sr = await apiCall('/api/settings');
+    if (sr.ok) Object.assign(SETTINGS, await sr.json());
+  } catch (_) {}
 
   try {
     const resp = await apiCall('/api/categories');
