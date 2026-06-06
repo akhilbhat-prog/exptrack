@@ -30,7 +30,7 @@ User needs to add and/or edit shared and amortised transactions dating back to t
 
 ## BL-5 — Configurable share ratio and annual divisor defaults
 
-**Status:** Open
+**Status:** Complete (2026-06-06)
 
 The default share ratio (0.7) and annual cadence divisor (12 for cadence A) are hardcoded in the UI. Make them user-configurable — either via a settings table in the DB, a config file, or a settings endpoint — so the user can change them without a code deploy.
 
@@ -38,6 +38,6 @@ The default share ratio (0.7) and annual cadence divisor (12 for cadence A) are 
 
 ## BL-6 — Shared transaction mirror table
 
-**Status:** Open (requirements pending)
+**Status:** Complete (2026-06-06)
 
-When a transaction is marked as shared, copy it to a separate table to track the counterparty's portion independently. Full schema and workflow requirements to be defined.
+Transactions in `data_feed_history` marked `shared_expense = 'Y'` with `entry_date >= 2026-04-01` are automatically mirrored into `shared_transactions`. The mirror syncs on Complete Batch (`/review`), Update (`/view` PATCH), Add Entry (`/view` POST), and monthly recurring generation. A new `/shared` page shows shared rows grouped by financial year (Apr–Mar) with summary cards and a filterable/sortable table. Paid By and Owed By default to Akhil/Aditi (editable). Balance = paid amount minus the payer's own share. Settled checkbox auto-saves with timestamp.

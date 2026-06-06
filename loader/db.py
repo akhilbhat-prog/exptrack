@@ -18,6 +18,8 @@ import psycopg2.extras
 
 logger = logging.getLogger(__name__)
 
+_SHARED_SCOPE_START = _date(2026, 4, 1)
+
 
 def get_connection():
     """Return a new psycopg2 connection using the DATABASE_URL env var."""
@@ -441,6 +443,321 @@ def get_history_summary(conn, period: str, prev_period: str | None = None) -> di
             }
 
 
+def create_shared_transactions_table(conn) -> None:
+    """Create shared_transactions mirror table and backfill existing shared data_feed_history rows."""
+    with conn.cursor() as cur:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS shared_transactions (
+                id               SERIAL PRIMARY KEY,
+                history_id       INT UNIQUE REFERENCES data_feed_history(id) ON DELETE CASCADE,
+                paid_by          TEXT NOT NULL DEFAULT 'Akhil',
+                owed_by          TEXT NOT NULL DEFAULT 'Aditi',
+                amount           NUMERIC(12,2) NOT NULL,
+                monthly_amount   NUMERIC(12,2),
+                share_ratio      NUMERIC(6,4)  NOT NULL,
+                akhil_share      NUMERIC(12,2) NOT NULL,
+                aditi_share      NUMERIC(12,2) NOT NULL,
+                balance          NUMERIC(12,2) NOT NULL,
+                entry_date       DATE,
+                merchant         TEXT,
+                category         TEXT,
+                subcategory      TEXT,
+                entry_text       TEXT,
+                settled          BOOLEAN NOT NULL DEFAULT FALSE,
+                settled_at       TIMESTAMPTZ,
+                created_at       TIMESTAMPTZ DEFAULT NOW()
+            );
+            ALTER TABLE IF EXISTS shared_transactions ADD COLUMN IF NOT EXISTS monthly_amount NUMERIC(12,2);
+            ALTER TABLE IF EXISTS shared_transactions ADD COLUMN IF NOT EXISTS is_manual BOOLEAN NOT NULL DEFAULT FALSE;
+            ALTER TABLE IF EXISTS shared_transactions ADD COLUMN IF NOT EXISTS is_payment BOOLEAN NOT NULL DEFAULT FALSE;
+            ALTER TABLE IF EXISTS shared_transactions ADD COLUMN IF NOT EXISTS is_ignored BOOLEAN NOT NULL DEFAULT FALSE;
+        """)
+        cur.execute("""
+            INSERT INTO shared_transactions
+                (history_id, amount, monthly_amount, share_ratio, akhil_share, aditi_share, balance,
+                 entry_date, merchant, category, subcategory, entry_text)
+            SELECT
+                id,
+                amount,
+                COALESCE(monthly_amount, amount),
+                COALESCE(share_ratio, 1.0),
+                ROUND(COALESCE(monthly_amount, amount) * COALESCE(share_ratio, 1.0), 2),
+                ROUND(COALESCE(monthly_amount, amount) * (1.0 - COALESCE(share_ratio, 1.0)), 2),
+                ROUND(COALESCE(monthly_amount, amount) * (1.0 - COALESCE(share_ratio, 1.0)), 2),
+                entry_date,
+                merchant,
+                category,
+                sub_category,
+                entry_text
+            FROM data_feed_history
+            WHERE shared_expense = 'Y'
+              AND entry_date >= %s
+            ON CONFLICT (history_id) DO NOTHING
+        """, (_SHARED_SCOPE_START,))
+        # Patch existing rows that have monthly_amount = NULL (rows inserted before this column existed)
+        cur.execute("""
+            UPDATE shared_transactions st
+               SET monthly_amount = COALESCE(dfh.monthly_amount, dfh.amount),
+                   akhil_share    = ROUND(COALESCE(dfh.monthly_amount, dfh.amount) * st.share_ratio, 2),
+                   aditi_share    = ROUND(COALESCE(dfh.monthly_amount, dfh.amount) * (1.0 - st.share_ratio), 2),
+                   balance        = CASE WHEN st.paid_by = 'Akhil'
+                                         THEN ROUND(COALESCE(dfh.monthly_amount, dfh.amount) * (1.0 - st.share_ratio), 2)
+                                         ELSE ROUND(COALESCE(dfh.monthly_amount, dfh.amount) * st.share_ratio, 2) END
+              FROM data_feed_history dfh
+             WHERE st.history_id = dfh.id
+               AND st.monthly_amount IS NULL
+        """)
+    conn.commit()
+
+
+def upsert_shared_transaction(
+    conn,
+    history_id: int,
+    amount: float,
+    monthly_amount: float,
+    share_ratio: float,
+    entry_date,
+    merchant: str | None,
+    category: str | None,
+    subcategory: str | None,
+    entry_text: str | None,
+) -> None:
+    """Insert or update a shared_transactions row. Preserves paid_by/owed_by/settled on conflict."""
+    ma = float(monthly_amount)
+    akhil_share = round(ma * float(share_ratio), 2)
+    aditi_share = round(ma * (1.0 - float(share_ratio)), 2)
+    with conn.cursor() as cur:
+        cur.execute("""
+            INSERT INTO shared_transactions
+                (history_id, amount, monthly_amount, share_ratio, akhil_share, aditi_share, balance,
+                 entry_date, merchant, category, subcategory, entry_text)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (history_id) DO UPDATE SET
+                amount         = EXCLUDED.amount,
+                monthly_amount = EXCLUDED.monthly_amount,
+                share_ratio    = EXCLUDED.share_ratio,
+                akhil_share    = EXCLUDED.akhil_share,
+                aditi_share    = EXCLUDED.aditi_share,
+                balance        = CASE WHEN shared_transactions.paid_by = 'Akhil'
+                                      THEN EXCLUDED.aditi_share
+                                      ELSE EXCLUDED.akhil_share END,
+                entry_date     = EXCLUDED.entry_date,
+                merchant       = EXCLUDED.merchant,
+                category       = EXCLUDED.category,
+                subcategory    = EXCLUDED.subcategory,
+                entry_text     = EXCLUDED.entry_text
+        """, (
+            history_id, amount, monthly_amount, share_ratio, akhil_share, aditi_share, aditi_share,
+            entry_date, merchant, category, subcategory, entry_text,
+        ))
+    conn.commit()
+
+
+def delete_shared_transaction(conn, history_id: int) -> bool:
+    """Delete a shared_transactions row by history_id. Returns True if a row was deleted."""
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM shared_transactions WHERE history_id = %s", (history_id,))
+        deleted = cur.rowcount > 0
+    conn.commit()
+    return deleted
+
+
+def insert_manual_shared_transaction(
+    conn,
+    entry_date,
+    merchant: str | None,
+    category: str | None,
+    subcategory: str | None,
+    monthly_amount: float,
+    share_ratio: float,
+    paid_by: str = "Akhil",
+    owed_by: str = "Aditi",
+    settled: bool = False,
+) -> int:
+    """Insert a manual entry directly into shared_transactions (history_id=NULL). Returns new id."""
+    ma          = float(monthly_amount)
+    sr          = float(share_ratio)
+    akhil_share = round(ma * sr, 2)
+    aditi_share = round(ma * (1.0 - sr), 2)
+    balance     = aditi_share if paid_by == "Akhil" else akhil_share
+    with conn.cursor() as cur:
+        cur.execute("""
+            INSERT INTO shared_transactions
+                (amount, monthly_amount, share_ratio, akhil_share, aditi_share, balance,
+                 paid_by, owed_by, settled, entry_date, merchant, category, subcategory,
+                 is_manual)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE)
+            RETURNING id
+        """, (ma, ma, sr, akhil_share, aditi_share, balance,
+              paid_by, owed_by, settled, entry_date, merchant, category, subcategory))
+        row_id = cur.fetchone()[0]
+    conn.commit()
+    return row_id
+
+
+def insert_payment_shared_transaction(
+    conn,
+    entry_date,
+    paid_by: str,
+    owed_by: str,
+    amount: float,
+    note: str | None,
+) -> int:
+    """Record a settlement payment in shared_transactions. Returns new id."""
+    amt = float(amount)
+    with conn.cursor() as cur:
+        cur.execute("""
+            INSERT INTO shared_transactions
+                (amount, monthly_amount, share_ratio, akhil_share, aditi_share, balance,
+                 paid_by, owed_by, entry_date, merchant, entry_text,
+                 is_manual, is_payment)
+            VALUES (%s, %s, 1.0, 0, 0, %s, %s, %s, %s, 'Payment', %s, TRUE, TRUE)
+            RETURNING id
+        """, (amt, amt, amt, paid_by, owed_by, entry_date, note or 'Payment'))
+        row_id = cur.fetchone()[0]
+    conn.commit()
+    return row_id
+
+
+def get_shared_transactions(conn, fy_year: int) -> list[dict]:
+    """Return all shared_transactions for FY Apr fy_year – Mar fy_year+1, newest first."""
+    fy_start = _date(fy_year, 4, 1)
+    fy_end   = _date(fy_year + 1, 4, 1)
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT id, history_id, paid_by, owed_by, amount, monthly_amount, share_ratio,
+                   akhil_share, aditi_share, balance,
+                   entry_date, merchant, category, subcategory, entry_text,
+                   settled, settled_at, is_payment, is_ignored
+            FROM shared_transactions
+            WHERE entry_date >= %s AND entry_date < %s
+            ORDER BY entry_date DESC, id DESC
+        """, (fy_start, fy_end))
+        rows = cur.fetchall()
+    return [
+        {
+            "id":             r[0],
+            "history_id":     r[1],
+            "paid_by":        r[2],
+            "owed_by":        r[3],
+            "amount":         float(r[4]) if r[4] is not None else 0.0,
+            "monthly_amount": float(r[5]) if r[5] is not None else 0.0,
+            "share_ratio":    float(r[6]) if r[6] is not None else 1.0,
+            "akhil_share":    float(r[7]) if r[7] is not None else 0.0,
+            "aditi_share":    float(r[8]) if r[8] is not None else 0.0,
+            "balance":        float(r[9]) if r[9] is not None else 0.0,
+            "entry_date":     r[10].isoformat() if r[10] else None,
+            "merchant":       r[11],
+            "category":       r[12] or "",
+            "subcategory":    r[13] or "",
+            "entry_text":     r[14] or "",
+            "settled":        r[15],
+            "settled_at":     r[16].isoformat() if r[16] else None,
+            "is_payment":     bool(r[17]),
+            "is_ignored":     bool(r[18]),
+        }
+        for r in rows
+    ]
+
+
+def update_shared_row(conn, shared_id: int, fields: dict) -> dict | None:
+    """Update editable fields (paid_by, owed_by, share_ratio, settled, is_ignored) of a shared_transactions row."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT paid_by, owed_by, share_ratio, monthly_amount, settled, is_ignored FROM shared_transactions WHERE id = %s",
+            (shared_id,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return None
+        paid_by        = fields.get("paid_by",    row[0])
+        owed_by        = fields.get("owed_by",    row[1])
+        share_ratio    = float(fields.get("share_ratio", row[2]))
+        monthly_amount = float(row[3]) if row[3] is not None else 0.0
+        settled_new    = fields.get("settled")
+        if settled_new is None:
+            settled_new = row[4]
+        elif isinstance(settled_new, str):
+            settled_new = settled_new.lower() in ("true", "1", "yes")
+        is_ignored_new = fields.get("is_ignored")
+        if is_ignored_new is None:
+            is_ignored_new = row[5]
+        elif isinstance(is_ignored_new, str):
+            is_ignored_new = is_ignored_new.lower() in ("true", "1", "yes")
+        akhil_share = round(monthly_amount * share_ratio, 2)
+        aditi_share = round(monthly_amount * (1.0 - share_ratio), 2)
+        balance = aditi_share if paid_by == "Akhil" else akhil_share
+        cur.execute("""
+            UPDATE shared_transactions
+               SET paid_by     = %s,
+                   owed_by     = %s,
+                   share_ratio = %s,
+                   akhil_share = %s,
+                   aditi_share = %s,
+                   balance     = %s,
+                   settled     = %s,
+                   is_ignored  = %s,
+                   settled_at  = CASE WHEN %s AND NOT settled THEN NOW()
+                                      WHEN NOT %s THEN NULL
+                                      ELSE settled_at END
+             WHERE id = %s
+        """, (paid_by, owed_by, share_ratio, akhil_share, aditi_share, balance,
+              settled_new, is_ignored_new, settled_new, settled_new, shared_id))
+        if cur.rowcount == 0:
+            return None
+    conn.commit()
+    return {
+        "paid_by": paid_by, "owed_by": owed_by, "share_ratio": share_ratio,
+        "akhil_share": akhil_share, "aditi_share": aditi_share,
+        "balance": balance, "settled": settled_new, "is_ignored": is_ignored_new,
+    }
+
+
+def get_shared_summary(conn, fy_year: int) -> dict:
+    """Return aggregate stats for shared_transactions in a financial year."""
+    fy_start = _date(fy_year, 4, 1)
+    fy_end   = _date(fy_year + 1, 4, 1)
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT
+                COALESCE(
+                    SUM(CASE WHEN paid_by = 'Akhil' THEN balance ELSE 0 END)
+                    - SUM(CASE WHEN paid_by = 'Aditi' THEN balance ELSE 0 END),
+                    0
+                ) AS net_balance,
+                COALESCE(SUM(CASE WHEN NOT is_payment AND paid_by = 'Akhil' THEN monthly_amount ELSE 0 END), 0) AS akhil_paid,
+                COALESCE(SUM(CASE WHEN NOT is_payment AND paid_by = 'Aditi' THEN monthly_amount ELSE 0 END), 0) AS aditi_paid
+            FROM shared_transactions
+            WHERE entry_date >= %s AND entry_date < %s
+              AND NOT is_ignored
+        """, (fy_start, fy_end))
+        row = cur.fetchone()
+    if not row:
+        return {"net_balance": 0.0, "total_akhil_paid": 0.0, "total_aditi_paid": 0.0}
+    return {
+        "net_balance":      float(row[0] or 0),
+        "total_akhil_paid": float(row[1] or 0),
+        "total_aditi_paid": float(row[2] or 0),
+    }
+
+
+def get_shared_fy_list(conn) -> list[int]:
+    """Return sorted list of FY start years (Apr–Mar) present in shared_transactions."""
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT DISTINCT
+                CASE WHEN EXTRACT(MONTH FROM entry_date) >= 4
+                     THEN EXTRACT(YEAR FROM entry_date)::INT
+                     ELSE EXTRACT(YEAR FROM entry_date)::INT - 1
+                END AS fy_year
+            FROM shared_transactions
+            WHERE entry_date IS NOT NULL
+            ORDER BY fy_year DESC
+        """)
+        rows = cur.fetchall()
+    return [r[0] for r in rows]
+
+
 def find_duplicate_transaction(conn, transaction: dict) -> str | None:
     """
     Return the gmail_message_id of an existing transaction that matches the
@@ -654,6 +971,19 @@ def generate_recurring_entries(conn, today: _date | None = None) -> list[dict]:
             final_amount=final_amount,
             exclude_from_training=True,
         )
+
+        if (shared_expense or "N") == "Y" and entry_date >= _SHARED_SCOPE_START:
+            upsert_shared_transaction(
+                conn, feed_id,
+                amount=amount_f,
+                monthly_amount=monthly_amount,
+                share_ratio=share_ratio_f,
+                entry_date=entry_date,
+                merchant=merchant,
+                category=category,
+                subcategory=sub_category,
+                entry_text=entry_text,
+            )
 
         with conn.cursor() as cur:
             cur.execute(

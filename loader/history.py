@@ -19,6 +19,8 @@ import os
 from datetime import date as _date
 from functools import wraps
 
+_SHARED_SCOPE_START = _date(2026, 4, 1)
+
 from flask import Blueprint, abort, jsonify, render_template, request
 
 import db
@@ -151,6 +153,11 @@ def create_history():
                     exclude_from_training=True,
                 )
                 ids.append(row_id)
+                if shared_expense == 'Y' and period_date >= _SHARED_SCOPE_START:
+                    db.upsert_shared_transaction(
+                        conn, row_id, amount, monthly_amount, share_ratio,
+                        period_date, merchant, category, sub_category, entry_text,
+                    )
             return jsonify({"ok": True, "ids": ids, "count": len(ids)}), 201
         else:
             row_id = db.insert_data_feed_row(
@@ -165,6 +172,11 @@ def create_history():
                 final_amount=final_amount,
                 exclude_from_training=True,
             )
+            if shared_expense == 'Y' and entry_date >= _SHARED_SCOPE_START:
+                db.upsert_shared_transaction(
+                    conn, row_id, amount, monthly_amount, share_ratio,
+                    entry_date, merchant, category, sub_category, entry_text,
+                )
             return jsonify({"ok": True, "id": row_id, "count": 1}), 201
     finally:
         conn.close()
@@ -241,7 +253,7 @@ def update_history(row_id):
                 for i in range(1, divide_by):
                     m = base_date.month - 1 + i
                     period_date = _date(base_date.year + m // 12, m % 12 + 1, 1)
-                    db.insert_data_feed_row(
+                    new_id = db.insert_data_feed_row(
                         conn,
                         period_date, entry_text, sub_category, category, spend_type,
                         monthly_amount,
@@ -255,6 +267,29 @@ def update_history(row_id):
                         exclude_from_training=True,
                     )
                     rows_created += 1
+                    if shared_expense == 'Y' and period_date >= _SHARED_SCOPE_START:
+                        db.upsert_shared_transaction(
+                            conn, new_id, monthly_amount, monthly_amount, share_ratio,
+                            period_date, None, category, sub_category, entry_text,
+                        )
+
+        # Sync the updated row itself to shared_transactions
+        new_shared = fields["shared_expense"]
+        if new_shared == 'Y':
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT entry_date, merchant, entry_text FROM data_feed_history WHERE id = %s",
+                    (row_id,),
+                )
+                dfh = cur.fetchone()
+            if dfh and dfh[0] and dfh[0] >= _SHARED_SCOPE_START:
+                db.upsert_shared_transaction(
+                    conn, row_id, result["amount"], result["monthly_amount"], fields["share_ratio"],
+                    dfh[0], dfh[1], fields.get("category") or None,
+                    fields.get("sub_category") or None, dfh[2],
+                )
+        else:
+            db.delete_shared_transaction(conn, row_id)
 
         return jsonify({"ok": True, **result, "rows_created": rows_created})
     finally:

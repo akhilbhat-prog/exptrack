@@ -21,7 +21,10 @@ import logging
 import os
 import subprocess
 import sys
+from datetime import date as _date
 from functools import wraps
+
+_SHARED_SCOPE_START = _date(2026, 4, 1)
 
 from flask import Blueprint, abort, jsonify, render_template, request
 
@@ -346,7 +349,7 @@ def complete_batch(batch_id):
             monthly_amount = round(amount_val / divide_by, 2)
             final_amount = round(monthly_amount * share_ratio, 2)
             time_period = date.strftime("%b-%Y") if date else None
-            if db.insert_data_feed_row(
+            feed_id = db.insert_data_feed_row(
                 conn, date, entry, subcategory, category, txn_type, amount,
                 merchant, vpa, upi_ref,
                 time_period=time_period,
@@ -356,8 +359,15 @@ def complete_batch(batch_id):
                 shared_expense=shared_expense or "N",
                 share_ratio=share_ratio,
                 final_amount=final_amount,
-            ):
+            )
+            if feed_id:
                 inserted += 1
+                row_date = date.date() if date else None
+                if (shared_expense or "N") == "Y" and row_date and row_date >= _SHARED_SCOPE_START:
+                    db.upsert_shared_transaction(
+                        conn, feed_id, amount_val, monthly_amount, share_ratio,
+                        row_date, merchant, category, subcategory, entry or "",
+                    )
 
         with conn.cursor() as cur:
             cur.execute(
