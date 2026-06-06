@@ -837,7 +837,10 @@ function getDisplayItems() {
         case 'monthly_amount': va = a.monthly_amount || 0; vb = b.monthly_amount || 0; break;
         case 'shared_expense': va = a.shared_expense|| 'N'; vb = b.shared_expense|| 'N'; break;
         case 'share_ratio':   va = a.share_ratio   != null ? a.share_ratio : 1; vb = b.share_ratio != null ? b.share_ratio : 1; break;
-        case 'final_amount':  va = a.final_amount  || 0;  vb = b.final_amount  || 0;  break;
+        case 'final_amount':
+          va = a.final_amount != null ? a.final_amount : (a.amount != null ? a.amount / (a.divide_by || 1) * (a.share_ratio != null ? a.share_ratio : 1.0) : 0);
+          vb = b.final_amount != null ? b.final_amount : (b.amount != null ? b.amount / (b.divide_by || 1) * (b.share_ratio != null ? b.share_ratio : 1.0) : 0);
+          break;
         default: return 0;
       }
       if (va < vb) return sortDir === 'asc' ? -1 : 1;
