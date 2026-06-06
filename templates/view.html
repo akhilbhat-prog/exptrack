@@ -1279,7 +1279,9 @@ async function saveRow(rowId) {
       refreshSummaryCards();
       return;
     }
-    if (data.amount != null) item.amount = data.amount;
+    if (data.amount         != null) item.amount         = data.amount;
+    if (data.monthly_amount != null) item.monthly_amount = data.monthly_amount;
+    if (data.final_amount   != null) item.final_amount   = data.final_amount;
     const moEl  = row.querySelector(`[data-computed="monthly_amount"][data-row="${rowId}"]`);
     const finEl = row.querySelector(`[data-computed="final_amount"][data-row="${rowId}"]`);
     if (moEl  && data.monthly_amount != null) moEl.textContent  = data.monthly_amount.toFixed(2);
