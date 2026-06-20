@@ -90,7 +90,7 @@
     "confidence": 0.9
   },
   "blinkit": {
-    "category": "Food",
+    "category": "Misc",
     "subcategory": "Groceries",
     "type": "expense",
     "confidence": 0.9
