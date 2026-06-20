@@ -27,8 +27,9 @@ Thumbs.db
 *.xlsx
 *.xls
 categorizer/data/
-ui_samples/
-ErrorShots/
+
+# Local scratch / design artefacts
+_scratch/
 
 # One-shot utility scripts
 loader/reset_db.py
