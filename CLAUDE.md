@@ -131,7 +131,7 @@ exptrack/
 ```
 
 ### Database
-- Tables: `snake_case` — `transactions`, `processed_emails`, `transaction_exclusions`, `data_feed_history`, `transaction_batches`, `transaction_batch_items`, `recurring_transactions`, `shared_transactions`, `app_settings`
+- Tables: `snake_case` — `transactions`, `processed_emails`, `transaction_exclusions`, `data_feed_history`, `transaction_batches`, `transaction_batch_items`, `recurring_transactions`, `shared_transactions`, `app_settings`, `users`
 - Columns: `snake_case` — `gmail_message_id`, `upi_ref`, `account_last4`, `raw_entry`
 - Status enums (stored as VARCHAR): `'success' | 'skipped' | 'failed'` (processed_emails), `'pending' | 'reviewed' | 'complete'` (transaction_batches)
 - Prediction source: `'memory' | 'rule' | 'ml' | 'none'`
@@ -183,12 +183,13 @@ exptrack/
 | `ADMIN_TOKEN` | No | If set, admin-only routes (`/review`, `/view`, `/recurring`, `/api/*` except `/api/shared/*`) require this token via `?token=` or `Authorization: Bearer` |
 | `INVITE_CODE` | No | Required to register a new user at `/register`; must be set to enable user registration |
 | `SECRET_KEY` | Prod | Flask session signing key; must be set in production (stored in GCP Secret Manager as `flask-secret-key`). Falls back to `"dev-secret-change-me"` locally with a warning. |
+| `GCS_MODEL_BUCKET` | Prod | GCS bucket for ML model artifacts (set to `exptrack-mlruns` in Cloud Run via `deploy.yml`). Required for model retraining triggered by Complete Batch. |
 
 ### Categorizer
 | Variable | Required | Description |
 |---|---|---|
 | `DATABASE_URL` | Yes (or individual vars) | Full Neon connection string |
-| `GCS_MODEL_BUCKET` | Yes | GCS bucket name for model storage (e.g. `hdfc-statement-loader-mlruns`) |
+| `GCS_MODEL_BUCKET` | Yes | GCS bucket name for model storage (`exptrack-mlruns` in production) |
 | `DB_HOST` | Alt | Used if `DATABASE_URL` not set |
 | `DB_PORT` | Alt | Default: `5432` |
 | `DB_NAME` | Alt | Database name |
@@ -332,6 +333,15 @@ value      TEXT NOT NULL
 updated_at TIMESTAMPTZ DEFAULT NOW()
 ```
 Default rows: `default_share_ratio = '0.7'`, `default_annual_divisor = '12'`
+
+### `users` — registered user accounts
+```
+id           SERIAL PRIMARY KEY
+username     TEXT UNIQUE NOT NULL
+password     TEXT NOT NULL              -- bcrypt hash
+role         VARCHAR(10) NOT NULL DEFAULT 'user'  -- 'user' or 'admin'
+created_at   TIMESTAMPTZ DEFAULT NOW()
+```
 
 **Idempotency:** `processed_emails` tracks every attempted message ID (including failed ones). `transactions` has a UNIQUE constraint on `gmail_message_id`. UPI duplicates are detected by `upi_ref`; others by `(amount, date, format, merchant)`.
 
