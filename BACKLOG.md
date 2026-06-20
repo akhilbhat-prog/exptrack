@@ -128,9 +128,9 @@ Renamed to **ExpTrack**. Updated: UI page titles and logo branding (all 4 templa
 
 ## BL-19 — Rename Cloud Scheduler job to exptrack-daily
 
-**Status:** Open
+**Status:** Complete (2026-06-20)
 
-Job currently named `hdfc-statement-loader-daily` but points to the `exptrack` service. Rename requires delete + recreate: note current settings (frequency `0 21 * * *`, timezone Asia/Calcutta, URL `https://exptrack-1527779814.asia-south1.run.app/trigger?token=admin-tok`), delete the old job, create new job named `exptrack-daily` with the same settings.
+Deleted `hdfc-statement-loader-daily`, recreated as `exptrack-daily` with same settings (frequency `0 21 * * *`, timezone Asia/Calcutta, URL `https://exptrack-1527779814.asia-south1.run.app/trigger?token=admin-tok`, OIDC auth via `hdfc-loader-invoker` service account). Force run confirmed success.
 
 ---
 
