@@ -136,9 +136,9 @@ Deleted `hdfc-statement-loader-daily`, recreated as `exptrack-daily` with same s
 
 ## BL-20 — Rename GCS ML model bucket
 
-**Status:** Open
+**Status:** Complete (2026-06-20)
 
-GCS bucket `hdfc-statement-loader-mlruns` stores ML model artifacts. Bucket names are immutable — migration requires: create new bucket (e.g. `exptrack-mlruns`), copy all objects (`gsutil cp -r gs://hdfc-statement-loader-mlruns gs://exptrack-mlruns`), update `GCS_MODEL_BUCKET` env var on Cloud Run service, verify ML categorisation still works, then delete old bucket. Do this after BL-18 is complete and the new project is stable.
+Created `exptrack-mlruns` bucket in `exptrack-privet-drive`, copied `models/spend-classifier/champion.joblib` from `hdfc-statement-loader-mlruns`, granted default compute SA `roles/storage.objectAdmin`. Added `GCS_MODEL_BUCKET=exptrack-mlruns` to `deploy.yml` `--set-env-vars` so it is set on every future deploy. Old bucket `hdfc-statement-loader-mlruns` can be deleted once the old project is decommissioned (BL-18 Phase 11).
 
 ---
 
