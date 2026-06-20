@@ -78,17 +78,17 @@ Initial expansion: 16 new tests in test_db.py and test_history.py covering `get_
 
 ## BL-11 — Add new categorisation rules
 
-**Status:** Open
+**Status:** Complete (2026-06-20)
 
-Review recent transactions in `data_feed_history` and identify merchants/patterns not yet covered by `categorizer/config/rules.json`. Add rules to improve rule-hit rate and reduce ML/none fallbacks.
+Analysed 1599 distinct entry/category combinations from `data_feed_history`. Added 17 new rules to `categorizer/config/rules.json`: Spotify, Third Wave Coffee, Big Box Cleaners, SSSPCT Aryamba (medical clinic), Medplus, Jio Postpaid, Sandhya Srihari (family transfer), BMRCL (metro), Decathlon, Starbucks, BigBasket, Wow Momo, Uber Eats (specific rule before the generic `uber`), FanCode, Apple Services (billdesk variant), Google Cloud, ACKO (bike insurance). Total rules: 104 (was 83).
 
 ---
 
 ## BL-12 — Review entries conflicting with rules
 
-**Status:** Open
+**Status:** Complete (2026-06-20)
 
-Find `data_feed_history` entries whose category/subcategory/type differs from what the current rules in `rules.json` would predict. Decide whether the entry is correct (rule needs updating) or the rule is correct (entry needs correction).
+Fixed 12 rule conflicts: Szechuan Dragon / By2Coffee / J B Bekary / Akshaya Enterprises / Md Lalu / Sri Maruthi Dose Cam / Polar Bear / comdyna all changed Eating Out → Ordering In; Magic changed Ordering In → Eating Out; blinkit and Village Hyper Bazaar changed category Misc → Food; LIC OF India subcategory changed Insurance → LIC; `reliance` keyword narrowed to `reliance jio` to stop false matches on Reliance Brands; `HOTEL` rule removed (too broad — was matching hotel stays as Eating Out).
 
 ---
 
