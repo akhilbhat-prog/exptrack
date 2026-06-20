@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%232dd4bf'/><polyline points='3,23 10,14 17,18 28,7' stroke='%230a0a10' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round' fill='none'/><circle cx='28' cy='7' r='3' fill='%230a0a10'/></svg>">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>History · FinTrack</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -111,8 +112,9 @@
   .nav-link:hover { color: var(--text); border-color: var(--border2); }
   .nav-link--active { color: var(--teal) !important; border-color: var(--teal) !important; }
   .user-chip {
-    font-size: 12px; color: var(--muted); padding: 4px 9px;
-    background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    font-size: 11px; font-weight: 600; color: var(--teal);
+    padding: 3px 10px; background: var(--teal-dim); border-radius: 20px;
+    letter-spacing: 0.2px; white-space: nowrap;
   }
 
   .theme-toggle {
@@ -449,7 +451,7 @@
         <a href="/recurring{{ tq }}" class="nav-link">Recurring</a>
       </nav>
       <span class="user-chip">{{ session.get('username') or 'Admin' }}</span>
-      <a href="/logout" class="nav-link">Logout</a>
+      <a href="/logout" class="nav-link" onclick="return confirm('Sign out?')">Logout</a>
       <div class="header-date" id="headerDate"></div>
       <div style="position:relative">
         <button class="btn btn-ghost" onclick="toggleSettingsPanel()" title="Defaults" style="font-size:15px;padding:5px 9px">⚙</button>
