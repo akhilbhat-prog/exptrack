@@ -83,11 +83,16 @@
   .header-right { display: flex; align-items: center; gap: 12px; }
 
   .nav-link {
-    font-size: 13px; color: var(--muted); text-decoration: none; padding: 5px 10px;
+    font-size: 12px; color: var(--muted); text-decoration: none; padding: 4px 9px;
     border: 1px solid var(--border); border-radius: var(--radius-sm);
     transition: color var(--transition), border-color var(--transition);
   }
   .nav-link:hover { color: var(--text); border-color: var(--border2); }
+  .nav-link--active { color: var(--teal) !important; border-color: var(--teal) !important; }
+  .user-chip {
+    font-size: 12px; color: var(--muted); padding: 4px 9px;
+    background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  }
 
   .theme-toggle {
     display: flex; align-items: center; gap: 8px;
@@ -269,8 +274,15 @@
       </div>
     </div>
     <div class="header-right">
-      <a href="/view" class="nav-link">History</a>
-      <a href="/review" class="nav-link">Review</a>
+      {% set tq = '' if session.get('role') else ('?token=' + review_token if review_token else '') %}
+      <nav style="display:flex;gap:6px;align-items:center">
+        <a href="/review{{ tq }}" class="nav-link">Review</a>
+        <a href="/view{{ tq }}" class="nav-link">History</a>
+        <a href="/shared{{ tq }}" class="nav-link">Shared</a>
+        <a href="/recurring{{ tq }}" class="nav-link nav-link--active">Recurring</a>
+      </nav>
+      <span class="user-chip">{{ session.get('username') or 'Admin' }}</span>
+      <a href="/logout" class="nav-link">Logout</a>
       <button class="btn btn-primary" onclick="generateNow()">&#9654; Generate Now</button>
       <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
         <span class="toggle-icon">☀️</span>

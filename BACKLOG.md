@@ -96,7 +96,7 @@ Find `data_feed_history` entries whose category/subcategory/type differs from wh
 
 **Status:** Complete (2026-06-20)
 
-Replaced `REVIEW_TOKEN` with a two-role system. Admin (Akhil) registers at `/register` with `INVITE_CODE` and role promoted to `admin` in DB; logs in at `/login` and gets full session access to all pages without needing `?token=`. User (Aditi) logs in and gets access to `/shared` only. The `/` route acts as a smart redirect. Pipeline moved from `GET /` to `GET /trigger`. `require_admin` accepts both `ADMIN_TOKEN` Bearer token and `role=admin` session. GCP secrets created: `flask-secret-key`, `invite-code`, `admin-token`. Cloud Scheduler updated to `/trigger?token=...`.
+Replaced `REVIEW_TOKEN` with a two-role system. Admin (Akhil) registers at `/register` with `INVITE_CODE` and role promoted to `admin` in DB; logs in at `/login` and gets full session access to all pages without needing `?token=`. User (Aditi) logs in and gets access to `/shared` only. The `/` route acts as a smart redirect. Pipeline moved from `GET /` to `GET /trigger`. `require_admin` accepts both `ADMIN_TOKEN` Bearer token and `role=admin` session. GCP secrets created: `flask-secret-key`, `invite-code`, `admin-token`. Cloud Scheduler updated to `/trigger?token=...`. Smoke tested: admin login → `/view`, user login → `/shared`, cross-access blocked.
 
 ---
 

@@ -112,6 +112,10 @@ tr.dirty .btn-update { display: inline-block; }
 .btn:hover { opacity: 0.85; }
 .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
 .theme-btn { background: none; border: 1px solid var(--border); color: var(--muted); border-radius: var(--radius-sm); padding: 5px 10px; cursor: pointer; font-size: 12px; }
+.nav-link { font-size: 12px; color: var(--muted); text-decoration: none; padding: 4px 9px; border: 1px solid var(--border); border-radius: var(--radius-sm); transition: color 0.18s ease, border-color 0.18s ease; }
+.nav-link:hover { color: var(--text); border-color: var(--border2); }
+.nav-link--active { color: var(--teal) !important; border-color: var(--teal) !important; }
+.user-chip { font-size: 12px; color: var(--muted); padding: 4px 9px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); }
 
 /* Toast */
 .toast { position: fixed; bottom: 24px; right: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 16px; font-size: 12px; z-index: 9000; box-shadow: 0 4px 16px rgba(0,0,0,0.3); display: none; }
@@ -141,7 +145,17 @@ tr.dirty .btn-update { display: inline-block; }
 <div class="page-header">
   <h1>Shared Expenses</h1>
   <div class="header-actions">
-    <a href="/view" class="btn btn-secondary" style="text-decoration:none">↩ View</a>
+    {% set tq = '' if session.get('role') else ('?token=' + review_token if review_token else '') %}
+    {% if session.get('role') == 'admin' %}
+      <nav style="display:flex;gap:6px;align-items:center">
+        <a href="/review{{ tq }}" class="nav-link">Review</a>
+        <a href="/view{{ tq }}" class="nav-link">History</a>
+        <a href="/shared{{ tq }}" class="nav-link nav-link--active">Shared</a>
+        <a href="/recurring{{ tq }}" class="nav-link">Recurring</a>
+      </nav>
+    {% endif %}
+    <span class="user-chip">{{ session.get('username') or 'Guest' }}</span>
+    <a href="/logout" class="nav-link" style="text-decoration:none">Logout</a>
     <button class="theme-btn" onclick="toggleTheme()">☀ / ☾</button>
   </div>
 </div>
