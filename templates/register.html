@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Create account</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .card {
+      background: #1a1d27;
+      border: 1px solid #2d3148;
+      border-radius: 12px;
+      padding: 2.5rem 2rem;
+      width: 100%;
+      max-width: 380px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      font-weight: 600;
+      color: #f8fafc;
+      margin-bottom: 0.4rem;
+    }
+
+    .subtitle {
+      font-size: 0.85rem;
+      color: #64748b;
+      margin-bottom: 2rem;
+    }
+
+    label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: #94a3b8;
+      margin-bottom: 0.35rem;
+      margin-top: 1.1rem;
+    }
+
+    input[type="text"],
+    input[type="password"] {
+      width: 100%;
+      background: #0f1117;
+      border: 1px solid #2d3148;
+      border-radius: 8px;
+      color: #e2e8f0;
+      font-size: 0.95rem;
+      padding: 0.6rem 0.8rem;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    input:focus {
+      border-color: #4f6ef7;
+    }
+
+    .error {
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: 8px;
+      color: #f87171;
+      font-size: 0.85rem;
+      padding: 0.6rem 0.8rem;
+      margin-bottom: 1rem;
+    }
+
+    .hint {
+      font-size: 0.78rem;
+      color: #475569;
+      margin-top: 0.3rem;
+    }
+
+    button[type="submit"] {
+      width: 100%;
+      margin-top: 1.6rem;
+      background: #4f6ef7;
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 0.95rem;
+      font-weight: 600;
+      padding: 0.7rem;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    button[type="submit"]:hover { background: #3b5de7; }
+
+    .footer {
+      margin-top: 1.4rem;
+      text-align: center;
+      font-size: 0.82rem;
+      color: #64748b;
+    }
+
+    .footer a {
+      color: #4f6ef7;
+      text-decoration: none;
+    }
+
+    .footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Create account</h1>
+    <p class="subtitle">You'll need an invite code to sign up.</p>
+
+    {% if error %}
+    <div class="error">{{ error }}</div>
+    {% endif %}
+
+    <form method="POST" action="/register">
+      <label for="username">Username</label>
+      <input type="text" id="username" name="username" autocomplete="username" required autofocus>
+
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password" autocomplete="new-password" required>
+      <p class="hint">Minimum 8 characters.</p>
+
+      <label for="invite_code">Invite code</label>
+      <input type="text" id="invite_code" name="invite_code" autocomplete="off" required>
+
+      <button type="submit">Create account</button>
+    </form>
+
+    <p class="footer">
+      Already have an account? <a href="/login">Sign in</a>
+    </p>
+  </div>
+</body>
+</html>

@@ -12,7 +12,7 @@ Routes:
   POST   /api/batches/<id>/complete           — complete batch, trigger retraining
   GET    /api/categories                      — {categories, types} merged from rules.json + data_feed_history
 
-Auth: if REVIEW_TOKEN env var is set, all routes require a matching
+Auth: if ADMIN_TOKEN env var is set, all routes require a matching
       ?token= query param or Authorization: Bearer <token> header.
 """
 
@@ -22,13 +22,11 @@ import os
 import subprocess
 import sys
 from datetime import date as _date
-from functools import wraps
-
-_SHARED_SCOPE_START = _date(2026, 4, 1)
 
 from flask import Blueprint, abort, jsonify, render_template, request
 
 import db
+from token_auth import require_admin as _require_token
 
 logger = logging.getLogger(__name__)
 
@@ -36,25 +34,7 @@ review_bp = Blueprint("review", __name__)
 
 _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _RULES_PATH = os.path.join(_project_root, "categorizer", "config", "rules.json")
-
-
-# ---------------------------------------------------------------------------
-# Auth
-# ---------------------------------------------------------------------------
-
-def _require_token(f):
-    @wraps(f)
-    def wrapper(*args, **kwargs):
-        token = os.environ.get("REVIEW_TOKEN", "")
-        if not token:
-            return f(*args, **kwargs)
-        provided = request.args.get("token") or (
-            request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
-        )
-        if provided != token:
-            abort(401)
-        return f(*args, **kwargs)
-    return wrapper
+_SHARED_SCOPE_START = db._SHARED_SCOPE_START
 
 
 # ---------------------------------------------------------------------------
@@ -64,7 +44,7 @@ def _require_token(f):
 @review_bp.route("/review")
 @_require_token
 def review_page():
-    token = os.environ.get("REVIEW_TOKEN", "")
+    token = os.environ.get("ADMIN_TOKEN", "")
     return render_template("review.html", review_token=token)
 
 

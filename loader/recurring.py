@@ -9,40 +9,25 @@ Routes:
   DELETE /api/recurring/<id>        — delete a definition
   POST  /api/recurring/generate     — manually trigger generation for current month
 
-Auth: if REVIEW_TOKEN env var is set, all routes require a matching
+Auth: if ADMIN_TOKEN env var is set, all routes require a matching
       ?token= query param or Authorization: Bearer <token> header.
 """
 
 import os
 from datetime import date as _date
-from functools import wraps
 
 from flask import Blueprint, abort, jsonify, render_template, request
 
 import db
+from token_auth import require_admin as _require_token
 
 recurring_bp = Blueprint("recurring", __name__)
-
-
-def _require_token(f):
-    @wraps(f)
-    def wrapper(*args, **kwargs):
-        token = os.environ.get("REVIEW_TOKEN", "")
-        if not token:
-            return f(*args, **kwargs)
-        provided = request.args.get("token") or (
-            request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
-        )
-        if provided != token:
-            abort(401)
-        return f(*args, **kwargs)
-    return wrapper
 
 
 @recurring_bp.route("/recurring")
 @_require_token
 def recurring_page():
-    token = os.environ.get("REVIEW_TOKEN", "")
+    token = os.environ.get("ADMIN_TOKEN", "")
     return render_template("recurring.html", review_token=token)
 
 

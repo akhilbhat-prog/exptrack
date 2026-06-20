@@ -1,4 +1,4 @@
-"""
+﻿"""
 Tests for the review Flask blueprint.
 
 Auth and /api/categories tests use the real rules.json (no DB needed).
@@ -51,32 +51,32 @@ def _make_mock_conn(fetchone=None, fetchall=None, rowcount=1):
 
 class TestRequireToken:
     def test_no_token_env_allows_access(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         resp = client.get("/review")
         assert resp.status_code == 200
 
     def test_token_env_set_blocks_without_token(self, client, monkeypatch):
-        monkeypatch.setenv("REVIEW_TOKEN", "secret")
+        monkeypatch.setenv("ADMIN_TOKEN", "secret")
         resp = client.get("/review")
         assert resp.status_code == 401
 
     def test_token_env_set_blocks_wrong_token(self, client, monkeypatch):
-        monkeypatch.setenv("REVIEW_TOKEN", "secret")
+        monkeypatch.setenv("ADMIN_TOKEN", "secret")
         resp = client.get("/review?token=wrong")
         assert resp.status_code == 401
 
     def test_correct_query_param_grants_access(self, client, monkeypatch):
-        monkeypatch.setenv("REVIEW_TOKEN", "secret")
+        monkeypatch.setenv("ADMIN_TOKEN", "secret")
         resp = client.get("/review?token=secret")
         assert resp.status_code == 200
 
     def test_correct_bearer_header_grants_access(self, client, monkeypatch):
-        monkeypatch.setenv("REVIEW_TOKEN", "secret")
+        monkeypatch.setenv("ADMIN_TOKEN", "secret")
         resp = client.get("/review", headers={"Authorization": "Bearer secret"})
         assert resp.status_code == 200
 
     def test_raw_token_in_auth_header_also_grants_access(self, client, monkeypatch):
-        monkeypatch.setenv("REVIEW_TOKEN", "secret")
+        monkeypatch.setenv("ADMIN_TOKEN", "secret")
         resp = client.get("/review", headers={"Authorization": "secret"})
         assert resp.status_code == 200
 
@@ -87,20 +87,20 @@ class TestRequireToken:
 
 class TestGetCategories:
     def test_returns_200(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         monkeypatch.delenv("DATABASE_URL", raising=False)
         resp = client.get("/api/categories")
         assert resp.status_code == 200
 
     def test_response_has_categories_and_types_keys(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         monkeypatch.delenv("DATABASE_URL", raising=False)
         data = client.get("/api/categories").get_json()
         assert "categories" in data
         assert "types" in data
 
     def test_categories_is_dict_of_lists(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         monkeypatch.delenv("DATABASE_URL", raising=False)
         data = client.get("/api/categories").get_json()
         assert isinstance(data["categories"], dict)
@@ -109,26 +109,26 @@ class TestGetCategories:
             assert isinstance(subs, list)
 
     def test_categories_nonempty_from_rules_json(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         monkeypatch.delenv("DATABASE_URL", raising=False)
         data = client.get("/api/categories").get_json()
         assert len(data["categories"]) > 0
 
     def test_types_fallback_when_no_db(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         monkeypatch.delenv("DATABASE_URL", raising=False)
         data = client.get("/api/categories").get_json()
         assert isinstance(data["types"], list)
         assert len(data["types"]) > 0
 
     def test_categories_require_token_when_set(self, client, monkeypatch):
-        monkeypatch.setenv("REVIEW_TOKEN", "tok")
+        monkeypatch.setenv("ADMIN_TOKEN", "tok")
         monkeypatch.delenv("DATABASE_URL", raising=False)
         resp = client.get("/api/categories")
         assert resp.status_code == 401
 
     def test_categories_accessible_with_token(self, client, monkeypatch):
-        monkeypatch.setenv("REVIEW_TOKEN", "tok")
+        monkeypatch.setenv("ADMIN_TOKEN", "tok")
         monkeypatch.delenv("DATABASE_URL", raising=False)
         resp = client.get("/api/categories?token=tok")
         assert resp.status_code == 200
@@ -143,7 +143,7 @@ _CREATED_AT = datetime(2026, 5, 20, 10, 0, 0, tzinfo=timezone.utc)
 
 class TestListBatches:
     def test_returns_200(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, mock_cursor = _make_mock_conn(
             fetchall=[(1, 10, "pending", _CREATED_AT)]
         )
@@ -152,7 +152,7 @@ class TestListBatches:
         assert resp.status_code == 200
 
     def test_returns_list_shape(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn(
             fetchall=[(1, 10, "pending", _CREATED_AT), (2, 5, "reviewed", _CREATED_AT)]
         )
@@ -164,7 +164,7 @@ class TestListBatches:
         assert data[0]["status"] == "pending"
 
     def test_excludes_complete_by_default(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, mock_cursor = _make_mock_conn(fetchall=[])
         with patch("review.db.get_connection", return_value=mock_conn):
             client.get("/api/batches")
@@ -172,7 +172,7 @@ class TestListBatches:
         assert "status != 'complete'" in sql or "status !=" in sql
 
     def test_includes_complete_with_flag(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, mock_cursor = _make_mock_conn(fetchall=[])
         with patch("review.db.get_connection", return_value=mock_conn):
             client.get("/api/batches?include_complete=1")
@@ -193,7 +193,7 @@ class TestGetBatch:
         return mock_conn
 
     def test_returns_200_for_existing_batch(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         batch = (1, 2, "pending", _CREATED_AT)
         items = [
             (101, "Food", "Eating Out", "Expense", 0.9, "ml",
@@ -206,7 +206,7 @@ class TestGetBatch:
         assert resp.status_code == 200
 
     def test_response_has_batch_and_items(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         batch = (1, 1, "pending", _CREATED_AT)
         items = [
             (101, "Food", "Eating Out", "Expense", 0.9, "ml",
@@ -223,14 +223,14 @@ class TestGetBatch:
         assert data["items"][0]["transaction_id"] == 101
 
     def test_returns_404_for_missing_batch(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn(fetchone=None)
         with patch("review.db.get_connection", return_value=mock_conn):
             resp = client.get("/api/batches/999")
         assert resp.status_code == 404
 
     def test_item_financial_fields_present(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         batch = (1, 1, "pending", _CREATED_AT)
         items = [
             (101, "Food", "Eating Out", "Expense", 0.9, "ml",
@@ -253,7 +253,7 @@ class TestGetBatch:
 
 class TestUpdateItem:
     def test_returns_200_on_success(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn(rowcount=1)
         with patch("review.db.get_connection", return_value=mock_conn):
             resp = client.patch(
@@ -265,7 +265,7 @@ class TestUpdateItem:
         assert resp.get_json()["ok"] is True
 
     def test_returns_404_when_item_not_found(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn(rowcount=0)
         with patch("review.db.get_connection", return_value=mock_conn):
             resp = client.patch(
@@ -282,7 +282,7 @@ class TestUpdateItem:
 
 class TestDeleteItem:
     def test_returns_200_on_success(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn(rowcount=1)
         with patch("review.db.get_connection", return_value=mock_conn):
             resp = client.delete("/api/batches/1/items/101")
@@ -290,14 +290,14 @@ class TestDeleteItem:
         assert resp.get_json()["ok"] is True
 
     def test_returns_404_when_item_not_found(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn(rowcount=0)
         with patch("review.db.get_connection", return_value=mock_conn):
             resp = client.delete("/api/batches/1/items/999")
         assert resp.status_code == 404
 
     def test_inserts_into_exclusions_on_delete(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, mock_cursor = _make_mock_conn(rowcount=1)
         with patch("review.db.get_connection", return_value=mock_conn):
             client.delete("/api/batches/1/items/101")
@@ -311,7 +311,7 @@ class TestDeleteItem:
 
 class TestDeleteBatch:
     def test_deletes_pending_batch(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn(fetchone=("pending",), rowcount=1)
         with patch("review.db.get_connection", return_value=mock_conn):
             resp = client.delete("/api/batches/1")
@@ -319,21 +319,21 @@ class TestDeleteBatch:
         assert resp.get_json()["ok"] is True
 
     def test_deletes_reviewed_batch(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn(fetchone=("reviewed",), rowcount=1)
         with patch("review.db.get_connection", return_value=mock_conn):
             resp = client.delete("/api/batches/1")
         assert resp.status_code == 200
 
     def test_rejects_complete_batch(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn(fetchone=("complete",))
         with patch("review.db.get_connection", return_value=mock_conn):
             resp = client.delete("/api/batches/1")
         assert resp.status_code == 400
 
     def test_returns_404_for_missing_batch(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn(fetchone=None)
         with patch("review.db.get_connection", return_value=mock_conn):
             resp = client.delete("/api/batches/999")
@@ -346,7 +346,7 @@ class TestDeleteBatch:
 
 class TestMarkReviewed:
     def test_transitions_pending_to_reviewed(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn(fetchone=("pending",))
         with patch("review.db.get_connection", return_value=mock_conn):
             resp = client.post("/api/batches/1/mark-reviewed")
@@ -354,21 +354,21 @@ class TestMarkReviewed:
         assert resp.get_json()["status"] == "reviewed"
 
     def test_idempotent_if_already_reviewed(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn(fetchone=("reviewed",))
         with patch("review.db.get_connection", return_value=mock_conn):
             resp = client.post("/api/batches/1/mark-reviewed")
         assert resp.status_code == 200
 
     def test_rejects_complete_batch(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn(fetchone=("complete",))
         with patch("review.db.get_connection", return_value=mock_conn):
             resp = client.post("/api/batches/1/mark-reviewed")
         assert resp.status_code == 400
 
     def test_returns_404_for_missing_batch(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn(fetchone=None)
         with patch("review.db.get_connection", return_value=mock_conn):
             resp = client.post("/api/batches/999/mark-reviewed")
@@ -400,7 +400,7 @@ class TestCompleteBatch:
         return mock_conn
 
     def test_returns_200_for_reviewed_batch(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn = self._make_complete_conn("reviewed")
         with patch("review.db.get_connection", return_value=mock_conn), \
              patch("review.db.create_data_feed_table"), \
@@ -411,7 +411,7 @@ class TestCompleteBatch:
         assert "inserted" in resp.get_json()
 
     def test_rejects_non_reviewed_batch(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn = self._make_complete_conn("pending")
         with patch("review.db.get_connection", return_value=mock_conn), \
              patch("review.db.create_data_feed_table"):
@@ -419,7 +419,7 @@ class TestCompleteBatch:
         assert resp.status_code == 400
 
     def test_returns_404_for_missing_batch(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_cursor = MagicMock()
         mock_cursor.fetchone.return_value = None
         mock_cursor.__enter__ = MagicMock(return_value=mock_cursor)

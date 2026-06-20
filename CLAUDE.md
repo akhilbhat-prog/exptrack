@@ -6,7 +6,7 @@ Onboarding guide for AI assistants. Read this at the start of every session.
 
 ## Project Overview
 
-A production financial pipeline that polls HDFC Bank transaction alert emails daily via the Gmail API, parses 4 email formats (UPI debit old/new, UPI credit, netbanking, debit card), stores parsed transactions in a Neon PostgreSQL database, classifies them into spend categories using a rules → memory → hierarchical LightGBM fallback pipeline, and sends a nightly summary email. A web-based batch review UI (`/review`) is served from the same Cloud Run service, replacing the previous manual SQL workflow for reviewing and approving categorized transactions. The system runs on Google Cloud Run, is triggered daily at 9 PM IST by Cloud Scheduler, and deploys automatically via GitHub Actions on every push to `main`.
+A production financial pipeline that polls HDFC Bank transaction alert emails daily via the Gmail API, parses 4 email formats (UPI debit old/new, UPI credit, netbanking, debit card), stores parsed transactions in a Neon PostgreSQL database, classifies them into spend categories using a rules → memory → hierarchical LightGBM fallback pipeline, and sends a nightly summary email. Four web UIs are served from the same Cloud Run service: `/review` (batch review of ML predictions), `/view` (full CRUD history editor), `/shared` (shared expense ledger with balance tracking), and `/recurring` (auto-generated monthly expense definitions). The system runs on Google Cloud Run, is triggered daily at 9 PM IST by Cloud Scheduler, and deploys automatically via GitHub Actions on every push to `main`.
 
 ---
 
@@ -14,13 +14,17 @@ A production financial pipeline that polls HDFC Bank transaction alert emails da
 
 ```
 hdfc-statement-loader/
-├── loader/                         # Gmail polling + email parsing pipeline
-│   ├── app.py                      # ENTRY POINT: Flask app, Cloud Run trigger, review blueprint
+├── loader/                         # Gmail polling + email parsing pipeline + web UIs
+│   ├── app.py                      # ENTRY POINT: Flask app, Cloud Run trigger, blueprint registration
 │   ├── gmail_poller.py             # Gmail polling logic + email parsing (CLI runner)
-│   ├── review.py                   # Flask Blueprint: batch review API (7 routes)
-│   ├── history.py                  # Flask Blueprint: history viewer/editor API (5 routes)
+│   ├── review.py                   # Flask Blueprint: batch review API (9 routes)
+│   ├── history.py                  # Flask Blueprint: history viewer/editor API (9 routes)
+│   ├── shared.py                   # Flask Blueprint: shared expense ledger API (8 routes)
+│   ├── recurring.py                # Flask Blueprint: recurring transactions API (6 routes)
+│   ├── token_auth.py               # Auth decorators: require_admin, require_any_auth, require_user_page
+│   ├── auth_routes.py              # Flask Blueprint: /login, /logout, /register (session-based user auth)
 │   ├── parser.py                   # Email format detection & field extraction
-│   ├── db.py                       # PostgreSQL schema creation & queries
+│   ├── db.py                       # PostgreSQL schema creation & queries (9 tables)
 │   ├── auth.py                     # One-time OAuth2 setup (run manually once)
 │   ├── generate_inserts.py         # Excel → SQL migration utility
 │   ├── load_excel.py               # Data feed loading utility
@@ -29,7 +33,9 @@ hdfc-statement-loader/
 │
 ├── templates/
 │   ├── review.html                 # Batch review UI (vanilla HTML/CSS/JS)
-│   └── view.html                   # History browser/editor UI (vanilla HTML/CSS/JS)
+│   ├── view.html                   # History browser/editor UI (vanilla HTML/CSS/JS)
+│   ├── shared.html                 # Shared expenses ledger UI (vanilla HTML/CSS/JS)
+│   └── recurring.html              # Recurring transactions manager UI (vanilla HTML/CSS/JS)
 │
 ├── categorizer/                    # Transaction classification pipeline
 │   ├── main.py                     # Full training pipeline (run to retrain model)
@@ -125,7 +131,7 @@ hdfc-statement-loader/
 ```
 
 ### Database
-- Tables: `snake_case` — `transactions`, `processed_emails`, `data_feed_history`, `transaction_batches`, `transaction_batch_items`
+- Tables: `snake_case` — `transactions`, `processed_emails`, `transaction_exclusions`, `data_feed_history`, `transaction_batches`, `transaction_batch_items`, `recurring_transactions`, `shared_transactions`, `app_settings`
 - Columns: `snake_case` — `gmail_message_id`, `upi_ref`, `account_last4`, `raw_entry`
 - Status enums (stored as VARCHAR): `'success' | 'skipped' | 'failed'` (processed_emails), `'pending' | 'reviewed' | 'complete'` (transaction_batches)
 - Prediction source: `'memory' | 'rule' | 'ml' | 'none'`
@@ -174,7 +180,9 @@ hdfc-statement-loader/
 | `AFTER_DATE` | No | Gmail `after:` date filter in `YYYY/MM/DD` format; overrides `POLL_DAYS` for backfill runs |
 | `MAX_MESSAGES` | No | Cap on messages processed (useful for testing) |
 | `PORT` | No | Flask server port (default: `8080`) |
-| `REVIEW_TOKEN` | No | If set, all `/review` and `/api/*` routes require `?token=<value>` or `Authorization: Bearer <value>` |
+| `ADMIN_TOKEN` | No | If set, admin-only routes (`/review`, `/view`, `/recurring`, `/api/*` except `/api/shared/*`) require this token via `?token=` or `Authorization: Bearer` |
+| `INVITE_CODE` | No | Required to register a new user at `/register`; must be set to enable user registration |
+| `SECRET_KEY` | Prod | Flask session signing key; must be set in production (stored in GCP Secret Manager as `flask-secret-key`). Falls back to `"dev-secret-change-me"` locally with a warning. |
 
 ### Categorizer
 | Variable | Required | Description |
@@ -208,6 +216,13 @@ gmail_message_id TEXT UNIQUE         -- idempotency key
 created_at       TIMESTAMPTZ DEFAULT NOW()
 ```
 
+### `transaction_exclusions` — transactions removed from review batches
+```
+transaction_id   INTEGER PRIMARY KEY REFERENCES transactions(id)
+excluded_at      TIMESTAMPTZ DEFAULT NOW()
+reason           VARCHAR(50) DEFAULT 'user_deleted'
+```
+
 ### `processed_emails` — audit log for all processed message IDs
 ```
 gmail_message_id TEXT PRIMARY KEY
@@ -218,24 +233,25 @@ notes            TEXT
 
 ### `data_feed_history` — labeled training data & final categorized transactions
 ```
-id             SERIAL PRIMARY KEY
-entry_date     DATE NOT NULL
-entry_text     TEXT NOT NULL
-sub_category   TEXT
-category       TEXT
-spend_type     VARCHAR(20)         -- 'Expense', 'Investment', 'Saving' (capitalised)
-amount         NUMERIC(12, 2) NOT NULL
-merchant       TEXT
-vpa            TEXT
-upi_ref        TEXT
-created_at     TIMESTAMPTZ DEFAULT NOW()
-time_period    VARCHAR(10)         -- e.g. 'May-2026', derived from entry_date
-cadence        VARCHAR(20) DEFAULT 'O'
-divide_by      INTEGER DEFAULT 1
-monthly_amount NUMERIC(12,2)       -- computed: amount / divide_by
-shared_expense CHAR(1) DEFAULT 'N' -- 'Y' or 'N'
-share_ratio    NUMERIC(6,4) DEFAULT 1.0
-final_amount   NUMERIC(12,2)       -- computed: monthly_amount * share_ratio
+id                    SERIAL PRIMARY KEY
+entry_date            DATE NOT NULL
+entry_text            TEXT NOT NULL
+sub_category          TEXT
+category              TEXT
+spend_type            VARCHAR(20)         -- 'Expense', 'Investment', 'Saving' (capitalised)
+amount                NUMERIC(12, 2) NOT NULL
+merchant              TEXT
+vpa                   TEXT
+upi_ref               TEXT
+created_at            TIMESTAMPTZ DEFAULT NOW()
+time_period           VARCHAR(10)         -- e.g. 'May-2026', derived from entry_date
+cadence               VARCHAR(20) DEFAULT 'O'
+divide_by             INTEGER DEFAULT 1
+monthly_amount        NUMERIC(12,2)       -- computed: amount / divide_by
+shared_expense        CHAR(1) DEFAULT 'N' -- 'Y' or 'N'
+share_ratio           NUMERIC(6,4) DEFAULT 1.0
+final_amount          NUMERIC(12,2)       -- computed: monthly_amount * share_ratio
+exclude_from_training BOOLEAN DEFAULT FALSE  -- TRUE for auto-generated recurring rows
 ```
 
 ### `transaction_batches` — batch lifecycle management
@@ -259,13 +275,69 @@ pred_source      VARCHAR             -- 'memory', 'rule', 'ml', 'none'
 category         VARCHAR             -- editable by human before commit
 subcategory      VARCHAR             -- editable by human before commit
 type             VARCHAR             -- editable by human before commit
+amount           NUMERIC(12,2)       -- can override the transaction amount
 cadence          VARCHAR(20) DEFAULT 'O'
 divide_by        INTEGER DEFAULT 1
 shared_expense   CHAR(1) DEFAULT 'N' -- 'Y' or 'N'
 share_ratio      NUMERIC(6,4) DEFAULT 1.0
 ```
 
+### `recurring_transactions` — auto-generated monthly/annual expense definitions
+```
+id              SERIAL PRIMARY KEY
+entry_text      TEXT NOT NULL
+merchant        TEXT
+amount          NUMERIC(12, 2) NOT NULL
+category        TEXT
+sub_category    TEXT
+spend_type      VARCHAR(20)
+cadence         VARCHAR(20) NOT NULL DEFAULT 'O'
+divide_by       INTEGER NOT NULL DEFAULT 1
+shared_expense  CHAR(1) NOT NULL DEFAULT 'N'
+share_ratio     NUMERIC(6,4) NOT NULL DEFAULT 1.0
+active          BOOLEAN NOT NULL DEFAULT TRUE
+last_generated  DATE                -- tracks when last auto-generated (idempotency)
+created_at      TIMESTAMPTZ DEFAULT NOW()
+```
+
+### `shared_transactions` — shared expense ledger (mirror of data_feed_history shared rows)
+```
+id               SERIAL PRIMARY KEY
+history_id       INT UNIQUE REFERENCES data_feed_history(id) ON DELETE CASCADE  -- NULL for manual/payment rows
+paid_by          TEXT NOT NULL DEFAULT 'Akhil'
+owed_by          TEXT NOT NULL DEFAULT 'Aditi'
+amount           NUMERIC(12,2) NOT NULL
+monthly_amount   NUMERIC(12,2)
+share_ratio      NUMERIC(6,4) NOT NULL
+akhil_share      NUMERIC(12,2) NOT NULL
+aditi_share      NUMERIC(12,2) NOT NULL
+balance          NUMERIC(12,2) NOT NULL   -- aditi_share when paid_by='Akhil', akhil_share when paid_by='Aditi'
+entry_date       DATE
+merchant         TEXT
+category         TEXT
+subcategory      TEXT
+entry_text       TEXT
+settled          BOOLEAN NOT NULL DEFAULT FALSE
+settled_at       TIMESTAMPTZ
+created_at       TIMESTAMPTZ DEFAULT NOW()
+is_manual        BOOLEAN NOT NULL DEFAULT FALSE   -- TRUE for manually added rows
+is_payment       BOOLEAN NOT NULL DEFAULT FALSE   -- TRUE for settlement payment rows
+is_ignored       BOOLEAN NOT NULL DEFAULT FALSE   -- excluded from balance calculations
+```
+
+### `app_settings` — configurable UI defaults
+```
+key        TEXT PRIMARY KEY
+value      TEXT NOT NULL
+updated_at TIMESTAMPTZ DEFAULT NOW()
+```
+Default rows: `default_share_ratio = '0.7'`, `default_annual_divisor = '12'`
+
 **Idempotency:** `processed_emails` tracks every attempted message ID (including failed ones). `transactions` has a UNIQUE constraint on `gmail_message_id`. UPI duplicates are detected by `upi_ref`; others by `(amount, date, format, merchant)`.
+
+**Shared expense scope:** Only `data_feed_history` rows with `entry_date >= 2026-04-01` and `shared_expense = 'Y'` are mirrored to `shared_transactions`. This constant (`_SHARED_SCOPE_START`) is defined once in `db.py` and imported by `review.py` and `history.py`.
+
+**Recurring generation idempotency:** `last_generated` is updated after each generation run. The generation query uses `DATE_TRUNC('month', last_generated)` so re-running on the same day is safe.
 
 ---
 
@@ -278,23 +350,30 @@ pytest tests/ -v
 
 `tests/conftest.py` adds both `loader/` and `categorizer/` to `sys.path`.
 
-**Current test files (222 tests, no DB or network required):**
+**Current test files (446 tests across 18 files, no DB or network required):**
 
 | File | Covers |
 |---|---|
 | `test_parser.py` | 40+ tests for all 4 email format parsers |
 | `test_gmail_poller.py` | `_strip_html`, `_get_received_at`, `_get_subject`, `run_parser_tests`, `run_categorization`, `send_summary_email` |
 | `test_generate_inserts.py` | SQL migration utility |
-| `test_review.py` | Token auth, `/api/categories` shape, all 7 review API routes (list/get/patch/delete/mark-reviewed/complete) |
-| `test_history.py` | Token auth, `/api/history/periods`, `/api/history` pagination, PATCH update, DELETE delete |
+| `test_review.py` | Token auth, `/api/categories` shape, all review API routes (list/get/patch/delete/mark-reviewed/complete/batch-delete) |
+| `test_history.py` | Token auth, `/api/history/periods`, `/api/history` pagination, POST create, PATCH update, DELETE, `/api/history/summary`, `/api/settings` GET/PATCH |
+| `test_shared.py` | Shared DB functions + all `/api/shared` routes (list, PATCH, DELETE, POST entries, POST payment) + session-based access tests |
+| `test_recurring.py` | Auth, all `/api/recurring` routes, `db.generate_recurring_entries` unit tests |
+| `test_auth.py` | `/login` GET/POST, `/logout`, `/register` GET/POST — all valid and invalid paths |
+| `test_db.py` | `find_duplicate_transaction`, `update_history_row`, `is_already_processed`, `insert_transaction`, `get_history_page`, `get_history_periods`, `delete_history_row`, `log_email`, `insert_data_feed_row`, `get_history_row`, `get_settings`, `update_setting`, `get_history_summary`, `create_user`, `get_user_by_username`, `username_exists` |
 | `test_app.py` | Flask trigger route, blueprint wiring, categorization status passthrough to summary email |
 | `test_batch_process.py` | Batch pipeline: chunking logic, model load failure, `process_dataframe` call count |
 | `test_cleaner.py` | `clean_entry`, `extract_vpa_handle` |
 | `test_merchant.py` | `extract_merchant` + stopword list |
 | `test_rules.py` | `apply_rules`, Uber amount override |
 | `test_memory.py` | `MerchantMemory` lookup/update |
+| `test_pipeline.py` | Processing pipeline orchestration |
+| `test_train.py` | Model training basics |
+| `test_categorizer_db.py` | Categorizer ingestion DB queries |
 
-**Deferred (require real PostgreSQL):** `db.py` functions, `categorizer/` ML pipeline and ingestion layer — do not add database mocks to the test suite.
+**Deferred (require real PostgreSQL):** end-to-end pipeline integration, `categorizer/` ML inference against a live DB — do not add database mocks to the test suite.
 
 ---
 
@@ -372,10 +451,11 @@ The old manual SQL approach has been replaced by a web UI. Current workflow:
 | `GET /review` | Serves the HTML page |
 | `GET /api/batches` | Lists batches; append `?include_complete=1` to include completed ones |
 | `GET /api/batches/<id>` | Batch info + all items joined with transactions |
-| `PATCH /api/batches/<id>/items/<txn_id>` | Save category/subcategory/type for one item |
-| `DELETE /api/batches/<id>/items/<txn_id>` | Remove one item from batch, decrements row_count |
+| `PATCH /api/batches/<id>/items/<txn_id>` | Save category/subcategory/type/cadence/divide_by/shared_expense/share_ratio/amount for one item |
+| `DELETE /api/batches/<id>/items/<txn_id>` | Remove one item from batch; adds to `transaction_exclusions`, decrements row_count |
+| `DELETE /api/batches/<id>` | Delete an entire pending/reviewed batch |
 | `POST /api/batches/<id>/mark-reviewed` | Transitions batch pending → reviewed |
-| `POST /api/batches/<id>/complete` | Inserts into data_feed_history, triggers retraining |
+| `POST /api/batches/<id>/complete` | Inserts into data_feed_history, mirrors shared rows, triggers retraining |
 | `GET /api/categories` | Returns `{categories, types}` merged from rules.json + data_feed_history |
 
 **UI behaviour notes:**
@@ -408,14 +488,22 @@ The old manual SQL approach has been replaced by a web UI. Current workflow:
 | `GET /view` | Serves the HTML page |
 | `GET /api/history/periods` | Distinct time_period values with row counts, newest first |
 | `GET /api/history` | Paginated rows for one period (`?period=<p>&page=<n>`), 25 per page |
+| `GET /api/history/summary` | Top-5 categories + period total (`?period=<p>&prev_period=<p>` optional) |
+| `POST /api/history` | Create a manual entry; cadence=A + divide_by>1 auto-generates future-month rows |
 | `PATCH /api/history/<id>` | Update editable fields for one row; returns recomputed amounts |
 | `DELETE /api/history/<id>` | Delete a row from data_feed_history |
+| `GET /api/settings` | Return `{default_share_ratio, default_annual_divisor}` |
+| `PATCH /api/settings` | Update allowed keys (`default_share_ratio`, `default_annual_divisor`) |
 
 **`db.py` functions used by history blueprint:**
 - `get_history_periods(conn)` — returns `[{period, count}, ...]`
 - `get_history_page(conn, period, page, page_size=25)` — returns `{items, total, page, pages}`
+- `get_history_summary(conn, period, prev_period=None)` — returns `{top_categories, period_total}`
+- `get_history_row(conn, row_id)` — returns `{id, entry_text, entry_date, time_period}` or None
 - `update_history_row(conn, row_id, fields)` — updates and recomputes amounts
 - `delete_history_row(conn, row_id)` — deletes row, returns bool
+- `get_settings(conn)` — returns `{default_share_ratio: float, default_annual_divisor: int}`
+- `update_setting(conn, key, value)` — upserts one setting
 
 **UI behaviour notes:**
 - Sidebar lists time periods; selecting one loads 25 rows per page with prev/next pagination
@@ -425,8 +513,72 @@ The old manual SQL approach has been replaced by a web UI. Current workflow:
 - A fixed bulk action bar slides up from the bottom when rows are selected; fill Category + Subcategory + Type, then **Apply to Selected** saves all at once; **Delete Selected** removes rows from DB and table
 - Column headers (Period, Date, Merchant, Category, Subcategory, Type, Amount) are sortable client-side
 - Combo dropdowns use a single global `<div id="globalDropdown">` at body level (`position: fixed`, `z-index: 9999`), anchored above the input via `transform: translateY(-100%)` — this escapes all ancestor overflow containers
+- Settings panel (gear icon) lets the user view/update `default_share_ratio` and `default_annual_divisor` via `/api/settings`
 
 **Backfill:** `loader/backfill_time_period.py` — one-shot script to populate `time_period` from `entry_date` for rows where it is NULL or empty. Run manually if needed.
+
+### Shared Expenses Workflow
+`/shared` is a read/edit UI over `shared_transactions` — a ledger that mirrors `data_feed_history` rows where `shared_expense = 'Y'` and `entry_date >= 2026-04-01`.
+
+**Implementation files:**
+- `loader/shared.py` — Flask Blueprint; all API logic is here
+- `templates/shared.html` — Single-page UI served at `GET /shared`
+
+**Mirroring:** Rows are synced automatically in three events:
+1. **Complete Batch** (`review.py`) — mirrors qualifying items from batch to `shared_transactions`
+2. **PATCH /api/history/<id>** (`history.py`) — upserts or deletes shared row when `shared_expense` changes
+3. **POST /api/history** (`history.py`) — inserts shared row if new manual entry is shared
+4. **Monthly recurring generation** (`db.generate_recurring_entries`) — mirrors shared recurring rows
+
+**Shared API routes** (all in `loader/shared.py`):
+| Route | Description |
+|---|---|
+| `GET /shared` | Serves the HTML page |
+| `GET /api/shared/fy-list` | FY start years present in `shared_transactions` |
+| `GET /api/shared` | All rows for FY (`?fy=2026`), ordered newest first |
+| `GET /api/shared/summary` | `{net_balance, total_akhil_paid, total_aditi_paid}` for FY |
+| `POST /api/shared` | Bulk-insert manual entries (array of `{entry_date, monthly_amount, ...}`) |
+| `POST /api/shared/payment` | Record a settlement payment (`entry_date`, `paid_by`, `amount` required) |
+| `PATCH /api/shared/<id>` | Update `paid_by`/`owed_by`/`share_ratio`/`settled`/`is_ignored`; recomputes balance |
+| `DELETE /api/shared/<id>` | Delete a shared row |
+
+**UI behaviour notes:**
+- Sidebar: FY selector (e.g. 2026–27); summary cards show net balance, total Akhil paid, total Aditi paid
+- Rows styled by type: regular expense, payment (blue), settled (dimmed), ignored (very dimmed)
+- Settled toggle auto-saves with timestamp; is_ignored button excludes from balance calculations
+- Add entry modal and payment modal for quick manual entry
+
+### Recurring Transactions Workflow
+`/recurring` manages definitions of recurring expenses. On the 1st of each month, `app.py` calls `db.generate_recurring_entries()` which inserts one row per active definition into `data_feed_history` (and mirrors to `shared_transactions` if shared).
+
+**Implementation files:**
+- `loader/recurring.py` — Flask Blueprint; all API logic is here
+- `templates/recurring.html` — Single-page UI served at `GET /recurring`
+
+**Recurring API routes** (all in `loader/recurring.py`):
+| Route | Description |
+|---|---|
+| `GET /recurring` | Serves the HTML page |
+| `GET /api/recurring` | List all definitions (active first) |
+| `POST /api/recurring` | Create new definition (`entry_text` and `amount` required) |
+| `PUT /api/recurring/<id>` | Full update of a definition |
+| `DELETE /api/recurring/<id>` | Delete definition |
+| `POST /api/recurring/generate` | Manually trigger generation (`?date=YYYY-MM-DD` optional; defaults to today) |
+
+**Generation idempotency:** `last_generated` is stamped after each run. The SELECT query uses `DATE_TRUNC('month', last_generated) < DATE_TRUNC('month', today)` so re-triggering on the same day is safe.
+
+### Auth System
+`loader/token_auth.py` provides three decorators used by blueprints:
+- `require_admin` — used by `/review`, `/view`, `/recurring` and their APIs. Requires `ADMIN_TOKEN` via `?token=` or `Authorization: Bearer`. Dev mode (neither `ADMIN_TOKEN` nor `INVITE_CODE` set): allows all.
+- `require_any_auth` — used by `/api/shared/*` routes. Allows either a valid `ADMIN_TOKEN` or a valid user session cookie (role `user` or `admin`).
+- `require_user_page` — used by the `/shared` HTML page. Same logic as `require_any_auth` but redirects to `/login` instead of returning 401.
+
+`loader/auth_routes.py` — `auth_bp` Blueprint with three routes:
+- `GET/POST /login` — login form; sets signed session cookie (30-day expiry) on success
+- `GET /logout` — clears session, redirects to `/login`
+- `GET/POST /register` — registration form; requires `INVITE_CODE` env var to match
+
+Sessions use Flask's signed cookies with `SECRET_KEY`. No server-side session storage — all Cloud Run instances validate the same cookie using the shared `SECRET_KEY` from GCP Secret Manager.
 
 ### SQL Migration Scripts
 Never run SQL migration or setup scripts against the database without first asking the user for confirmation and any required inputs (connection strings, target tables, etc.).

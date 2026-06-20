@@ -1,142 +1,184 @@
 # HDFC Statement Loader
 
-A Gmail-to-PostgreSQL pipeline that polls HDFC Bank transaction alert emails
-daily and stores parsed transactions in a Neon PostgreSQL database.  Runs as a
-Google Cloud Run **Service** triggered by Cloud Scheduler, and also accepts
-on-demand HTTP requests.
+A personal financial pipeline that polls HDFC Bank transaction alert emails via Gmail, parses and stores them in a PostgreSQL database, categorises them with a rules → memory → ML pipeline, and surfaces them through four web UIs for review, editing, shared expense tracking, and recurring transaction management. Runs on Google Cloud Run, triggered daily by Cloud Scheduler.
 
 ---
 
-## How it works
+## What it does
 
-1. **Gmail poller** (`gmail_poller.py`) authenticates with the Gmail API using an
-   OAuth2 refresh token and searches for emails from `alerts@hdfcbank.bank.in` or `alerts@hdfcbank.net` (both used by HDFC) newer than `POLL_DAYS` days.
-2. **Parser** (`parser.py`) detects the email format (UPI debit/credit,
-   NetBanking, Debit Card) and extracts structured fields.
-3. **DB layer** (`db.py`) writes the transaction to Neon PostgreSQL and records
-   each Gmail message ID in `processed_emails` so re-runs are fully idempotent.
-4. After each run, a **summary email** is sent to `NOTIFICATION_EMAIL` with
-   transaction details and parser test results.
+1. **Gmail poller** (`loader/gmail_poller.py`) searches for HDFC alert emails (4 formats: UPI debit/credit, NetBanking, Debit Card) and stores parsed transactions in the `transactions` table.
+2. **Categoriser** (`categorizer/batch_process.py`) runs a rules → merchant-memory → LightGBM ML pipeline, creating batches of predictions in `transaction_batch_items`.
+3. **Batch review UI** (`/review`) lets you edit and approve categorised batches. On completion, rows move to `data_feed_history` and the ML model retrains.
+4. **History editor** (`/view`) provides full CRUD over `data_feed_history` with period filtering, inline editing, and period-vs-period spend summaries.
+5. **Shared expenses ledger** (`/shared`) mirrors shared-expense rows into `shared_transactions` and tracks balances, settlements, and payments between Akhil and Aditi.
+6. **Recurring transactions manager** (`/recurring`) defines recurring expenses that are auto-generated monthly into `data_feed_history`.
+7. **Nightly summary email** is sent after each run with transaction counts, failures, and categorisation status.
 
 ---
 
-## Prerequisites
+## Web UI pages
 
-| Tool | Version |
-|------|---------|
-| Python | 3.12+ |
-| Docker | 24+ |
-| Google Cloud SDK (`gcloud`) | latest |
-| A [Neon](https://neon.tech) project | — |
-| A Google Cloud project with the Gmail API enabled | — |
+| Page | Route | Purpose |
+|------|-------|---------|
+| Batch Review | `/review` | Edit and approve ML-predicted categories; complete batches to finalize |
+| History Editor | `/view` | Browse and edit `data_feed_history` by period; add manual entries |
+| Shared Expenses | `/shared` | Track shared expenses with balances, settlements, and payments by FY |
+| Recurring Manager | `/recurring` | Define auto-generated monthly/annual recurring entries |
+
+---
+
+## API routes
+
+### Review (`loader/review.py`)
+| Method | Route | Description |
+|--------|-------|-------------|
+| GET | `/review` | Serve review HTML page |
+| GET | `/api/batches` | List batches (`?include_complete=1` for all) |
+| GET | `/api/batches/<id>` | Batch detail + items |
+| PATCH | `/api/batches/<id>/items/<txn_id>` | Edit category/subcategory/type/cadence/divide_by/shared_expense/share_ratio/amount |
+| DELETE | `/api/batches/<id>/items/<txn_id>` | Remove item; adds to `transaction_exclusions` |
+| DELETE | `/api/batches/<id>` | Delete pending/reviewed batch |
+| POST | `/api/batches/<id>/mark-reviewed` | Transition batch to `reviewed` |
+| POST | `/api/batches/<id>/complete` | Finalize to `data_feed_history`, mirror shared rows, trigger retraining |
+| GET | `/api/categories` | `{categories, types}` merged from `rules.json` + `data_feed_history` |
+
+### History (`loader/history.py`)
+| Method | Route | Description |
+|--------|-------|-------------|
+| GET | `/view` | Serve history HTML page |
+| GET | `/api/history/periods` | Distinct `time_period` values with row counts, newest first |
+| GET | `/api/history` | Paginated rows (`?period=May-2026&page=1`) |
+| GET | `/api/history/summary` | Top-5 categories + period total (`?period=&prev_period=` optional) |
+| POST | `/api/history` | Create manual entry; cadence=A + divide_by>1 auto-generates future rows |
+| PATCH | `/api/history/<id>` | Update row fields; recomputes monthly_amount and final_amount |
+| DELETE | `/api/history/<id>` | Delete row |
+| GET | `/api/settings` | Return `{default_share_ratio, default_annual_divisor}` |
+| PATCH | `/api/settings` | Update allowed settings keys |
+
+### Shared (`loader/shared.py`)
+| Method | Route | Description |
+|--------|-------|-------------|
+| GET | `/shared` | Serve shared HTML page |
+| GET | `/api/shared/fy-list` | FY start years present in `shared_transactions` |
+| GET | `/api/shared` | All rows for FY (`?fy=2026`) |
+| GET | `/api/shared/summary` | `{net_balance, total_akhil_paid, total_aditi_paid}` for FY |
+| POST | `/api/shared` | Bulk-insert manual shared entries |
+| POST | `/api/shared/payment` | Record a settlement payment |
+| PATCH | `/api/shared/<id>` | Update paid_by/owed_by/share_ratio/settled/is_ignored |
+| DELETE | `/api/shared/<id>` | Delete shared row |
+
+### Recurring (`loader/recurring.py`)
+| Method | Route | Description |
+|--------|-------|-------------|
+| GET | `/recurring` | Serve recurring HTML page |
+| GET | `/api/recurring` | List all recurring definitions |
+| POST | `/api/recurring` | Create new definition |
+| PUT | `/api/recurring/<id>` | Update definition |
+| DELETE | `/api/recurring/<id>` | Delete definition |
+| POST | `/api/recurring/generate` | Manually trigger generation (`?date=YYYY-MM-DD` optional) |
+
+---
+
+## Database tables
+
+| Table | Purpose |
+|-------|---------|
+| `transactions` | Raw parsed bank transactions (one per email alert) |
+| `processed_emails` | Idempotency log for every Gmail message ID |
+| `transaction_exclusions` | Transactions removed from review batches |
+| `transaction_batches` | Batch lifecycle: pending → reviewed → complete |
+| `transaction_batch_items` | Per-transaction ML predictions and human edits |
+| `data_feed_history` | Ground-truth categorised transactions (the canonical table) |
+| `recurring_transactions` | User-defined recurring entries auto-generated monthly |
+| `shared_transactions` | Mirror of shared-expense rows with balance tracking |
+| `app_settings` | Configurable defaults (`default_share_ratio`, `default_annual_divisor`) |
 
 ---
 
 ## Environment variables
 
-| Variable | Description |
-|----------|-------------|
-| `GMAIL_CLIENT_ID` | OAuth2 client ID from Google Cloud Console |
-| `GMAIL_CLIENT_SECRET` | OAuth2 client secret |
-| `GMAIL_REFRESH_TOKEN` | Long-lived refresh token (needs `gmail.readonly` + `gmail.send`) |
-| `DATABASE_URL` | Neon connection string, e.g. `postgresql://user:pass@host/db?sslmode=require` |
-| `NOTIFICATION_EMAIL` | Gmail address to receive the nightly summary email |
-| `POLL_DAYS` | How many days back to search (default: `1`) |
+### Loader
 
-### Obtaining / re-obtaining Gmail OAuth2 credentials
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `GMAIL_CLIENT_ID` | Yes | OAuth2 client ID |
+| `GMAIL_CLIENT_SECRET` | Yes | OAuth2 client secret |
+| `GMAIL_REFRESH_TOKEN` | Yes | Long-lived refresh token |
+| `DATABASE_URL` | Yes | Neon PostgreSQL connection string |
+| `NOTIFICATION_EMAIL` | Yes | Recipient for nightly summary email |
+| `POLL_DAYS` | No | Days back to search (default: `1`) |
+| `AFTER_DATE` | No | Override `POLL_DAYS` with a `YYYY/MM/DD` date |
+| `MAX_MESSAGES` | No | Cap on messages processed (default: no limit) |
+| `REVIEW_TOKEN` | No | If set, all routes require `?token=` or `Authorization: Bearer` |
+| `PORT` | No | Flask server port (default: `8080`) |
 
-1. In [Google Cloud Console](https://console.cloud.google.com), create an
-   **OAuth 2.0 Client ID** of type *Desktop app*.
-2. Download the JSON as `credentials.json`.
-3. Run the one-time authorisation flow:
+### Categoriser
 
-   ```bash
-   python auth.py
-   ```
-
-   A browser window will open. Grant both **Read** and **Send** Gmail permissions.
-   Copy the printed `GMAIL_REFRESH_TOKEN` into your `.env`.
-
-4. If you ever need to re-authorise (e.g. after revoking access), repeat step 3
-   and update the token in your `.env` and in GCP Secret Manager.
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DATABASE_URL` | Yes | Same Neon connection string |
+| `GCS_MODEL_BUCKET` | Yes | GCS bucket for model artefacts |
 
 ---
 
-## Local testing
+## Running locally
 
 ```bash
-# 1. Copy and fill in .env
-cp .env.example .env   # or create manually
+# Install dependencies
+pip install -r requirements.txt -r categorizer/requirements.txt pytest
 
-# 2. Install dependencies
-pip install -r requirements.txt pytest
-
-# 3. Run the unit tests (no network or DB required)
+# Run tests (no DB or network required)
 pytest tests/ -v
 
-# 4. Run the full pipeline (also sends the summary email)
+# Run the full pipeline
 python loader/gmail_poller.py
 
-# 5. Test the HTTP server locally
-PORT=8080 python loader/app.py
-# In another terminal:
-curl -X POST http://localhost:8080/
+# Serve the web UI locally
+cd loader && PORT=5000 python app.py
+# then open http://localhost:5000/view
 ```
+
+---
+
+## Obtaining Gmail OAuth2 credentials
+
+1. In [Google Cloud Console](https://console.cloud.google.com), create an OAuth 2.0 Client ID of type *Desktop app*.
+2. Download the JSON as `credentials.json`.
+3. Run the one-time authorisation flow:
+   ```bash
+   python loader/auth.py
+   ```
+4. Copy the printed `GMAIL_REFRESH_TOKEN` into `.env` and into GCP Secret Manager.
 
 ---
 
 ## Docker
 
 ```bash
-# Build
 docker build -t hdfc-statement-loader .
 
-# Run (pass env vars inline or via --env-file)
 docker run --rm \
   -e GMAIL_CLIENT_ID="..." \
   -e GMAIL_CLIENT_SECRET="..." \
   -e GMAIL_REFRESH_TOKEN="..." \
   -e DATABASE_URL="postgresql://..." \
-  -e NOTIFICATION_EMAIL="you@gmail.com" \
-  -e POLL_DAYS=1 \
+  -e NOTIFICATION_EMAIL="you@example.com" \
   hdfc-statement-loader
 ```
 
 ---
 
-## Google Cloud Run deployment
-
-### 1. Authenticate and configure
+## Deployment (Google Cloud Run)
 
 ```bash
-gcloud auth login
+# Set project
 gcloud config set project hdfc-statement-loader
-```
 
-### 2. Create an Artifact Registry repository (first time only)
-
-```bash
-gcloud artifacts repositories create hdfc-loader \
-  --repository-format=docker \
-  --location=asia-south1
-```
-
-### 3. Build and push the image
-
-```bash
+# Build and push image
 IMAGE="asia-south1-docker.pkg.dev/hdfc-statement-loader/hdfc-loader/hdfc-statement-loader:latest"
-
 gcloud builds submit --tag "$IMAGE"
-# or, if using Docker locally:
-docker build -t "$IMAGE" .
-docker push "$IMAGE"
-```
 
-### 4. Deploy as a Cloud Run Service
-
-```bash
-SA="hdfc-loader-invoker@hdfc-statement-loader.iam.gserviceaccount.com"
-
+# Deploy
 gcloud run deploy hdfc-statement-loader \
   --image "$IMAGE" \
   --region asia-south1 \
@@ -145,35 +187,19 @@ gcloud run deploy hdfc-statement-loader \
     GMAIL_CLIENT_ID=gmail-client-id:latest,\
     GMAIL_CLIENT_SECRET=gmail-client-secret:latest,\
     GMAIL_REFRESH_TOKEN=gmail-refresh-token:latest,\
-    DATABASE_URL=neon-database-url:latest \
-  --set-env-vars POLL_DAYS=1,NOTIFICATION_EMAIL=you@gmail.com \
+    DATABASE_URL=neon-database-url:latest,\
+    REVIEW_TOKEN=review-token:latest \
+  --set-env-vars POLL_DAYS=1,NOTIFICATION_EMAIL=you@example.com \
   --timeout 300s
 ```
 
-> **Tip:** store secrets in [Secret Manager](https://cloud.google.com/secret-manager)
-> rather than passing them as plain env vars.  The `--set-secrets` flag above
-> assumes you have already created secrets named `gmail-client-id` etc.
+Deployments happen automatically via GitHub Actions on every push to `main` — manual `gcloud` deploys are only needed for initial setup or out-of-band changes.
 
-After deployment, `gcloud` will print the **Service URL** — save it for the next steps.
-
-### 5. Schedule daily execution with Cloud Scheduler
-
-The cron below fires at **21:00 IST** every day.
+### Cloud Scheduler (daily trigger)
 
 ```bash
-# Create a service account (first time only)
 SA="hdfc-loader-invoker@hdfc-statement-loader.iam.gserviceaccount.com"
-
-gcloud iam service-accounts create hdfc-loader-invoker \
-  --display-name "HDFC Loader Cloud Run Invoker"
-
-gcloud run services add-iam-policy-binding hdfc-statement-loader \
-  --region asia-south1 \
-  --member "serviceAccount:${SA}" \
-  --role "roles/run.invoker"
-
-# Create the scheduler job (replace SERVICE_URL with the URL from step 4)
-SERVICE_URL="https://hdfc-statement-loader-<hash>-el.a.run.app"
+SERVICE_URL="https://hdfc-statement-loader-<hash>.asia-south1.run.app"
 
 gcloud scheduler jobs create http hdfc-statement-loader-daily \
   --location asia-south1 \
@@ -185,90 +211,23 @@ gcloud scheduler jobs create http hdfc-statement-loader-daily \
   --oidc-token-audience "${SERVICE_URL}"
 ```
 
-### 6. On-demand trigger
-
-To trigger a run manually from the command line:
+### On-demand trigger
 
 ```bash
-SERVICE_URL="https://hdfc-statement-loader-<hash>-el.a.run.app"
-
 curl -X POST "${SERVICE_URL}" \
   -H "Authorization: Bearer $(gcloud auth print-identity-token)"
 ```
 
-The response is immediate JSON with the run outcome:
-
+Response:
 ```json
 {
   "status": "ok",
   "processed": 2,
   "skipped": 0,
   "failed": 0,
+  "recurring_generated": 0,
   "message": "2 transaction(s) processed."
 }
-```
-
-Or when nothing new was found:
-
-```json
-{
-  "status": "ok",
-  "processed": 0,
-  "skipped": 0,
-  "failed": 0,
-  "message": "No new transactions found."
-}
-```
-
----
-
-## Checking Cloud Run logs
-
-```bash
-# List recent revisions / requests
-gcloud run services describe hdfc-statement-loader --region asia-south1
-
-# Stream logs
-gcloud logging read \
-  'resource.type="cloud_run_revision" resource.labels.service_name="hdfc-statement-loader"' \
-  --limit 200 \
-  --format "value(textPayload)" \
-  --freshness 1d
-```
-
-Or open **Cloud Logging** in the console and filter by:
-```
-resource.type="cloud_run_revision"
-resource.labels.service_name="hdfc-statement-loader"
-```
-
----
-
-## Querying the Neon database
-
-Connect with `psql` or any PostgreSQL client using your `DATABASE_URL`.
-
-```sql
--- Recent transactions
-SELECT date, type, format, amount, merchant, account_last4, card_last4
-FROM transactions
-ORDER BY date DESC
-LIMIT 20;
-
--- Monthly spend summary
-SELECT
-    DATE_TRUNC('month', date) AS month,
-    SUM(CASE WHEN type = 'debit'  THEN amount ELSE 0 END) AS total_debits,
-    SUM(CASE WHEN type = 'credit' THEN amount ELSE 0 END) AS total_credits
-FROM transactions
-GROUP BY 1
-ORDER BY 1 DESC;
-
--- Idempotency log: last 10 processed emails
-SELECT gmail_message_id, processed_at, status, notes
-FROM processed_emails
-ORDER BY processed_at DESC
-LIMIT 10;
 ```
 
 ---
@@ -277,23 +236,42 @@ LIMIT 10;
 
 ```
 hdfc-statement-loader/
-├── loader/                    # Gmail polling + email parsing pipeline
-│   ├── app.py                 # Flask app entry point (Cloud Run)
-│   ├── gmail_poller.py        # Gmail API polling and email parsing
-│   ├── review.py              # Batch review Flask Blueprint (7 routes)
-│   ├── parser.py              # Email format detection and field extraction
-│   ├── db.py                  # PostgreSQL schema, queries, idempotency helpers
-│   └── auth.py                # One-time OAuth2 flow to obtain refresh token
-├── categorizer/               # Transaction classification pipeline
-│   ├── batch_process.py       # Batch classification CLI entry point
-│   ├── main.py                # Full model training pipeline
-│   ├── processing/            # cleaner, merchant, rules, memory
-│   ├── models/                # LightGBM train/predict/registry
-│   └── config/rules.json      # Keyword → category mapping rules
+├── loader/
+│   ├── app.py                # Flask entry point; registers all blueprints
+│   ├── gmail_poller.py       # Gmail polling, email parsing, summary email
+│   ├── parser.py             # 4-format email parser + inline test suite
+│   ├── db.py                 # All DB helpers (9 tables)
+│   ├── review.py             # /review blueprint (batch review)
+│   ├── history.py            # /view blueprint (history editor)
+│   ├── shared.py             # /shared blueprint (shared expenses)
+│   ├── recurring.py          # /recurring blueprint (recurring transactions)
+│   ├── token_auth.py         # Shared _require_token decorator
+│   └── auth.py               # One-time OAuth2 setup
+├── categorizer/
+│   ├── batch_process.py      # Batch classification entry point
+│   ├── main.py               # Model retraining pipeline
+│   ├── config/rules.json     # Keyword → category rules
+│   ├── processing/           # cleaner, merchant, rules, memory, pipeline
+│   └── models/               # LightGBM train/predict/registry
 ├── templates/
-│   └── review.html            # Batch review UI (vanilla HTML/CSS/JS)
-├── tests/                     # pytest suite (147 tests, no DB required)
-├── Dockerfile                 # python:3.12-slim image
-├── requirements.txt           # Loader Python dependencies
+│   ├── review.html           # Batch review UI
+│   ├── view.html             # History editor UI
+│   ├── shared.html           # Shared expenses UI
+│   └── recurring.html        # Recurring transactions UI
+├── tests/                    # 399+ tests across 17 files (no DB required)
+├── Dockerfile
+├── requirements.txt
 └── README.md
+```
+
+---
+
+## Checking Cloud Run logs
+
+```bash
+gcloud logging read \
+  'resource.type="cloud_run_revision" resource.labels.service_name="hdfc-statement-loader"' \
+  --limit 200 \
+  --format "value(textPayload)" \
+  --freshness 1d
 ```

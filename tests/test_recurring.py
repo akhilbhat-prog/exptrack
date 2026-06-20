@@ -1,4 +1,4 @@
-"""
+﻿"""
 Tests for the recurring transactions Flask blueprint and db helpers.
 
 Auth tests use no DB.
@@ -50,35 +50,35 @@ def _make_mock_conn(fetchone=None, fetchall=None, rowcount=1):
 
 class TestRequireToken:
     def test_no_token_env_allows_page(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         resp = client.get("/recurring")
         assert resp.status_code == 200
 
     def test_token_env_blocks_page_without_token(self, client, monkeypatch):
-        monkeypatch.setenv("REVIEW_TOKEN", "secret")
+        monkeypatch.setenv("ADMIN_TOKEN", "secret")
         resp = client.get("/recurring")
         assert resp.status_code == 401
 
     def test_correct_query_param_grants_page(self, client, monkeypatch):
-        monkeypatch.setenv("REVIEW_TOKEN", "secret")
+        monkeypatch.setenv("ADMIN_TOKEN", "secret")
         resp = client.get("/recurring?token=secret")
         assert resp.status_code == 200
 
     def test_correct_bearer_header_grants_page(self, client, monkeypatch):
-        monkeypatch.setenv("REVIEW_TOKEN", "secret")
+        monkeypatch.setenv("ADMIN_TOKEN", "secret")
         resp = client.get("/recurring", headers={"Authorization": "Bearer secret"})
         assert resp.status_code == 200
 
     def test_api_list_requires_token(self, client, monkeypatch):
-        monkeypatch.setenv("REVIEW_TOKEN", "tok")
+        monkeypatch.setenv("ADMIN_TOKEN", "tok")
         assert client.get("/api/recurring").status_code == 401
 
     def test_api_create_requires_token(self, client, monkeypatch):
-        monkeypatch.setenv("REVIEW_TOKEN", "tok")
+        monkeypatch.setenv("ADMIN_TOKEN", "tok")
         assert client.post("/api/recurring", json={}).status_code == 401
 
     def test_api_generate_requires_token(self, client, monkeypatch):
-        monkeypatch.setenv("REVIEW_TOKEN", "tok")
+        monkeypatch.setenv("ADMIN_TOKEN", "tok")
         assert client.post("/api/recurring/generate").status_code == 401
 
 
@@ -88,7 +88,7 @@ class TestRequireToken:
 
 class TestListRecurring:
     def test_returns_200_and_list(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         sample = [
             {"id": 1, "entry_text": "Groww SIP", "amount": 5000.0, "active": True},
@@ -103,7 +103,7 @@ class TestListRecurring:
         assert len(data) == 2
 
     def test_returns_empty_list(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         with patch("recurring.db.get_connection", return_value=mock_conn), \
              patch("recurring.db.get_recurring_transactions", return_value=[]):
@@ -117,7 +117,7 @@ class TestListRecurring:
 
 class TestCreateRecurring:
     def test_creates_returns_201(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         with patch("recurring.db.get_connection", return_value=mock_conn), \
              patch("recurring.db.create_recurring_table"), \
@@ -129,17 +129,17 @@ class TestCreateRecurring:
         assert data["id"] == 7
 
     def test_rejects_missing_entry_text(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         resp = client.post("/api/recurring", json={"amount": 5000})
         assert resp.status_code == 400
 
     def test_rejects_missing_amount(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         resp = client.post("/api/recurring", json={"entry_text": "Groww SIP"})
         assert resp.status_code == 400
 
     def test_defaults_active_to_true(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         captured = {}
         def capture(conn, data, row_id=None):
@@ -152,7 +152,7 @@ class TestCreateRecurring:
         assert captured.get("active") is True
 
     def test_defaults_divide_by_to_1(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         captured = {}
         def capture(conn, data, row_id=None):
@@ -171,7 +171,7 @@ class TestCreateRecurring:
 
 class TestUpdateRecurring:
     def test_returns_200_on_valid_update(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         with patch("recurring.db.get_connection", return_value=mock_conn), \
              patch("recurring.db.upsert_recurring_transaction", return_value=3):
@@ -180,7 +180,7 @@ class TestUpdateRecurring:
         assert resp.get_json()["ok"] is True
 
     def test_returns_404_when_not_found(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         with patch("recurring.db.get_connection", return_value=mock_conn), \
              patch("recurring.db.upsert_recurring_transaction", return_value=None):
@@ -194,7 +194,7 @@ class TestUpdateRecurring:
 
 class TestDeleteRecurring:
     def test_delete_returns_204(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         with patch("recurring.db.get_connection", return_value=mock_conn), \
              patch("recurring.db.delete_recurring_transaction", return_value=True):
@@ -202,7 +202,7 @@ class TestDeleteRecurring:
         assert resp.status_code == 204
 
     def test_delete_returns_404_when_not_found(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         with patch("recurring.db.get_connection", return_value=mock_conn), \
              patch("recurring.db.delete_recurring_transaction", return_value=False):
@@ -216,7 +216,7 @@ class TestDeleteRecurring:
 
 class TestGenerateEndpoint:
     def test_returns_200_with_count(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         generated = [{"id": 1, "feed_id": 10, "entry_text": "Groww SIP"}]
         with patch("recurring.db.get_connection", return_value=mock_conn), \
@@ -230,7 +230,7 @@ class TestGenerateEndpoint:
         assert len(data["generated"]) == 1
 
     def test_returns_empty_when_nothing_due(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         with patch("recurring.db.get_connection", return_value=mock_conn), \
              patch("recurring.db.create_recurring_table"), \
@@ -240,7 +240,7 @@ class TestGenerateEndpoint:
         assert resp.get_json()["count"] == 0
 
     def test_custom_date_param_forwarded(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         captured = {}
         def capture(conn, today=None):
@@ -253,13 +253,13 @@ class TestGenerateEndpoint:
         assert captured["today"] == _date(2026, 1, 1)
 
     def test_invalid_date_param_returns_400(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         resp = client.post("/api/recurring/generate?date=not-a-date")
         assert resp.status_code == 400
 
 
 # ---------------------------------------------------------------------------
-# db.generate_recurring_entries — unit tests (no Flask, no real DB)
+# db.generate_recurring_entries â€” unit tests (no Flask, no real DB)
 # ---------------------------------------------------------------------------
 
 class TestGenerateRecurringEntries:

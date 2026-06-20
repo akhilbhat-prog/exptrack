@@ -11,42 +11,29 @@ Routes:
   GET   /api/settings             — return all app settings
   PATCH /api/settings             — update one or more settings
 
-Auth: if REVIEW_TOKEN env var is set, all routes require a matching
+Auth: if ADMIN_TOKEN env var is set, all routes require a matching
       ?token= query param or Authorization: Bearer <token> header.
 """
 
 import os
 from datetime import date as _date
-from functools import wraps
-
-_SHARED_SCOPE_START = _date(2026, 4, 1)
 
 from flask import Blueprint, abort, jsonify, render_template, request
 
 import db
+from token_auth import require_admin as _require_token
 
 history_bp = Blueprint("history", __name__)
 
+_SHARED_SCOPE_START = db._SHARED_SCOPE_START
 
-def _require_token(f):
-    @wraps(f)
-    def wrapper(*args, **kwargs):
-        token = os.environ.get("REVIEW_TOKEN", "")
-        if not token:
-            return f(*args, **kwargs)
-        provided = request.args.get("token") or (
-            request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
-        )
-        if provided != token:
-            abort(401)
-        return f(*args, **kwargs)
-    return wrapper
+
 
 
 @history_bp.route("/view")
 @_require_token
 def view_page():
-    token = os.environ.get("REVIEW_TOKEN", "")
+    token = os.environ.get("ADMIN_TOKEN", "")
     return render_template("view.html", review_token=token)
 
 

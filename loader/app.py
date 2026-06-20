@@ -11,8 +11,10 @@ For local development:
 import os
 
 from dotenv import load_dotenv
-from datetime import date as _date
-from flask import Flask, jsonify
+from datetime import date as _date, timedelta
+from flask import Flask, jsonify, redirect, url_for
+from auth_routes import auth_bp
+from token_auth import require_admin, _is_valid_admin_token, _is_valid_user_session
 from history import history_bp
 from review import review_bp
 from recurring import recurring_bp
@@ -30,13 +32,25 @@ load_dotenv()
 
 _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 app = Flask(__name__, template_folder=os.path.join(_project_root, "templates"))
+
+import logging as _logging
+_secret = os.environ.get("SECRET_KEY")
+if not _secret:
+    _logging.getLogger(__name__).warning("SECRET_KEY not set — using insecure default. Set it in production.")
+    _secret = "dev-secret-change-me"
+app.secret_key = _secret
+app.config["SESSION_COOKIE_SECURE"] = os.environ.get("SECRET_KEY") is not None
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
+
+app.register_blueprint(auth_bp)
 app.register_blueprint(review_bp)
 app.register_blueprint(history_bp)
 app.register_blueprint(recurring_bp)
 app.register_blueprint(shared_bp)
 
 import db as _db
-import logging as _logging
 try:
     _startup_conn = _db.get_connection()
     _db.create_tables(_startup_conn)
@@ -44,6 +58,7 @@ try:
     _db.create_recurring_table(_startup_conn)
     _db.create_settings_table(_startup_conn)
     _db.create_shared_transactions_table(_startup_conn)
+    _db.create_users_table(_startup_conn)
     _startup_conn.close()
 except Exception as _e:
     _logging.getLogger(__name__).warning("DB table setup skipped at startup: %s", _e)
@@ -54,7 +69,17 @@ def handle_http_exception(e):
     return jsonify({"error": e.description, "code": e.code}), e.code
 
 
-@app.route("/", methods=["GET", "POST"])
+@app.route("/")
+def index():
+    if _is_valid_user_session():
+        return redirect(url_for("shared.shared_page"))
+    if _is_valid_admin_token():
+        return redirect(url_for("history.view_page"))
+    return redirect(url_for("auth.login_page"))
+
+
+@app.route("/trigger", methods=["GET", "POST"])
+@require_admin
 def trigger():
     service = _build_gmail_service()
     summary = main(service)

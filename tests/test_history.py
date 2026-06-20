@@ -1,4 +1,4 @@
-"""
+﻿"""
 Tests for the history Flask blueprint.
 
 Auth tests use no DB.
@@ -48,37 +48,37 @@ def _make_mock_conn(fetchone=None, fetchall=None, rowcount=1):
 
 class TestRequireToken:
     def test_no_token_env_allows_access(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         resp = client.get("/view")
         assert resp.status_code == 200
 
     def test_token_env_set_blocks_without_token(self, client, monkeypatch):
-        monkeypatch.setenv("REVIEW_TOKEN", "secret")
+        monkeypatch.setenv("ADMIN_TOKEN", "secret")
         resp = client.get("/view")
         assert resp.status_code == 401
 
     def test_correct_query_param_grants_access(self, client, monkeypatch):
-        monkeypatch.setenv("REVIEW_TOKEN", "secret")
+        monkeypatch.setenv("ADMIN_TOKEN", "secret")
         resp = client.get("/view?token=secret")
         assert resp.status_code == 200
 
     def test_correct_bearer_header_grants_access(self, client, monkeypatch):
-        monkeypatch.setenv("REVIEW_TOKEN", "secret")
+        monkeypatch.setenv("ADMIN_TOKEN", "secret")
         resp = client.get("/view", headers={"Authorization": "Bearer secret"})
         assert resp.status_code == 200
 
     def test_api_periods_requires_token(self, client, monkeypatch):
-        monkeypatch.setenv("REVIEW_TOKEN", "tok")
+        monkeypatch.setenv("ADMIN_TOKEN", "tok")
         resp = client.get("/api/history/periods")
         assert resp.status_code == 401
 
     def test_api_history_requires_token(self, client, monkeypatch):
-        monkeypatch.setenv("REVIEW_TOKEN", "tok")
+        monkeypatch.setenv("ADMIN_TOKEN", "tok")
         resp = client.get("/api/history?period=May-2026")
         assert resp.status_code == 401
 
     def test_api_patch_requires_token(self, client, monkeypatch):
-        monkeypatch.setenv("REVIEW_TOKEN", "tok")
+        monkeypatch.setenv("ADMIN_TOKEN", "tok")
         resp = client.patch("/api/history/1", json={})
         assert resp.status_code == 401
 
@@ -89,7 +89,7 @@ class TestRequireToken:
 
 class TestListPeriods:
     def test_returns_200(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, mock_cursor = _make_mock_conn(fetchall=[("May-2026", 45), ("Apr-2026", 30)])
         with patch("history.db.get_connection", return_value=mock_conn), \
              patch("history.db.get_history_periods", return_value=[
@@ -100,7 +100,7 @@ class TestListPeriods:
         assert resp.status_code == 200
 
     def test_returns_list_of_period_dicts(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         with patch("history.db.get_connection", return_value=mock_conn), \
              patch("history.db.get_history_periods", return_value=[
@@ -112,7 +112,7 @@ class TestListPeriods:
         assert data[0]["count"] == 10
 
     def test_returns_empty_list_when_no_history(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         with patch("history.db.get_connection", return_value=mock_conn), \
              patch("history.db.get_history_periods", return_value=[]):
@@ -126,7 +126,7 @@ class TestListPeriods:
 
 class TestListHistory:
     def test_missing_period_returns_empty(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         resp = client.get("/api/history")
         assert resp.status_code == 200
         data = resp.get_json()
@@ -134,7 +134,7 @@ class TestListHistory:
         assert data["total"] == 0
 
     def test_returns_paginated_shape(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         page_result = {
             "items": [{"id": 1, "time_period": "May-2026", "amount": 100.0}],
@@ -149,7 +149,7 @@ class TestListHistory:
         assert "pages" in data
 
     def test_page_defaults_to_1(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         captured = {}
         def fake_page(conn, period, page, page_size=25):
@@ -161,7 +161,7 @@ class TestListHistory:
         assert captured["page"] == 1
 
     def test_page_param_is_forwarded(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         captured = {}
         def fake_page(conn, period, page, page_size=25):
@@ -190,7 +190,7 @@ class TestUpdateHistory:
     }
 
     def test_returns_200_with_computed_amounts(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         with patch("history.db.get_connection", return_value=mock_conn), \
              patch("history.db.update_history_row",
@@ -203,7 +203,7 @@ class TestUpdateHistory:
         assert "final_amount" in data
 
     def test_returns_404_when_row_not_found(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         with patch("history.db.get_connection", return_value=mock_conn), \
              patch("history.db.update_history_row", return_value=None):
@@ -211,7 +211,7 @@ class TestUpdateHistory:
         assert resp.status_code == 404
 
     def test_divide_by_clamped_to_1(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         captured = {}
         def fake_update(conn, row_id, fields):
@@ -223,7 +223,7 @@ class TestUpdateHistory:
         assert captured["fields"]["divide_by"] >= 1
 
     def test_shared_expense_uppercased(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         captured = {}
         def fake_update(conn, row_id, fields):
@@ -241,7 +241,7 @@ class TestUpdateHistory:
 
 class TestDeleteHistory:
     def test_delete_returns_204(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         with patch("history.db.get_connection", return_value=mock_conn), \
              patch("history.db.delete_history_row", return_value=True):
@@ -249,7 +249,7 @@ class TestDeleteHistory:
         assert resp.status_code == 204
 
     def test_delete_returns_404_when_not_found(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         with patch("history.db.get_connection", return_value=mock_conn), \
              patch("history.db.delete_history_row", return_value=False):
@@ -257,7 +257,7 @@ class TestDeleteHistory:
         assert resp.status_code == 404
 
     def test_delete_requires_token(self, client, monkeypatch):
-        monkeypatch.setenv("REVIEW_TOKEN", "tok")
+        monkeypatch.setenv("ADMIN_TOKEN", "tok")
         resp = client.delete("/api/history/1")
         assert resp.status_code == 401
 
@@ -278,7 +278,7 @@ class TestCreateHistoryRow:
     }
 
     def test_creates_row_returns_201(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         with patch("history.db.get_connection", return_value=mock_conn), \
              patch("history.db.create_data_feed_table"), \
@@ -290,25 +290,25 @@ class TestCreateHistoryRow:
         assert data["id"] == 42
 
     def test_rejects_missing_entry_date(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         payload = {**self._payload, "entry_date": ""}
         resp = client.post("/api/history", json=payload)
         assert resp.status_code == 400
 
     def test_rejects_missing_entry_text(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         payload = {k: v for k, v in self._payload.items() if k != "entry_text"}
         resp = client.post("/api/history", json=payload)
         assert resp.status_code == 400
 
     def test_rejects_missing_amount(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         payload = {k: v for k, v in self._payload.items() if k != "amount"}
         resp = client.post("/api/history", json=payload)
         assert resp.status_code == 400
 
     def test_passes_exclude_from_training_true(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         captured = {}
         def fake_insert(conn, *args, **kwargs):
@@ -321,13 +321,13 @@ class TestCreateHistoryRow:
         assert captured["kwargs"].get("exclude_from_training") is True
 
     def test_requires_token_when_set(self, client, monkeypatch):
-        monkeypatch.setenv("REVIEW_TOKEN", "tok")
+        monkeypatch.setenv("ADMIN_TOKEN", "tok")
         resp = client.post("/api/history", json=self._payload)
         assert resp.status_code == 401
 
 
 # ---------------------------------------------------------------------------
-# POST /api/history — cadence A multi-period insert
+# POST /api/history â€” cadence A multi-period insert
 # ---------------------------------------------------------------------------
 
 class TestCreateHistoryRowCadenceA:
@@ -340,7 +340,7 @@ class TestCreateHistoryRowCadenceA:
     }
 
     def test_cadence_A_creates_N_rows(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         mock_insert = MagicMock(side_effect=list(range(1, 13)))
         with patch("history.db.get_connection", return_value=mock_conn), \
@@ -355,7 +355,7 @@ class TestCreateHistoryRowCadenceA:
         assert mock_insert.call_count == 12
 
     def test_cadence_A_divide_by_3_creates_3_rows(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         mock_insert = MagicMock(side_effect=[10, 11, 12])
         with patch("history.db.get_connection", return_value=mock_conn), \
@@ -367,7 +367,7 @@ class TestCreateHistoryRowCadenceA:
         assert mock_insert.call_count == 3
 
     def test_cadence_A_divide_by_1_uses_single_path(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         mock_insert = MagicMock(return_value=5)
         with patch("history.db.get_connection", return_value=mock_conn), \
@@ -381,7 +381,7 @@ class TestCreateHistoryRowCadenceA:
         assert mock_insert.call_count == 1
 
     def test_cadence_O_divide_by_3_uses_single_path(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         mock_insert = MagicMock(return_value=7)
         with patch("history.db.get_connection", return_value=mock_conn), \
@@ -396,7 +396,7 @@ class TestCreateHistoryRowCadenceA:
         assert mock_insert.call_count == 1
 
     def test_cadence_A_entry_dates_and_time_periods(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         calls_data = []
         def capture(conn, entry_date, entry_text, *args, **kwargs):
@@ -415,7 +415,7 @@ class TestCreateHistoryRowCadenceA:
         assert calls_data[11]["time_period"] == "Apr-2027"
 
     def test_cadence_A_year_wrap(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         calls_data = []
         def capture(conn, entry_date, *args, **kwargs):
@@ -437,7 +437,7 @@ class TestCreateHistoryRowCadenceA:
 
 
 # ---------------------------------------------------------------------------
-# PATCH /api/history/<id> — cadence A expansion on update
+# PATCH /api/history/<id> â€” cadence A expansion on update
 # ---------------------------------------------------------------------------
 
 class TestUpdateHistoryCadenceA:
@@ -460,7 +460,7 @@ class TestUpdateHistoryCadenceA:
     }
 
     def test_annual_cadence_creates_future_rows(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, mock_cursor = _make_mock_conn()
         insert_calls = []
         def fake_insert(conn, entry_date, *args, **kwargs):
@@ -479,7 +479,7 @@ class TestUpdateHistoryCadenceA:
         assert len(insert_calls) == 2
 
     def test_future_row_entry_dates_are_first_of_month(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         insert_calls = []
         def fake_insert(conn, entry_date, *args, **kwargs):
@@ -497,7 +497,7 @@ class TestUpdateHistoryCadenceA:
         assert insert_calls[1]["time_period"] == "Jul-2026"
 
     def test_future_rows_not_in_base_period(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         insert_calls = []
         def fake_insert(conn, entry_date, *args, **kwargs):
@@ -512,7 +512,7 @@ class TestUpdateHistoryCadenceA:
         assert "May-2026" not in insert_calls
 
     def test_annual_cadence_divide_by_1_no_expansion(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         with patch("history.db.get_connection", return_value=mock_conn), \
              patch("history.db.update_history_row",
@@ -525,7 +525,7 @@ class TestUpdateHistoryCadenceA:
         assert resp.get_json()["rows_created"] == 0
 
     def test_non_annual_cadence_no_expansion(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         with patch("history.db.get_connection", return_value=mock_conn), \
              patch("history.db.update_history_row",
@@ -538,7 +538,7 @@ class TestUpdateHistoryCadenceA:
         assert resp.get_json()["rows_created"] == 0
 
     def test_year_wrap_creates_correct_periods(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         dec_existing = {
             "id": 5, "entry_text": "Annual fee",
@@ -566,7 +566,7 @@ class TestUpdateHistoryCadenceA:
 
 class TestSettings:
     def test_get_returns_defaults(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         defaults = {"default_share_ratio": 0.7, "default_annual_divisor": 12}
         with patch("history.db.get_connection", return_value=mock_conn), \
@@ -578,11 +578,11 @@ class TestSettings:
         assert data["default_annual_divisor"] == 12
 
     def test_get_requires_token(self, client, monkeypatch):
-        monkeypatch.setenv("REVIEW_TOKEN", "tok")
+        monkeypatch.setenv("ADMIN_TOKEN", "tok")
         assert client.get("/api/settings").status_code == 401
 
     def test_patch_updates_share_ratio(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         updated = {"default_share_ratio": 0.5, "default_annual_divisor": 12}
         with patch("history.db.get_connection", return_value=mock_conn), \
@@ -596,7 +596,7 @@ class TestSettings:
         mock_update.assert_called_once_with(mock_conn, "default_share_ratio", "0.5")
 
     def test_patch_updates_annual_divisor(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         updated = {"default_share_ratio": 0.7, "default_annual_divisor": 4}
         with patch("history.db.get_connection", return_value=mock_conn), \
@@ -607,20 +607,83 @@ class TestSettings:
         mock_update.assert_called_once_with(mock_conn, "default_annual_divisor", "4")
 
     def test_patch_rejects_invalid_share_ratio(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         resp = client.patch("/api/settings", json={"default_share_ratio": 1.5})
         assert resp.status_code == 400
 
     def test_patch_rejects_zero_divisor(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         resp = client.patch("/api/settings", json={"default_annual_divisor": 0})
         assert resp.status_code == 400
 
     def test_patch_rejects_unknown_keys(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         resp = client.patch("/api/settings", json={"unknown_key": "value"})
         assert resp.status_code == 400
 
     def test_patch_requires_token(self, client, monkeypatch):
-        monkeypatch.setenv("REVIEW_TOKEN", "tok")
+        monkeypatch.setenv("ADMIN_TOKEN", "tok")
         assert client.patch("/api/settings", json={"default_share_ratio": 0.5}).status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# GET /api/history/summary
+# ---------------------------------------------------------------------------
+
+class TestHistorySummary:
+    def _summary(self, **overrides):
+        base = {
+            "top_categories": [
+                {"category": "Food", "total": 5000.0, "count": 10},
+                {"category": "Transport", "total": 3000.0, "count": 5},
+            ],
+            "period_total": 8000.0,
+        }
+        return {**base, **overrides}
+
+    def test_returns_200_and_shape(self, client, monkeypatch):
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
+        mock_conn, _ = _make_mock_conn()
+        with patch("history.db.get_connection", return_value=mock_conn), \
+             patch("history.db.get_history_summary", return_value=self._summary()):
+            resp = client.get("/api/history/summary?period=May-2026")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "top_categories" in data
+        assert "period_total" in data
+        assert data["period_total"] == 8000.0
+        assert len(data["top_categories"]) == 2
+
+    def test_missing_period_returns_empty(self, client, monkeypatch):
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
+        resp = client.get("/api/history/summary")
+        assert resp.status_code == 200
+        assert resp.get_json()["top_categories"] == []
+
+    def test_forwards_prev_period_param(self, client, monkeypatch):
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
+        mock_conn, _ = _make_mock_conn()
+        captured = {}
+        def fake_summary(conn, period, prev_period=None):
+            captured["prev_period"] = prev_period
+            return self._summary()
+        with patch("history.db.get_connection", return_value=mock_conn), \
+             patch("history.db.get_history_summary", side_effect=fake_summary):
+            client.get("/api/history/summary?period=May-2026&prev_period=Apr-2026")
+        assert captured["prev_period"] == "Apr-2026"
+
+    def test_requires_token(self, client, monkeypatch):
+        monkeypatch.setenv("ADMIN_TOKEN", "tok")
+        assert client.get("/api/history/summary?period=May-2026").status_code == 401
+
+    def test_omitted_prev_period_passes_none(self, client, monkeypatch):
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
+        mock_conn, _ = _make_mock_conn()
+        captured = {}
+        def fake_summary(conn, period, prev_period=None):
+            captured["prev_period"] = prev_period
+            return self._summary()
+        with patch("history.db.get_connection", return_value=mock_conn), \
+             patch("history.db.get_history_summary", side_effect=fake_summary):
+            client.get("/api/history/summary?period=May-2026")
+        assert captured["prev_period"] is None

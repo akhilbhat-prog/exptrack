@@ -56,4 +56,6 @@ jobs:
           service: hdfc-statement-loader
           region: asia-south1
           image: asia-south1-docker.pkg.dev/hdfc-statement-loader/hdfc-loader/hdfc-statement-loader:latest
-          flags: '--allow-unauthenticated'
+          flags: >-
+            --allow-unauthenticated
+            --update-secrets=SECRET_KEY=flask-secret-key:latest,INVITE_CODE=invite-code:latest,ADMIN_TOKEN=admin-token:latest

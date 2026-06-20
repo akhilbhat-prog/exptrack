@@ -1,4 +1,4 @@
-"""
+﻿"""
 Tests for the shared_transactions DB functions and Flask blueprint.
 
 DB function tests use the same _make_mock_conn() pattern as test_review.py / test_history.py.
@@ -227,12 +227,37 @@ class TestGetSharedFYList:
 
 
 # ---------------------------------------------------------------------------
-# Flask routes — auth
+# Flask routes â€” auth
 # ---------------------------------------------------------------------------
+
+@pytest.fixture
+def app_with_auth(app):
+    from auth_routes import auth_bp
+    app.register_blueprint(auth_bp)
+    app.secret_key = "test-secret"
+    return app
+
+
+@pytest.fixture
+def user_client(app_with_auth):
+    c = app_with_auth.test_client()
+    with c.session_transaction() as sess:
+        sess["role"] = "user"
+        sess["user_id"] = 1
+        sess["username"] = "aditi"
+    return c
+
+
+@pytest.fixture
+def no_auth_client(app_with_auth):
+    """Client with no session and no token; auth_bp registered so url_for works."""
+    return app_with_auth.test_client()
+
 
 class TestSharedAuth:
     def test_no_token_env_allows_access(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
+        monkeypatch.delenv("INVITE_CODE", raising=False)
         with patch("db.get_connection") as mock_conn_fn:
             mock_conn, _ = _make_mock_conn(fetchall=[])
             mock_conn_fn.return_value = mock_conn
@@ -241,12 +266,12 @@ class TestSharedAuth:
         assert resp.status_code == 200
 
     def test_token_env_blocks_without_token(self, client, monkeypatch):
-        monkeypatch.setenv("REVIEW_TOKEN", "secret")
+        monkeypatch.setenv("ADMIN_TOKEN", "secret")
         resp = client.get("/api/shared")
         assert resp.status_code == 401
 
     def test_correct_token_grants_access(self, client, monkeypatch):
-        monkeypatch.setenv("REVIEW_TOKEN", "secret")
+        monkeypatch.setenv("ADMIN_TOKEN", "secret")
         with patch("db.get_connection") as mock_conn_fn:
             mock_conn, _ = _make_mock_conn(fetchall=[])
             mock_conn_fn.return_value = mock_conn
@@ -256,12 +281,60 @@ class TestSharedAuth:
 
 
 # ---------------------------------------------------------------------------
-# Flask routes — GET /api/shared
+# Session-based access (user role)
+# ---------------------------------------------------------------------------
+
+class TestSharedSessionAuth:
+    def test_user_session_grants_page_access(self, user_client, monkeypatch):
+        monkeypatch.setenv("ADMIN_TOKEN", "tok")
+        monkeypatch.setenv("INVITE_CODE", "inv")
+        with patch("db.get_connection") as mock_fn:
+            mock_conn, _ = _make_mock_conn()
+            mock_fn.return_value = mock_conn
+            resp = user_client.get("/shared")
+        assert resp.status_code == 200
+
+    def test_user_session_grants_api_access(self, user_client, monkeypatch):
+        monkeypatch.setenv("ADMIN_TOKEN", "tok")
+        monkeypatch.setenv("INVITE_CODE", "inv")
+        with patch("db.get_connection") as mock_fn:
+            mock_conn, _ = _make_mock_conn(fetchall=[])
+            mock_fn.return_value = mock_conn
+            with patch("db.get_shared_transactions", return_value=[]):
+                resp = user_client.get("/api/shared?fy=2026")
+        assert resp.status_code == 200
+
+    def test_no_session_no_token_redirects_page(self, no_auth_client, monkeypatch):
+        monkeypatch.setenv("ADMIN_TOKEN", "tok")
+        monkeypatch.setenv("INVITE_CODE", "inv")
+        resp = no_auth_client.get("/shared", follow_redirects=False)
+        assert resp.status_code == 302
+        assert "/login" in resp.headers["Location"]
+
+    def test_no_session_no_token_blocks_api(self, no_auth_client, monkeypatch):
+        monkeypatch.setenv("ADMIN_TOKEN", "tok")
+        monkeypatch.setenv("INVITE_CODE", "inv")
+        resp = no_auth_client.get("/api/shared?fy=2026")
+        assert resp.status_code == 401
+
+    def test_admin_token_grants_api_access(self, no_auth_client, monkeypatch):
+        monkeypatch.setenv("ADMIN_TOKEN", "tok")
+        monkeypatch.setenv("INVITE_CODE", "inv")
+        with patch("db.get_connection") as mock_fn:
+            mock_conn, _ = _make_mock_conn(fetchall=[])
+            mock_fn.return_value = mock_conn
+            with patch("db.get_shared_transactions", return_value=[]):
+                resp = no_auth_client.get("/api/shared?fy=2026&token=tok")
+        assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Flask routes â€” GET /api/shared
 # ---------------------------------------------------------------------------
 
 class TestListShared:
     def test_returns_rows(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         rows = [{"id": 1, "history_id": 10, "paid_by": "Akhil", "owed_by": "Aditi",
                  "amount": 1000.0, "share_ratio": 0.7, "akhil_share": 700.0,
                  "aditi_share": 300.0, "balance": 300.0, "entry_date": "2026-05-01",
@@ -279,12 +352,12 @@ class TestListShared:
 
 
 # ---------------------------------------------------------------------------
-# Flask routes — PATCH /api/shared/<id>
+# Flask routes â€” PATCH /api/shared/<id>
 # ---------------------------------------------------------------------------
 
 class TestPatchShared:
     def test_settled_toggle(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         with patch("db.get_connection") as mock_fn:
             mock_conn, _ = _make_mock_conn()
             mock_fn.return_value = mock_conn
@@ -296,7 +369,7 @@ class TestPatchShared:
         assert resp.get_json()["settled"] is True
 
     def test_paid_by_change(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         with patch("db.get_connection") as mock_fn:
             mock_conn, _ = _make_mock_conn()
             mock_fn.return_value = mock_conn
@@ -308,12 +381,12 @@ class TestPatchShared:
         assert resp.get_json()["paid_by"] == "Aditi"
 
     def test_invalid_paid_by_rejected(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         resp = client.patch("/api/shared/1", json={"paid_by": "Unknown"}, content_type="application/json")
         assert resp.status_code == 400
 
     def test_not_found(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         with patch("db.get_connection") as mock_fn:
             mock_conn, _ = _make_mock_conn()
             mock_fn.return_value = mock_conn
@@ -323,12 +396,12 @@ class TestPatchShared:
 
 
 # ---------------------------------------------------------------------------
-# Flask routes — DELETE /api/shared/<id>
+# Flask routes â€” DELETE /api/shared/<id>
 # ---------------------------------------------------------------------------
 
 class TestDeleteShared:
     def test_returns_204(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         with patch("db.get_connection") as mock_fn:
             mock_conn, cur = _make_mock_conn(rowcount=1)
             mock_fn.return_value = mock_conn
@@ -336,7 +409,7 @@ class TestDeleteShared:
         assert resp.status_code == 204
 
     def test_not_found_returns_404(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         with patch("db.get_connection") as mock_fn:
             mock_conn, cur = _make_mock_conn(rowcount=0)
             mock_fn.return_value = mock_conn
@@ -404,7 +477,7 @@ class TestInsertManualSharedTransaction:
 
 
 # ---------------------------------------------------------------------------
-# Flask routes — POST /api/shared
+# Flask routes â€” POST /api/shared
 # ---------------------------------------------------------------------------
 
 class TestPostShared:
@@ -414,7 +487,7 @@ class TestPostShared:
                            content_type="application/json")
 
     def test_single_entry_returns_201(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         with patch("db.get_connection") as mock_fn:
             mock_conn, _ = _make_mock_conn(fetchone=(1,))
             mock_fn.return_value = mock_conn
@@ -426,22 +499,22 @@ class TestPostShared:
         assert data["count"] == 1
 
     def test_missing_entry_date_returns_400(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         resp = self._post(client, [{"monthly_amount": 500}])
         assert resp.status_code == 400
 
     def test_missing_monthly_amount_returns_400(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         resp = self._post(client, [{"entry_date": "2026-05-01"}])
         assert resp.status_code == 400
 
     def test_zero_monthly_amount_returns_400(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         resp = self._post(client, [{"entry_date": "2026-05-01", "monthly_amount": 0}])
         assert resp.status_code == 400
 
     def test_multiple_entries(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         with patch("db.get_connection") as mock_fn:
             mock_conn, _ = _make_mock_conn(fetchone=(1,))
             mock_fn.return_value = mock_conn
@@ -492,7 +565,7 @@ class TestInsertPaymentSharedTransaction:
 
 
 # ---------------------------------------------------------------------------
-# Flask routes — POST /api/shared/payment
+# Flask routes â€” POST /api/shared/payment
 # ---------------------------------------------------------------------------
 
 class TestPostPayment:
@@ -502,7 +575,7 @@ class TestPostPayment:
                            content_type="application/json")
 
     def test_valid_payload_returns_201(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         with patch("db.get_connection") as mock_fn:
             mock_conn, _ = _make_mock_conn(fetchone=(1,))
             mock_fn.return_value = mock_conn
@@ -512,27 +585,27 @@ class TestPostPayment:
         assert resp.get_json()["ok"] is True
 
     def test_missing_entry_date_returns_400(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         resp = self._post(client, {"paid_by": "Aditi", "amount": 5000})
         assert resp.status_code == 400
 
     def test_invalid_paid_by_returns_400(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         resp = self._post(client, {"entry_date": "2026-06-01", "paid_by": "Bob", "amount": 5000})
         assert resp.status_code == 400
 
     def test_zero_amount_returns_400(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         resp = self._post(client, {"entry_date": "2026-06-01", "paid_by": "Aditi", "amount": 0})
         assert resp.status_code == 400
 
     def test_same_person_payer_payee_returns_400(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         resp = self._post(client, {"entry_date": "2026-06-01", "paid_by": "Aditi", "owed_by": "Aditi", "amount": 100})
         assert resp.status_code == 400
 
     def test_owed_by_auto_set(self, client, monkeypatch):
-        monkeypatch.delenv("REVIEW_TOKEN", raising=False)
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         captured = {}
         def fake_insert(conn, entry_date, paid_by, owed_by, amount, note):
             captured['owed_by'] = owed_by

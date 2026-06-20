@@ -282,3 +282,157 @@ class TestInsertDataFeedRow:
         args = mock_cursor.execute.call_args[0][1]
         assert "DMART" in args
         assert "May-2026" in args
+
+
+# ---------------------------------------------------------------------------
+# get_history_row
+# ---------------------------------------------------------------------------
+
+class TestGetHistoryRow:
+    def test_returns_dict_when_found(self):
+        mock_conn, _ = _make_mock_conn(fetchone=(5, "Grocery run", date(2026, 5, 1), "May-2026"))
+        result = db.get_history_row(mock_conn, 5)
+        assert result == {"id": 5, "entry_text": "Grocery run", "entry_date": date(2026, 5, 1), "time_period": "May-2026"}
+
+    def test_returns_none_when_not_found(self):
+        mock_conn, _ = _make_mock_conn(fetchone=None)
+        assert db.get_history_row(mock_conn, 999) is None
+
+
+# ---------------------------------------------------------------------------
+# get_settings / update_setting
+# ---------------------------------------------------------------------------
+
+class TestGetSettings:
+    def test_returns_typed_dict(self):
+        mock_conn, _ = _make_mock_conn(fetchall=[("default_share_ratio", "0.7"), ("default_annual_divisor", "12")])
+        result = db.get_settings(mock_conn)
+        assert result["default_share_ratio"] == 0.7
+        assert isinstance(result["default_share_ratio"], float)
+        assert result["default_annual_divisor"] == 12
+        assert isinstance(result["default_annual_divisor"], int)
+
+    def test_unknown_key_returned_as_string(self):
+        mock_conn, _ = _make_mock_conn(fetchall=[("some_flag", "yes")])
+        result = db.get_settings(mock_conn)
+        assert result["some_flag"] == "yes"
+
+    def test_empty_settings_returns_empty_dict(self):
+        mock_conn, _ = _make_mock_conn(fetchall=[])
+        assert db.get_settings(mock_conn) == {}
+
+
+class TestUpdateSetting:
+    def test_calls_execute_and_commit(self):
+        mock_conn, mock_cursor = _make_mock_conn()
+        db.update_setting(mock_conn, "default_share_ratio", "0.6")
+        mock_cursor.execute.assert_called_once()
+        mock_conn.commit.assert_called_once()
+
+    def test_sql_uses_on_conflict_upsert(self):
+        mock_conn, mock_cursor = _make_mock_conn()
+        db.update_setting(mock_conn, "default_share_ratio", "0.5")
+        sql = mock_cursor.execute.call_args[0][0]
+        assert "ON CONFLICT" in sql
+        assert "DO UPDATE" in sql
+
+
+# ---------------------------------------------------------------------------
+# get_history_summary
+# ---------------------------------------------------------------------------
+
+class TestGetHistorySummary:
+    def _row(self, category, total, count, period_total):
+        return (category, Decimal(str(total)), count, Decimal(str(period_total)))
+
+    def test_returns_top_categories_and_period_total(self):
+        rows = [self._row("Food", 5000, 10, 8000), self._row("Transport", 3000, 5, 8000)]
+        mock_conn, _ = _make_mock_conn(fetchall=rows)
+        result = db.get_history_summary(mock_conn, "May-2026")
+        assert result["period_total"] == 8000.0
+        assert len(result["top_categories"]) == 2
+        assert result["top_categories"][0]["category"] == "Food"
+        assert result["top_categories"][0]["total"] == 5000.0
+        assert result["top_categories"][0]["count"] == 10
+
+    def test_returns_empty_when_no_rows(self):
+        mock_conn, _ = _make_mock_conn(fetchall=[])
+        result = db.get_history_summary(mock_conn, "Jan-2020")
+        assert result["period_total"] == 0.0
+        assert result["top_categories"] == []
+
+    def test_with_prev_period_includes_prev_total(self):
+        # row shape with prev_period: (cat, cur_total, prev_total, count, period_total)
+        rows = [("Food", Decimal("5000"), Decimal("4000"), 10, Decimal("5000"))]
+        mock_conn, _ = _make_mock_conn(fetchall=rows)
+        result = db.get_history_summary(mock_conn, "May-2026", prev_period="Apr-2026")
+        cat = result["top_categories"][0]
+        assert cat["category"] == "Food"
+        assert cat["total"] == 5000.0
+        assert cat["prev_total"] == 4000.0
+        assert cat["count"] == 10
+
+    def test_with_prev_period_none_prev_total_is_none(self):
+        rows = [("Food", Decimal("5000"), None, 10, Decimal("5000"))]
+        mock_conn, _ = _make_mock_conn(fetchall=rows)
+        result = db.get_history_summary(mock_conn, "May-2026", prev_period="Apr-2026")
+        assert result["top_categories"][0]["prev_total"] is None
+
+
+# ---------------------------------------------------------------------------
+# create_user
+# ---------------------------------------------------------------------------
+
+class TestCreateUser:
+    def test_returns_new_id(self):
+        mock_conn, mock_cursor = _make_mock_conn(fetchone=(7,))
+        result = db.create_user(mock_conn, "aditi", "hashed-pw")
+        assert result == 7
+
+    def test_executes_insert_with_username_and_hash(self):
+        mock_conn, mock_cursor = _make_mock_conn(fetchone=(1,))
+        db.create_user(mock_conn, "aditi", "hashed-pw")
+        sql, params = mock_cursor.execute.call_args[0]
+        assert "INSERT INTO users" in sql
+        assert params[0] == "aditi"
+        assert params[1] == "hashed-pw"
+
+    def test_default_role_is_user(self):
+        mock_conn, mock_cursor = _make_mock_conn(fetchone=(1,))
+        db.create_user(mock_conn, "aditi", "hashed-pw")
+        _, params = mock_cursor.execute.call_args[0]
+        assert params[2] == "user"
+
+    def test_commits(self):
+        mock_conn, _ = _make_mock_conn(fetchone=(1,))
+        db.create_user(mock_conn, "aditi", "hashed-pw")
+        mock_conn.commit.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# get_user_by_username
+# ---------------------------------------------------------------------------
+
+class TestGetUserByUsername:
+    def test_returns_dict_when_found(self):
+        mock_conn, _ = _make_mock_conn(fetchone=(3, "aditi", "hashed-pw", "user"))
+        result = db.get_user_by_username(mock_conn, "aditi")
+        assert result == {"id": 3, "username": "aditi", "password_hash": "hashed-pw", "role": "user"}
+
+    def test_returns_none_when_not_found(self):
+        mock_conn, _ = _make_mock_conn(fetchone=None)
+        assert db.get_user_by_username(mock_conn, "nobody") is None
+
+
+# ---------------------------------------------------------------------------
+# username_exists
+# ---------------------------------------------------------------------------
+
+class TestUsernameExists:
+    def test_returns_true_when_row_found(self):
+        mock_conn, _ = _make_mock_conn(fetchone=(1,))
+        assert db.username_exists(mock_conn, "aditi") is True
+
+    def test_returns_false_when_not_found(self):
+        mock_conn, _ = _make_mock_conn(fetchone=None)
+        assert db.username_exists(mock_conn, "nobody") is False

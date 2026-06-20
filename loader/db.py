@@ -997,6 +997,53 @@ def generate_recurring_entries(conn, today: _date | None = None) -> list[dict]:
     return results
 
 
+def create_users_table(conn) -> None:
+    """Create the users table if it doesn't exist."""
+    with conn.cursor() as cur:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id            SERIAL PRIMARY KEY,
+                username      TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                role          VARCHAR(20) NOT NULL DEFAULT 'user',
+                created_at    TIMESTAMPTZ DEFAULT NOW()
+            );
+        """)
+    conn.commit()
+
+
+def create_user(conn, username: str, password_hash: str, role: str = "user") -> int:
+    """Insert a new user. Returns the new row id."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO users (username, password_hash, role) VALUES (%s, %s, %s) RETURNING id",
+            (username, password_hash, role),
+        )
+        row_id = cur.fetchone()[0]
+    conn.commit()
+    return row_id
+
+
+def get_user_by_username(conn, username: str) -> dict | None:
+    """Return {id, username, password_hash, role} or None if not found."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, username, password_hash, role FROM users WHERE username = %s",
+            (username,),
+        )
+        row = cur.fetchone()
+    if row is None:
+        return None
+    return {"id": row[0], "username": row[1], "password_hash": row[2], "role": row[3]}
+
+
+def username_exists(conn, username: str) -> bool:
+    """Return True if a user with this username already exists."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT 1 FROM users WHERE username = %s", (username,))
+        return cur.fetchone() is not None
+
+
 def log_email(conn, gmail_message_id: str, status: str, notes: str | None = None) -> None:
     """
     Upsert a row in processed_emails.

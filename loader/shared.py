@@ -9,17 +9,16 @@ Routes:
   PATCH /api/shared/<id>            — update paid_by, owed_by, or settled
   DELETE /api/shared/<id>           — remove row from mirror
 
-Auth: if REVIEW_TOKEN env var is set, all routes require a matching
-      ?token= query param or Authorization: Bearer <token> header.
+Auth: ADMIN_TOKEN grants full access. Valid user session (role='user') also grants access.
 """
 
 import os
 from datetime import date as _date
-from functools import wraps
 
 from flask import Blueprint, abort, jsonify, render_template, request
 
 import db
+from token_auth import require_any_auth as _require_token, require_user_page as _require_page
 
 shared_bp = Blueprint("shared", __name__)
 
@@ -31,25 +30,10 @@ def _current_fy_year() -> int:
     return today.year if today.month >= 4 else today.year - 1
 
 
-def _require_token(f):
-    @wraps(f)
-    def wrapper(*args, **kwargs):
-        token = os.environ.get("REVIEW_TOKEN", "")
-        if not token:
-            return f(*args, **kwargs)
-        provided = request.args.get("token") or (
-            request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
-        )
-        if provided != token:
-            abort(401)
-        return f(*args, **kwargs)
-    return wrapper
-
-
 @shared_bp.route("/shared")
-@_require_token
+@_require_page
 def shared_page():
-    token = os.environ.get("REVIEW_TOKEN", "")
+    token = os.environ.get("ADMIN_TOKEN", "")
     return render_template("shared.html", review_token=token)
 
 
