@@ -90,7 +90,7 @@ Analysed 1599 distinct entry/category combinations from `data_feed_history`. Add
 
 Phase 1: Fixed 12 rule conflicts — LIC subcategory → LIC; `reliance` narrowed to `reliance jio`; `HOTEL` rule removed (too broad). Rules for By2Coffee / J B Bekary / Akshaya Enterprises / Md Lalu / Sri Maruthi Dose Cam / Polar Bear / comdyna / Magic / blinkit / Village Hyper Bazaar reverted to match historical data.
 
-Phase 2: Rules confirmed correct; 24 DB entries corrected to match rules — Uber (13 rows: Cab/Metro → Auto), Zomato (5 rows: Eating Out → Ordering In), Magic Time Pass (6 rows: Eating Out → Ordering In). Removed 4 overly broad person-name rules (lakshmi, N VENKATESH, S P PRAKASH, PRABHAN). blinkit rule updated Misc/Groceries → Food/Groceries. ACT rules (ACT BROADBAND, ATRIA CONVERGENCE → Bills/ACT Internet) confirmed correct.
+Phase 2: Rules confirmed correct; 30 DB entries corrected to match rules — Uber (13 rows: Cab/Metro → Auto), Zomato (5 rows: Eating Out → Ordering In), Magic Time Pass (6 rows: Eating Out → Ordering In), blinkit (2 rows: Food → Misc), Village Hyper Bazaar (4 rows: Food → Misc). Removed 4 overly broad person-name rules (lakshmi, N VENKATESH, S P PRAKASH, PRABHAN). blinkit and Village Hyper Bazaar rules confirmed as Misc/Groceries. ACT rules (ACT BROADBAND, ATRIA CONVERGENCE → Bills/ACT Internet) confirmed correct.
 
 ---
 
