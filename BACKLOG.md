@@ -102,27 +102,17 @@ Replaced `REVIEW_TOKEN` with a two-role system. Admin (Akhil) registers at `/reg
 
 ## BL-16 — Navigation bar across all pages
 
-**Status:** Open
+**Status:** Complete (2026-06-20)
 
-Add a consistent nav bar to all four UI pages (`/review`, `/view`, `/shared`, `/recurring`) so users can move between pages without editing the URL.
-
-**Requirements:**
-- Admin pages (`/review`, `/view`, `/recurring`): show links to all four pages + logged-in username + logout button.
-- User page (`/shared`): show only the `/shared` link + logged-in username + logout button.
-- Nav links work for both session-based login (no token needed) and token-based access (`?token=...`).
-- Logout button hits `GET /logout` and redirects to `/login`.
-- Active page highlighted so user knows where they are.
-- Style consistent with the existing dark theme (`#0f1117` background, `#4f6ef7` accent).
-
-**See also:** BL-17 (show logged-in user + logout button — may be implemented together).
+Consistent nav bar added to all four UI pages. Admin pages show links to all four pages; `/shared` shows only the Shared link for user-role sessions. Token query string (`?token=`) is appended automatically for token-based access. Active page is highlighted. Logout button on every page with confirmation dialog.
 
 ---
 
 ## BL-17 — Show logged-in user and logout button on all pages
 
-**Status:** Open
+**Status:** Complete (2026-06-20)
 
-On every page (`/review`, `/view`, `/shared`, `/recurring`), show who is currently logged in and provide a logout button. For session-based users this is `session["username"]`; for token-only admin access show "Admin". Logout button hits `GET /logout`. Likely implemented together with BL-16.
+User chip (teal pill badge) showing `session["username"]` or "Guest" displayed in the header of all four pages. Logout button hits `GET /logout`. Implemented together with BL-16.
 
 ---
 

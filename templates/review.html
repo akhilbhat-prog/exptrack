@@ -198,19 +198,19 @@
   /* ── Buttons ── */
   .btn {
     display: inline-flex; align-items: center; gap: 6px;
-    padding: 7px 13px; border-radius: var(--radius-sm);
+    padding: 7px 14px; border-radius: var(--radius-sm);
     font-size: 13px; font-weight: 600; cursor: pointer;
     border: none; transition: var(--transition); font-family: var(--font);
   }
   .btn-primary { background: var(--teal); color: #0a0a10; }
-  .btn-primary:hover:not(:disabled) { background: #25c0ab; }
+  .btn-primary:hover:not(:disabled) { opacity: 0.88; }
   .btn-ghost {
     background: transparent; color: var(--muted);
     border: 1px solid var(--border2);
   }
   .btn-ghost:hover:not(:disabled) { background: var(--surface2); color: var(--text); }
-  .btn-danger { background: var(--red-dim); color: var(--red); border: 1px solid transparent; }
-  .btn-danger:hover:not(:disabled) { background: rgba(239,68,68,0.2); }
+  .btn-danger { background: var(--red-dim); color: var(--red); border: 1px solid var(--red); }
+  .btn-danger:hover:not(:disabled) { background: var(--red); color: #fff; }
   .btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
   /* ── Table ── */
