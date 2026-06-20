@@ -120,9 +120,9 @@ User chip (teal pill badge) showing `session["username"]` or "Guest" displayed i
 
 ## BL-14 — Rename the project
 
-**Status:** Open
+**Status:** Complete (2026-06-20)
 
-The name `hdfc-statement-loader` no longer reflects the scope of the project (it now includes categorisation, review UI, history editor, shared expense tracking, etc.). Pick a new name and update: repo name, Cloud Run service, Artifact Registry path, Cloud Scheduler job, `deploy.yml`, `CLAUDE.md`, `README.md`, and any other references.
+Renamed to **ExpTrack**. Updated: UI page titles and logo branding (all 4 templates: FinTrack → ExpTrack), `deploy.yml` (service `exptrack`, image `exptrack:latest`), `CLAUDE.md`, `README.md`. GCP project ID (`hdfc-statement-loader`) is immutable and stays unchanged. Remaining manual GCP steps: rename GitHub repo, update Cloud Scheduler job target URL to new service URL, delete old Cloud Run service `hdfc-statement-loader` after new `exptrack` service is confirmed live.
 
 ---
 

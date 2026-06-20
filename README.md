@@ -155,7 +155,7 @@ cd loader && PORT=5000 python app.py
 ## Docker
 
 ```bash
-docker build -t hdfc-statement-loader .
+docker build -t exptrack .
 
 docker run --rm \
   -e GMAIL_CLIENT_ID="..." \
@@ -163,7 +163,7 @@ docker run --rm \
   -e GMAIL_REFRESH_TOKEN="..." \
   -e DATABASE_URL="postgresql://..." \
   -e NOTIFICATION_EMAIL="you@example.com" \
-  hdfc-statement-loader
+  exptrack
 ```
 
 ---
@@ -175,11 +175,11 @@ docker run --rm \
 gcloud config set project hdfc-statement-loader
 
 # Build and push image
-IMAGE="asia-south1-docker.pkg.dev/hdfc-statement-loader/hdfc-loader/hdfc-statement-loader:latest"
+IMAGE="asia-south1-docker.pkg.dev/hdfc-statement-loader/hdfc-loader/exptrack:latest"
 gcloud builds submit --tag "$IMAGE"
 
 # Deploy
-gcloud run deploy hdfc-statement-loader \
+gcloud run deploy exptrack \
   --image "$IMAGE" \
   --region asia-south1 \
   --no-allow-unauthenticated \
@@ -199,9 +199,9 @@ Deployments happen automatically via GitHub Actions on every push to `main` — 
 
 ```bash
 SA="hdfc-loader-invoker@hdfc-statement-loader.iam.gserviceaccount.com"
-SERVICE_URL="https://hdfc-statement-loader-<hash>.asia-south1.run.app"
+SERVICE_URL="https://exptrack-<hash>.asia-south1.run.app"
 
-gcloud scheduler jobs create http hdfc-statement-loader-daily \
+gcloud scheduler jobs create http exptrack-daily \
   --location asia-south1 \
   --schedule "0 21 * * *" \
   --time-zone "Asia/Kolkata" \
@@ -235,7 +235,7 @@ Response:
 ## Project structure
 
 ```
-hdfc-statement-loader/
+exptrack/
 ├── loader/
 │   ├── app.py                # Flask entry point; registers all blueprints
 │   ├── gmail_poller.py       # Gmail polling, email parsing, summary email
@@ -270,7 +270,7 @@ hdfc-statement-loader/
 
 ```bash
 gcloud logging read \
-  'resource.type="cloud_run_revision" resource.labels.service_name="hdfc-statement-loader"' \
+  'resource.type="cloud_run_revision" resource.labels.service_name="exptrack"' \
   --limit 200 \
   --format "value(textPayload)" \
   --freshness 1d

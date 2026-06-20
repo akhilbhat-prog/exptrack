@@ -47,15 +47,15 @@ jobs:
         with:
           context: .
           push: true
-          tags: asia-south1-docker.pkg.dev/hdfc-statement-loader/hdfc-loader/hdfc-statement-loader:latest
+          tags: asia-south1-docker.pkg.dev/hdfc-statement-loader/hdfc-loader/exptrack:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - uses: google-github-actions/deploy-cloudrun@v2
         with:
-          service: hdfc-statement-loader
+          service: exptrack
           region: asia-south1
-          image: asia-south1-docker.pkg.dev/hdfc-statement-loader/hdfc-loader/hdfc-statement-loader:latest
+          image: asia-south1-docker.pkg.dev/hdfc-statement-loader/hdfc-loader/exptrack:latest
           flags: >-
             --allow-unauthenticated
             --update-secrets=SECRET_KEY=flask-secret-key:latest,INVITE_CODE=invite-code:latest,ADMIN_TOKEN=admin-token:latest

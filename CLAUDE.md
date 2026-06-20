@@ -1,4 +1,4 @@
-# CLAUDE.md — hdfc-statement-loader
+# CLAUDE.md — ExpTrack
 
 Onboarding guide for AI assistants. Read this at the start of every session.
 
@@ -13,7 +13,7 @@ A production financial pipeline that polls HDFC Bank transaction alert emails da
 ## Directory Structure
 
 ```
-hdfc-statement-loader/
+exptrack/
 ├── loader/                         # Gmail polling + email parsing pipeline + web UIs
 │   ├── app.py                      # ENTRY POINT: Flask app, Cloud Run trigger, blueprint registration
 │   ├── gmail_poller.py             # Gmail polling logic + email parsing (CLI runner)
@@ -389,8 +389,8 @@ Workflow: `.github/workflows/deploy.yml` — triggered on push to `main`.
 **Job 2 — `deploy`** (runs only if `test` passes):
 1. Authenticate to GCP via Workload Identity Federation (OIDC)
 2. Build Docker image with buildx cache
-3. Push to Artifact Registry: `asia-south1-docker.pkg.dev/hdfc-statement-loader/hdfc-loader/hdfc-statement-loader:latest`
-4. Deploy to Cloud Run service `hdfc-statement-loader` (region: `asia-south1`)
+3. Push to Artifact Registry: `asia-south1-docker.pkg.dev/hdfc-statement-loader/hdfc-loader/exptrack:latest`
+4. Deploy to Cloud Run service `exptrack` (region: `asia-south1`)
 
 **Required GitHub secrets:** `WIF_PROVIDER`, `WIF_SERVICE_ACCOUNT`
 
@@ -399,9 +399,9 @@ Workflow: `.github/workflows/deploy.yml` — triggered on push to `main`.
 ## Deployment References
 
 - **GCP project:** `hdfc-statement-loader`
-- **Cloud Run service:** `hdfc-statement-loader` (region: `asia-south1`)
-- **Artifact Registry:** `asia-south1-docker.pkg.dev/hdfc-statement-loader/hdfc-loader/`
-- **Cloud Scheduler job:** `hdfc-statement-loader-daily` — cron `0 21 * * *` (UTC) = 9 PM IST daily
+- **Cloud Run service:** `exptrack` (region: `asia-south1`)
+- **Artifact Registry:** `asia-south1-docker.pkg.dev/hdfc-statement-loader/hdfc-loader/exptrack:latest`
+- **Cloud Scheduler job:** `exptrack-daily` — cron `0 21 * * *` (UTC) = 9 PM IST daily
 - **Database:** Neon managed PostgreSQL, database name `financial_db`
 
 ---
