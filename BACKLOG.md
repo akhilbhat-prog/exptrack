@@ -144,9 +144,9 @@ GCS bucket `hdfc-statement-loader-mlruns` stores ML model artifacts. Bucket name
 
 ## BL-18 — Migrate GCP project to new project ID
 
-**Status:** Open
+**Status:** Complete (2026-06-20)
 
-GCP project ID `hdfc-statement-loader` is immutable — it cannot be renamed in place. Migration requires: create a new GCP project (e.g. `exptrack`), recreate all resources (Cloud Run service, Artifact Registry repository, Cloud Scheduler job, Secret Manager secrets, service accounts, WIF pool/provider, IAM bindings), update `deploy.yml` image path and GCP project references, migrate the Neon DB connection string secret, then decommission the old project. This is a significant effort and carries risk — plan carefully and do a dry run first.
+Migrated from `hdfc-statement-loader` to `exptrack-privet-drive` (ID `exptrack` was taken). All resources recreated: Artifact Registry (`exptrack` repo), Secret Manager (7 secrets), service accounts (`github-actions`, default compute), Workload Identity Federation (pool + provider + IAM binding for `akhilbhat-prog/exptrack`), Cloud Run service `exptrack`, Cloud Scheduler job `exptrack-daily`. `deploy.yml` updated with new project and registry paths. Several issues resolved during migration: WIF attribute condition required, `iam.serviceaccounts.actAs` permission needed, secrets had trailing newlines from pipe-copy (fixed with `echo -n` / `tr -d '\n\r'`), `ADMIN_TOKEN` comparison now strips whitespace in `token_auth.py`. Cloud Scheduler force run confirmed Success. Phase 11 (decommission old project) deferred until after one successful nightly run.
 
 ---
 
