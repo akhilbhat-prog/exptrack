@@ -152,6 +152,6 @@ Migrated from `hdfc-statement-loader` to `exptrack-privet-drive` (ID `exptrack` 
 
 ## BL-15 — Context management strategy
 
-**Status:** Open
+**Status:** Complete (2026-06-20)
 
-After BL-7 through BL-14 are complete, evaluate how to better manage AI assistant context across sessions: CLAUDE.md structure, memory file organisation, session handoff patterns. Depends on BL-8 (docs updated) being done first.
+Audited CLAUDE.md and all memory files. Fixed: added `users` table to DB schema, added `GCS_MODEL_BUCKET` to Loader env vars table, updated categorizer bucket example from `hdfc-statement-loader-mlruns` to `exptrack-mlruns`. Updated 3 stale memory files: `reference_cloud_run_url.md` (new service URL), `project_cicd_backlog.md` (new project/repo/registry references), `project_test_backlog.md` (450 tests, deferred list trimmed). Updated `MEMORY.md` index hooks.
