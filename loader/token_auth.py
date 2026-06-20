@@ -24,8 +24,8 @@ def _provided_token() -> str:
 
 
 def _is_valid_admin_token() -> bool:
-    admin = os.environ.get("ADMIN_TOKEN", "")
-    return bool(admin and _provided_token() == admin)
+    admin = os.environ.get("ADMIN_TOKEN", "").strip()
+    return bool(admin and _provided_token().strip() == admin)
 
 
 def _is_valid_user_session() -> bool:
