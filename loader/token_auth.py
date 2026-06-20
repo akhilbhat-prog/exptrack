@@ -32,11 +32,15 @@ def _is_valid_user_session() -> bool:
     return session.get("role") in ("user", "admin")
 
 
+def _is_valid_admin_session() -> bool:
+    return session.get("role") == "admin"
+
+
 def require_admin(f):
-    """Allow if ADMIN_TOKEN matches. Dev mode passes all."""
+    """Allow if ADMIN_TOKEN matches OR session role is admin. Dev mode passes all."""
     @wraps(f)
     def wrapper(*args, **kwargs):
-        if _auth_disabled() or _is_valid_admin_token():
+        if _auth_disabled() or _is_valid_admin_token() or _is_valid_admin_session():
             return f(*args, **kwargs)
         abort(401)
     return wrapper

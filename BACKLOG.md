@@ -94,20 +94,9 @@ Find `data_feed_history` entries whose category/subcategory/type differs from wh
 
 ## BL-13 — Role-based auth (admin / user)
 
-**Status:** Local testing pending — cloud deployment not yet done
+**Status:** Complete (2026-06-20)
 
-Replaced `REVIEW_TOKEN` with a two-role system. Admin (Akhil) uses `ADMIN_TOKEN` for full access to `/review`, `/view`, `/recurring`, and all APIs. User (Aditi) registers once at `/register` with an `INVITE_CODE`, logs in at `/login`, and gets a 30-day signed session cookie granting access to `/shared` only. The `/` route now acts as a smart redirect (session → `/shared`, admin token → `/view`, no auth → `/login`). The pipeline moved from `GET /` to `GET /trigger` (protected by `require_admin`) so visiting the homepage no longer triggers Gmail polling.
-
-New files: `loader/auth_routes.py`, `templates/login.html`, `templates/register.html`.
-New DB table: `users` (id, username, password_hash, role, created_at).
-New env vars: `ADMIN_TOKEN`, `INVITE_CODE`, `SECRET_KEY`.
-
-**Remaining before complete:**
-- Local testing (register, login, session, redirect, blocked routes)
-- Create GCP Secret Manager secrets: `flask-secret-key`, `invite-code`
-- Push to main → CI deploys with new `--update-secrets` flags in deploy.yml
-- Update Cloud Scheduler job URL from `/` to `/trigger?token=<ADMIN_TOKEN>`
-- Cloud smoke test: register as Aditi, confirm access to `/shared`, confirm blocked from `/view`
+Replaced `REVIEW_TOKEN` with a two-role system. Admin (Akhil) registers at `/register` with `INVITE_CODE` and role promoted to `admin` in DB; logs in at `/login` and gets full session access to all pages without needing `?token=`. User (Aditi) logs in and gets access to `/shared` only. The `/` route acts as a smart redirect. Pipeline moved from `GET /` to `GET /trigger`. `require_admin` accepts both `ADMIN_TOKEN` Bearer token and `role=admin` session. GCP secrets created: `flask-secret-key`, `invite-code`, `admin-token`. Cloud Scheduler updated to `/trigger?token=...`.
 
 ---
 
@@ -118,11 +107,22 @@ New env vars: `ADMIN_TOKEN`, `INVITE_CODE`, `SECRET_KEY`.
 Add a consistent nav bar to all four UI pages (`/review`, `/view`, `/shared`, `/recurring`) so users can move between pages without editing the URL.
 
 **Requirements:**
-- Admin pages (`/review`, `/view`, `/recurring`): show links to all four pages + a logout button. Pass the admin token through so nav links work (e.g. `href="/view?token=..."`). Token is already available in each template as `review_token`.
-- User page (`/shared`): show only the `/shared` link (no links to admin pages) + a logout button.
+- Admin pages (`/review`, `/view`, `/recurring`): show links to all four pages + logged-in username + logout button.
+- User page (`/shared`): show only the `/shared` link + logged-in username + logout button.
+- Nav links work for both session-based login (no token needed) and token-based access (`?token=...`).
 - Logout button hits `GET /logout` and redirects to `/login`.
 - Active page highlighted so user knows where they are.
 - Style consistent with the existing dark theme (`#0f1117` background, `#4f6ef7` accent).
+
+**See also:** BL-17 (show logged-in user + logout button — may be implemented together).
+
+---
+
+## BL-17 — Show logged-in user and logout button on all pages
+
+**Status:** Open
+
+On every page (`/review`, `/view`, `/shared`, `/recurring`), show who is currently logged in and provide a logout button. For session-based users this is `session["username"]`; for token-only admin access show "Admin". Logout button hits `GET /logout`. Likely implemented together with BL-16.
 
 ---
 

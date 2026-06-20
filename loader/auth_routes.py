@@ -50,6 +50,8 @@ def login_page():
     session["user_id"] = user["id"]
     session["role"] = user["role"]
     session["username"] = user["username"]
+    if user["role"] == "admin":
+        return redirect(url_for("history.view_page"))
     return redirect(url_for("shared.shared_page"))
 
 
