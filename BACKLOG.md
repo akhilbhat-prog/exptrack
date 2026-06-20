@@ -122,7 +122,23 @@ User chip (teal pill badge) showing `session["username"]` or "Guest" displayed i
 
 **Status:** Complete (2026-06-20)
 
-Renamed to **ExpTrack**. Updated: UI page titles and logo branding (all 4 templates: FinTrack → ExpTrack), `deploy.yml` (service `exptrack`, image `exptrack:latest`), `CLAUDE.md`, `README.md`. GCP project ID (`hdfc-statement-loader`) is immutable and stays unchanged. Remaining manual GCP steps: rename GitHub repo, update Cloud Scheduler job target URL to new service URL, delete old Cloud Run service `hdfc-statement-loader` after new `exptrack` service is confirmed live.
+Renamed to **ExpTrack**. Updated: UI page titles and logo branding (all 4 templates: FinTrack → ExpTrack), `deploy.yml` (service `exptrack`, image `exptrack:latest`), `CLAUDE.md`, `README.md`. GCP project ID (`hdfc-statement-loader`) is immutable and stays unchanged. All GCP steps complete: GitHub repo renamed to `exptrack`, WIF IAM binding updated to `akhilbhat-prog/exptrack`, Cloud Scheduler job updated to point to `exptrack` service URL, old `hdfc-statement-loader` Cloud Run service deleted.
+
+---
+
+## BL-19 — Rename Cloud Scheduler job to exptrack-daily
+
+**Status:** Open
+
+Job currently named `hdfc-statement-loader-daily` but points to the `exptrack` service. Rename requires delete + recreate: note current settings (frequency `0 21 * * *`, timezone Asia/Calcutta, URL `https://exptrack-1527779814.asia-south1.run.app/trigger?token=admin-tok`), delete the old job, create new job named `exptrack-daily` with the same settings.
+
+---
+
+## BL-18 — Migrate GCP project to new project ID
+
+**Status:** Open
+
+GCP project ID `hdfc-statement-loader` is immutable — it cannot be renamed in place. Migration requires: create a new GCP project (e.g. `exptrack`), recreate all resources (Cloud Run service, Artifact Registry repository, Cloud Scheduler job, Secret Manager secrets, service accounts, WIF pool/provider, IAM bindings), update `deploy.yml` image path and GCP project references, migrate the Neon DB connection string secret, then decommission the old project. This is a significant effort and carries risk — plan carefully and do a dry run first.
 
 ---
 
