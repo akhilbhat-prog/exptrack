@@ -47,7 +47,7 @@ jobs:
         with:
           context: .
           push: true
-          tags: asia-south1-docker.pkg.dev/hdfc-statement-loader/hdfc-loader/exptrack:latest
+          tags: asia-south1-docker.pkg.dev/exptrack-privet-drive/exptrack/exptrack:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -55,7 +55,7 @@ jobs:
         with:
           service: exptrack
           region: asia-south1
-          image: asia-south1-docker.pkg.dev/hdfc-statement-loader/hdfc-loader/exptrack:latest
+          image: asia-south1-docker.pkg.dev/exptrack-privet-drive/exptrack/exptrack:latest
           flags: >-
             --allow-unauthenticated
             --update-secrets=SECRET_KEY=flask-secret-key:latest,INVITE_CODE=invite-code:latest,ADMIN_TOKEN=admin-token:latest,DATABASE_URL=neon-database-url:latest,GMAIL_CLIENT_ID=gmail-client-id:latest,GMAIL_CLIENT_SECRET=gmail-client-secret:latest,GMAIL_REFRESH_TOKEN=gmail-refresh-token:latest

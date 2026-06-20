@@ -398,9 +398,9 @@ Workflow: `.github/workflows/deploy.yml` — triggered on push to `main`.
 
 ## Deployment References
 
-- **GCP project:** `hdfc-statement-loader`
+- **GCP project:** `exptrack-privet-drive`
 - **Cloud Run service:** `exptrack` (region: `asia-south1`)
-- **Artifact Registry:** `asia-south1-docker.pkg.dev/hdfc-statement-loader/hdfc-loader/exptrack:latest`
+- **Artifact Registry:** `asia-south1-docker.pkg.dev/exptrack-privet-drive/exptrack/exptrack:latest`
 - **Cloud Scheduler job:** `exptrack-daily` — cron `0 21 * * *` (UTC) = 9 PM IST daily
 - **Database:** Neon managed PostgreSQL, database name `financial_db`
 
