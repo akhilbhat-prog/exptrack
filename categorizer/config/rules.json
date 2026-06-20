@@ -49,7 +49,7 @@
   },
   "AKSHAYA ENTERPRISES": {
     "category": "Food",
-    "subcategory": "Ordering In",
+    "subcategory": "Eating Out",
     "type": "expense",
     "confidence": 0.9
   },
@@ -85,7 +85,7 @@
   },
   "BY 2 COFFEE": {
     "category": "Food",
-    "subcategory": "Ordering In",
+    "subcategory": "Eating Out",
     "type": "expense",
     "confidence": 0.9
   },
@@ -133,7 +133,7 @@
   },
   "comdyna": {
     "category": "Food",
-    "subcategory": "Ordering In",
+    "subcategory": "Eating Out",
     "type": "expense",
     "confidence": 0.9
   },
@@ -193,7 +193,7 @@
   },
   "J B BEKARY": {
     "category": "Food",
-    "subcategory": "Ordering In",
+    "subcategory": "Eating Out",
     "type": "expense",
     "confidence": 0.9
   },
@@ -221,12 +221,6 @@
     "type": "expense",
     "confidence": 0.9
   },
-  "lakshmi": {
-    "category": "Personal Purchase",
-    "subcategory": "Grooming",
-    "type": "expense",
-    "confidence": 0.9
-  },
   "LIC OF INDIA": {
     "category": "Insurance",
     "subcategory": "LIC",
@@ -235,7 +229,7 @@
   },
   "magic": {
     "category": "Food",
-    "subcategory": "Eating Out",
+    "subcategory": "Ordering In",
     "type": "expense",
     "confidence": 0.9
   },
@@ -259,7 +253,7 @@
   },
   "md lalu": {
     "category": "Food",
-    "subcategory": "Ordering In",
+    "subcategory": "Eating Out",
     "type": "expense",
     "confidence": 0.9
   },
@@ -272,12 +266,6 @@
   "MYNTRA": {
     "category": "Personal Purchase",
     "subcategory": "Clothes",
-    "type": "expense",
-    "confidence": 0.9
-  },
-  "N VENKATESH": {
-    "category": "Personal Purchase",
-    "subcategory": "Clothes Press",
     "type": "expense",
     "confidence": 0.9
   },
@@ -311,12 +299,6 @@
     "type": "expense",
     "confidence": 0.9
   },
-  "PRABHAN": {
-    "category": "Food",
-    "subcategory": "Eating Out",
-    "type": "expense",
-    "confidence": 0.9
-  },
   "PREPAIDRECHARGE": {
     "category": "Bills",
     "subcategory": "Airtel",
@@ -325,7 +307,7 @@
   },
   "POLAR BEAR": {
     "category": "Food",
-    "subcategory": "Ordering In",
+    "subcategory": "Eating Out",
     "type": "expense",
     "confidence": 0.9
   },
@@ -377,12 +359,6 @@
     "type": "expense",
     "confidence": 0.9
   },
-  "S P PRAKASH": {
-    "category": "Food",
-    "subcategory": "Eating Out",
-    "type": "expense",
-    "confidence": 0.9
-  },
   "SRI MARUTHI BHEL SAG": {
     "category": "Food",
     "subcategory": "Eating Out",
@@ -391,7 +367,7 @@
   },
   "SRI MARUTHI DOSE CAM": {
     "category": "Food",
-    "subcategory": "Ordering In",
+    "subcategory": "Eating Out",
     "type": "expense",
     "confidence": 0.9
   },
@@ -480,7 +456,7 @@
     "confidence": 0.9
   },
   "VILLAGE HYPER BAZAAR": {
-    "category": "Food",
+    "category": "Misc",
     "subcategory": "Groceries",
     "type": "expense",
     "confidence": 0.9

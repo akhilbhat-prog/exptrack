@@ -86,9 +86,11 @@ Analysed 1599 distinct entry/category combinations from `data_feed_history`. Add
 
 ## BL-12 — Review entries conflicting with rules
 
-**Status:** Complete (2026-06-20)
+**Status:** Complete (2026-06-20, extended 2026-06-20)
 
-Fixed 12 rule conflicts: Szechuan Dragon / By2Coffee / J B Bekary / Akshaya Enterprises / Md Lalu / Sri Maruthi Dose Cam / Polar Bear / comdyna all changed Eating Out → Ordering In; Magic changed Ordering In → Eating Out; blinkit and Village Hyper Bazaar changed category Misc → Food; LIC OF India subcategory changed Insurance → LIC; `reliance` keyword narrowed to `reliance jio` to stop false matches on Reliance Brands; `HOTEL` rule removed (too broad — was matching hotel stays as Eating Out).
+Phase 1: Fixed 12 rule conflicts — LIC subcategory → LIC; `reliance` narrowed to `reliance jio`; `HOTEL` rule removed (too broad). Rules for By2Coffee / J B Bekary / Akshaya Enterprises / Md Lalu / Sri Maruthi Dose Cam / Polar Bear / comdyna / Magic / blinkit / Village Hyper Bazaar reverted to match historical data.
+
+Phase 2: Rules confirmed correct; 24 DB entries corrected to match rules — Uber (13 rows: Cab/Metro → Auto), Zomato (5 rows: Eating Out → Ordering In), Magic Time Pass (6 rows: Eating Out → Ordering In). Removed 4 overly broad person-name rules (lakshmi, N VENKATESH, S P PRAKASH, PRABHAN). blinkit rule updated Misc/Groceries → Food/Groceries. ACT rules (ACT BROADBAND, ATRIA CONVERGENCE → Bills/ACT Internet) confirmed correct.
 
 ---
 
