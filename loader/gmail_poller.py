@@ -289,7 +289,10 @@ def send_summary_email(service, summary: dict, test_output: str, categorization_
     if skipped_details:
         lines += ["", f"Skipped Messages ({len(skipped_details)})", "-" * 40]
         for i, entry in enumerate(skipped_details, 1):
-            lines.append(f"{i}. id={entry['id']}  {entry['reason']}")
+            detail = ""
+            if entry.get("merchant"):
+                detail = f"  ({entry['merchant']}  Rs. {entry['amount']:,.2f}  {entry['txn_type']})"
+            lines.append(f"{i}. id={entry['id']}  {entry['reason']}{detail}")
 
     lines += [
         "",
@@ -356,7 +359,13 @@ def main(service) -> dict:
                 logger.warning(
                     "Message %s already in processed_emails — skipping.", gmail_message_id
                 )
-                skipped_details.append({"id": gmail_message_id, "reason": "already processed"})
+                entry = {"id": gmail_message_id, "reason": "already processed"}
+                txn = db.get_transaction_by_message_id(conn, gmail_message_id)
+                if txn:
+                    entry["merchant"] = txn["merchant"]
+                    entry["amount"]   = txn["amount"]
+                    entry["txn_type"] = txn["type"]
+                skipped_details.append(entry)
                 skipped += 1
                 continue
 

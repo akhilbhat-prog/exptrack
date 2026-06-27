@@ -259,7 +259,8 @@ class TestSendSummaryEmail:
         svc = self._make_service()
         summary = self._make_summary(skipped=2)
         summary["skipped_details"] = [
-            {"id": "ghi789", "reason": "already processed"},
+            {"id": "ghi789", "reason": "already processed",
+             "merchant": "Swiggy", "amount": 350.0, "txn_type": "debit"},
             {"id": "jkl012", "reason": "duplicate of mno345"},
         ]
         send_summary_email(svc, summary, "(no output)")
@@ -267,6 +268,9 @@ class TestSendSummaryEmail:
         assert "Skipped Messages (2)" in body
         assert "id=ghi789" in body
         assert "already processed" in body
+        assert "Swiggy" in body
+        assert "350.00" in body
+        assert "debit" in body
         assert "id=jkl012" in body
         assert "duplicate of mno345" in body
 

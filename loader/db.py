@@ -81,6 +81,19 @@ def is_already_processed(conn, gmail_message_id: str) -> bool:
         return cur.fetchone() is not None
 
 
+def get_transaction_by_message_id(conn, gmail_message_id: str) -> dict | None:
+    """Return {merchant, amount, type, date} for a message ID, or None if not found."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT merchant, amount, type, date FROM transactions WHERE gmail_message_id = %s",
+            (gmail_message_id,),
+        )
+        row = cur.fetchone()
+    if row is None:
+        return None
+    return {"merchant": row[0], "amount": row[1], "type": row[2], "date": row[3]}
+
+
 def insert_transaction(conn, transaction_dict: dict, gmail_message_id: str) -> None:
     """
     Insert a parsed transaction.  Silently ignores duplicate gmail_message_id

@@ -111,6 +111,22 @@ class TestIsAlreadyProcessed:
 
 
 # ---------------------------------------------------------------------------
+# get_transaction_by_message_id
+# ---------------------------------------------------------------------------
+
+class TestGetTransactionByMessageId:
+    def test_found_returns_dict(self):
+        ts = datetime(2026, 6, 27, 10, 0, 0, tzinfo=timezone.utc)
+        mock_conn, _ = _make_mock_conn(fetchone=("Swiggy", Decimal("350.00"), "debit", ts))
+        result = db.get_transaction_by_message_id(mock_conn, "msg123")
+        assert result == {"merchant": "Swiggy", "amount": Decimal("350.00"), "type": "debit", "date": ts}
+
+    def test_not_found_returns_none(self):
+        mock_conn, _ = _make_mock_conn(fetchone=None)
+        assert db.get_transaction_by_message_id(mock_conn, "missing") is None
+
+
+# ---------------------------------------------------------------------------
 # insert_transaction
 # ---------------------------------------------------------------------------
 
