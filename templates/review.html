@@ -362,6 +362,21 @@
   .sidebar-toggle:hover { color: var(--text); }
   .sidebar-toggle.active { color: var(--teal); }
 
+  /* ── Run pipeline section ── */
+  .sidebar-run {
+    padding: 10px 14px;
+    border-top: 1px solid var(--border);
+    background: var(--surface2);
+  }
+  .pipeline-result {
+    margin-top: 7px; font-size: 11px; font-weight: 600;
+    padding: 5px 8px; border-radius: var(--radius-sm);
+    line-height: 1.4;
+  }
+  .pipeline-ok    { background: var(--green-dim); color: var(--green); }
+  .pipeline-skip  { background: var(--yellow-dim); color: var(--yellow); }
+  .pipeline-error { background: var(--red-dim); color: var(--red); }
+
   /* ── Empty / loading states ── */
   .empty-state { text-align: center; padding: 48px 20px; color: var(--muted); font-size: 13px; }
   .empty-state .icon { font-size: 36px; margin-bottom: 10px; opacity: 0.35; display: block; }
@@ -442,7 +457,7 @@
       {% set tq = '' if session.get('role') else ('?token=' + review_token if review_token else '') %}
       <nav style="display:flex;gap:6px;align-items:center">
         <a href="/review{{ tq }}" class="nav-link nav-link--active">Review</a>
-        <a href="/view{{ tq }}" class="nav-link">History</a>
+        <a href="/view{{ tq }}" class="nav-link">View</a>
         <a href="/shared{{ tq }}" class="nav-link">Shared</a>
         <a href="/recurring{{ tq }}" class="nav-link">Recurring</a>
       </nav>
@@ -467,6 +482,10 @@
         <button class="sidebar-toggle" id="btnShowAll" onclick="toggleShowAll()">Show all</button>
       </div>
       <div id="batchList"><div class="loading-state">Loading…</div></div>
+      <div class="sidebar-run">
+        <button class="btn btn-ghost" id="btnRunPipeline" onclick="runPipeline()" style="width:100%;font-size:12px;justify-content:center">▶ Run Pipeline</button>
+        <div class="pipeline-result" id="pipelineResult" style="display:none"></div>
+      </div>
     </aside>
 
     <!-- Main panel -->
@@ -1416,6 +1435,35 @@ async function deleteBatch() {
     btn.disabled = false;
     btn.textContent = '🗑 Delete Batch';
     showToast(`Error: ${e.message}`, 'error');
+  }
+}
+
+/* ── Run pipeline ── */
+async function runPipeline() {
+  const btn    = document.getElementById('btnRunPipeline');
+  const result = document.getElementById('pipelineResult');
+  btn.disabled = true;
+  btn.textContent = '⏳ Running…';
+  result.style.display = 'none';
+  try {
+    const resp = await apiCall('/trigger', { method: 'POST' });
+    const data = await resp.json();
+    if (data.status === 'skipped') {
+      result.textContent = 'Already running.';
+      result.className = 'pipeline-result pipeline-skip';
+    } else {
+      result.textContent = `${data.processed} processed · ${data.skipped} skipped · ${data.failed} failed`;
+      result.className = 'pipeline-result pipeline-ok';
+    }
+    result.style.display = '';
+    await loadBatches();
+  } catch (e) {
+    result.textContent = 'Pipeline failed — check logs.';
+    result.className = 'pipeline-result pipeline-error';
+    result.style.display = '';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '▶ Run Pipeline';
   }
 }
 

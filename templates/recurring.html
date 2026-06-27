@@ -294,7 +294,7 @@
       {% set tq = '' if session.get('role') else ('?token=' + review_token if review_token else '') %}
       <nav style="display:flex;gap:6px;align-items:center">
         <a href="/review{{ tq }}" class="nav-link">Review</a>
-        <a href="/view{{ tq }}" class="nav-link">History</a>
+        <a href="/view{{ tq }}" class="nav-link">View</a>
         <a href="/shared{{ tq }}" class="nav-link">Shared</a>
         <a href="/recurring{{ tq }}" class="nav-link nav-link--active">Recurring</a>
       </nav>
