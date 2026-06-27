@@ -9,6 +9,7 @@ For local development:
 """
 
 import os
+import threading
 
 from dotenv import load_dotenv
 from datetime import date as _date, timedelta
@@ -63,6 +64,8 @@ try:
 except Exception as _e:
     _logging.getLogger(__name__).warning("DB table setup skipped at startup: %s", _e)
 
+_trigger_lock = threading.Lock()
+
 
 @app.errorhandler(HTTPException)
 def handle_http_exception(e):
@@ -81,6 +84,17 @@ def index():
 @app.route("/trigger", methods=["GET", "POST"])
 @require_admin
 def trigger():
+    if not _trigger_lock.acquire(blocking=False):
+        _logging.getLogger(__name__).warning("Duplicate /trigger request — pipeline already running, ignoring.")
+        return jsonify({"status": "skipped", "message": "Pipeline already running."}), 200
+
+    try:
+        return _run_trigger()
+    finally:
+        _trigger_lock.release()
+
+
+def _run_trigger():
     service = _build_gmail_service()
     summary = main(service)
     cat_status = run_categorization()
