@@ -1,4 +1,4 @@
-# HDFC Statement Loader
+# ExpTrack
 
 A personal financial pipeline that polls HDFC Bank transaction alert emails via Gmail, parses and stores them in a PostgreSQL database, categorises them with a rules → memory → ML pipeline, and surfaces them through four web UIs for review, editing, shared expense tracking, and recurring transaction management. Runs on Google Cloud Run, triggered daily by Cloud Scheduler.
 
@@ -109,7 +109,7 @@ A personal financial pipeline that polls HDFC Bank transaction alert emails via 
 | `POLL_DAYS` | No | Days back to search (default: `1`) |
 | `AFTER_DATE` | No | Override `POLL_DAYS` with a `YYYY/MM/DD` date |
 | `MAX_MESSAGES` | No | Cap on messages processed (default: no limit) |
-| `REVIEW_TOKEN` | No | If set, all routes require `?token=` or `Authorization: Bearer` |
+| `ADMIN_TOKEN` | No | If set, admin routes require `?token=` or `Authorization: Bearer` |
 | `PORT` | No | Flask server port (default: `8080`) |
 
 ### Categoriser
@@ -170,52 +170,18 @@ docker run --rm \
 
 ## Deployment (Google Cloud Run)
 
-```bash
-# Set project
-gcloud config set project hdfc-statement-loader
+Deployments are fully automated via GitHub Actions on every push to `main` (test → build → push to Artifact Registry → deploy to Cloud Run).
 
-# Build and push image
-IMAGE="asia-south1-docker.pkg.dev/hdfc-statement-loader/hdfc-loader/exptrack:latest"
-gcloud builds submit --tag "$IMAGE"
-
-# Deploy
-gcloud run deploy exptrack \
-  --image "$IMAGE" \
-  --region asia-south1 \
-  --no-allow-unauthenticated \
-  --set-secrets \
-    GMAIL_CLIENT_ID=gmail-client-id:latest,\
-    GMAIL_CLIENT_SECRET=gmail-client-secret:latest,\
-    GMAIL_REFRESH_TOKEN=gmail-refresh-token:latest,\
-    DATABASE_URL=neon-database-url:latest,\
-    REVIEW_TOKEN=review-token:latest \
-  --set-env-vars POLL_DAYS=1,NOTIFICATION_EMAIL=you@example.com \
-  --timeout 300s
-```
-
-Deployments happen automatically via GitHub Actions on every push to `main` — manual `gcloud` deploys are only needed for initial setup or out-of-band changes.
-
-### Cloud Scheduler (daily trigger)
-
-```bash
-SA="hdfc-loader-invoker@hdfc-statement-loader.iam.gserviceaccount.com"
-SERVICE_URL="https://exptrack-<hash>.asia-south1.run.app"
-
-gcloud scheduler jobs create http exptrack-daily \
-  --location asia-south1 \
-  --schedule "0 21 * * *" \
-  --time-zone "Asia/Kolkata" \
-  --uri "${SERVICE_URL}" \
-  --http-method POST \
-  --oidc-service-account-email "${SA}" \
-  --oidc-token-audience "${SERVICE_URL}"
-```
+- **GCP project:** `exptrack-privet-drive`
+- **Cloud Run service:** `exptrack` (region: `asia-south1`)
+- **Artifact Registry:** `asia-south1-docker.pkg.dev/exptrack-privet-drive/exptrack/exptrack:latest`
+- **Cloud Scheduler job:** `exptrack-daily` — `0 21 * * *` UTC (9 PM IST)
+- **Service URL:** `https://exptrack-878109220582.asia-south1.run.app`
 
 ### On-demand trigger
 
 ```bash
-curl -X POST "${SERVICE_URL}" \
-  -H "Authorization: Bearer $(gcloud auth print-identity-token)"
+curl "https://exptrack-878109220582.asia-south1.run.app/trigger?token=YOUR_ADMIN_TOKEN"
 ```
 
 Response:

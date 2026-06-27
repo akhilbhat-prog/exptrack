@@ -1,5 +1,5 @@
 """
-Gmail poller — HDFC Bank email polling and parsing pipeline.
+Gmail poller — bank email polling and parsing pipeline.
 
 Reads HDFC Bank alert emails from Gmail, parses them with parser.py,
 and persists the results to a Neon PostgreSQL database via db.py.
@@ -249,13 +249,13 @@ def send_summary_email(service, summary: dict, test_output: str, categorization_
     no_transactions = summary["processed"] == 0 and summary["skipped"] == 0
 
     subject = (
-        f"HDFC Pipeline Run – No Transactions | {date_str}"
+        f"ExpTrack Pipeline Run – No Transactions | {date_str}"
         if no_transactions
-        else f"HDFC Pipeline Run – {date_str}"
+        else f"ExpTrack Pipeline Run – {date_str}"
     )
 
     lines = [
-        f"HDFC Pipeline Run — {date_str}",
+        f"ExpTrack Pipeline Run — {date_str}",
         "",
         "Run Summary",
         "-" * 40,
@@ -266,7 +266,7 @@ def send_summary_email(service, summary: dict, test_output: str, categorization_
     ]
 
     if no_transactions:
-        lines.append("No new HDFC transactions were found in this run.")
+        lines.append("No new transactions were found in this run.")
     else:
         lines += ["Transactions Processed", "-" * 40]
         for i, t in enumerate(summary["transactions"], 1):

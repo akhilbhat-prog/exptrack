@@ -399,7 +399,7 @@ Workflow: `.github/workflows/deploy.yml` — triggered on push to `main`.
 **Job 2 — `deploy`** (runs only if `test` passes):
 1. Authenticate to GCP via Workload Identity Federation (OIDC)
 2. Build Docker image with buildx cache
-3. Push to Artifact Registry: `asia-south1-docker.pkg.dev/hdfc-statement-loader/hdfc-loader/exptrack:latest`
+3. Push to Artifact Registry: `asia-south1-docker.pkg.dev/exptrack-privet-drive/exptrack/exptrack:latest`
 4. Deploy to Cloud Run service `exptrack` (region: `asia-south1`)
 
 **Required GitHub secrets:** `WIF_PROVIDER`, `WIF_SERVICE_ACCOUNT`

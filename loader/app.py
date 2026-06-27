@@ -1,5 +1,5 @@
 """
-Flask entry point for the HDFC statement loader Cloud Run service.
+Flask entry point for the ExpTrack Cloud Run service.
 
 Cloud Scheduler hits GET / daily at 9 PM IST, which triggers Gmail polling,
 categorization, and a nightly summary email.

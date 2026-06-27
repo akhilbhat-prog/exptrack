@@ -1,5 +1,5 @@
 """
-PostgreSQL helpers for the HDFC statement loader.
+PostgreSQL helpers for ExpTrack.
 
 Tables managed here:
   transactions          — one row per parsed bank transaction
