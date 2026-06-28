@@ -58,6 +58,7 @@ jobs:
           image: asia-south1-docker.pkg.dev/exptrack-privet-drive/exptrack/exptrack:latest
           flags: >-
             --allow-unauthenticated
+            --memory=2Gi
             --update-secrets=SECRET_KEY=flask-secret-key:latest,INVITE_CODE=invite-code:latest,ADMIN_TOKEN=admin-token:latest,DATABASE_URL=neon-database-url:latest,GMAIL_CLIENT_ID=gmail-client-id:latest,GMAIL_CLIENT_SECRET=gmail-client-secret:latest,GMAIL_REFRESH_TOKEN=gmail-refresh-token:latest
             --update-env-vars=NOTIFICATION_EMAIL=akhilbhat88@yahoo.in
 

@@ -23,7 +23,7 @@ import subprocess
 import sys
 from datetime import date as _date
 
-from flask import Blueprint, abort, jsonify, render_template, request
+from flask import Blueprint, abort, jsonify, request
 
 import db
 from token_auth import require_admin as _require_token
@@ -40,13 +40,6 @@ _SHARED_SCOPE_START = db._SHARED_SCOPE_START
 # ---------------------------------------------------------------------------
 # HTML page
 # ---------------------------------------------------------------------------
-
-@review_bp.route("/review")
-@_require_token
-def review_page():
-    token = os.environ.get("ADMIN_TOKEN", "")
-    return render_template("review.html", review_token=token)
-
 
 # ---------------------------------------------------------------------------
 # Batches
@@ -362,12 +355,28 @@ def complete_batch(batch_id):
         conn.close()
 
 
+_retraining_proc: subprocess.Popen | None = None
+
+
+def is_retraining() -> bool:
+    """Return True if a model retraining subprocess is currently running."""
+    global _retraining_proc
+    if _retraining_proc is not None and _retraining_proc.poll() is None:
+        return True
+    _retraining_proc = None
+    return False
+
+
 def _trigger_retraining():
+    global _retraining_proc
     main_py = os.path.join(_project_root, "categorizer", "main.py")
     if not os.path.exists(main_py):
         return
+    if is_retraining():
+        logger.info("Model retraining already in progress — skipping duplicate trigger.")
+        return
     try:
-        subprocess.Popen(
+        _retraining_proc = subprocess.Popen(
             [sys.executable, main_py],
             cwd=os.path.join(_project_root, "categorizer"),
         )
