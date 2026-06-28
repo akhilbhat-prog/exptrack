@@ -13,9 +13,9 @@ import threading
 
 from dotenv import load_dotenv
 from datetime import date as _date, timedelta
-from flask import Flask, jsonify, redirect, request, send_from_directory, url_for
+from flask import Flask, jsonify, redirect, url_for
 from auth_routes import auth_bp
-from token_auth import require_admin, _is_valid_admin_token, _is_valid_user_session, _auth_disabled
+from token_auth import require_admin, _is_valid_admin_token, _is_valid_user_session
 from history import history_bp
 from review import review_bp, is_retraining
 from recurring import recurring_bp
@@ -32,13 +32,7 @@ from gmail_poller import (
 load_dotenv()
 
 _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-_static_dist  = os.path.join(_project_root, "static", "dist")
-app = Flask(
-    __name__,
-    template_folder=os.path.join(_project_root, "templates"),
-    static_folder=_static_dist,
-    static_url_path="/",
-)
+app = Flask(__name__, template_folder=os.path.join(_project_root, "templates"))
 
 import logging as _logging
 _secret = os.environ.get("SECRET_KEY")
@@ -78,44 +72,12 @@ def handle_http_exception(e):
     return jsonify({"error": e.description, "code": e.code}), e.code
 
 
-@app.route("/api/me")
-def api_me():
-    """Returns the currently authenticated user's username and role."""
-    if _auth_disabled():
-        return jsonify({"username": "dev", "role": "admin"})
-    if _is_valid_admin_token():
-        return jsonify({"username": "Admin", "role": "admin"})
-    if _is_valid_user_session():
-        from flask import session
-        return jsonify({"username": session.get("username"), "role": session.get("role")})
-    return jsonify({"error": "Not authenticated"}), 401
-
-
 @app.route("/")
 def index():
     if _is_valid_user_session():
-        return redirect("/shared")
+        return redirect(url_for("shared.shared_page"))
     if _is_valid_admin_token():
-        return redirect("/view")
-    return redirect(url_for("auth.login_page"))
-
-
-@app.route("/<path:path>")
-def spa_catch_all(path: str):
-    """Serve the React SPA for all non-API, non-auth routes."""
-    # Let Flask's static file handler serve actual assets (JS, CSS, etc.)
-    if path.startswith("api/") or path in ("login", "logout", "register", "trigger"):
-        from flask import abort
-        abort(404)
-    dist = _static_dist
-    if os.path.exists(os.path.join(dist, path)):
-        return send_from_directory(dist, path)
-    index_path = os.path.join(dist, "index.html")
-    if os.path.exists(index_path):
-        return send_from_directory(dist, "index.html")
-    # React build not present yet — fall back to legacy redirects
-    if path in ("review", "view", "recurring"):
-        return redirect(url_for("auth.login_page"))
+        return redirect(url_for("history.view_page"))
     return redirect(url_for("auth.login_page"))
 
 

@@ -23,7 +23,7 @@ import subprocess
 import sys
 from datetime import date as _date
 
-from flask import Blueprint, abort, jsonify, request
+from flask import Blueprint, abort, jsonify, render_template, request
 
 import db
 from token_auth import require_admin as _require_token
@@ -40,6 +40,13 @@ _SHARED_SCOPE_START = db._SHARED_SCOPE_START
 # ---------------------------------------------------------------------------
 # HTML page
 # ---------------------------------------------------------------------------
+
+@review_bp.route("/review")
+@_require_token
+def review_page():
+    token = os.environ.get("ADMIN_TOKEN", "")
+    return render_template("review.html", review_token=token)
+
 
 # ---------------------------------------------------------------------------
 # Batches
