@@ -6,7 +6,7 @@ Batch API route tests mock db.get_connection() to avoid requiring a real DB.
 """
 
 import os
-from datetime import datetime, timezone
+from datetime import date as _date, datetime, timezone
 from unittest.mock import MagicMock, patch, call
 
 import pytest
@@ -488,3 +488,35 @@ class TestCompleteBatch:
         assert args[4] == "Food"
         assert args[5] == "Expense"
         assert args[6] == 450.0
+
+    def test_amortised_cadence_expands_to_future_months(self, client, monkeypatch):
+        """Regression test: a batch item marked cadence='A' with divide_by>1 must
+        generate divide_by rows in data_feed_history (one per month, each carrying
+        monthly_amount), not just a single row for the transaction's own month -
+        matching the behaviour of the /api/history create/update endpoints."""
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
+        mock_conn = self._make_complete_conn("reviewed")
+        annual_row = (
+            datetime(2026, 1, 15, tzinfo=timezone.utc), "Annual insurance premium", 12000.0,
+            "Bills", "Insurance", "Expense",
+            "LIC", None, "UPIREF999",
+            "A", 12, "N", 1.0,
+        )
+        mock_conn.cursor.return_value.fetchall.return_value = [annual_row]
+        with patch("review.db.get_connection", return_value=mock_conn), \
+             patch("review.db.create_data_feed_table"), \
+             patch("review.db.insert_data_feed_row", return_value=1) as mock_insert, \
+             patch("review._trigger_retraining"):
+            resp = client.post("/api/batches/1/complete")
+        assert resp.status_code == 200
+        assert resp.get_json()["inserted"] == 12
+        assert mock_insert.call_count == 12
+        # every inserted row (including the first) stores the divided amount, not
+        # the full lump sum, in the actual `amount` column that persists to the DB
+        for call in mock_insert.call_args_list:
+            assert call.args[6] == 1000.0
+        # the 12 rows land in 12 distinct, sequential calendar months
+        first_call_args = mock_insert.call_args_list[0][0]
+        assert first_call_args[1] == datetime(2026, 1, 15, tzinfo=timezone.utc)
+        future_dates = [c[0][1] for c in mock_insert.call_args_list[1:]]
+        assert future_dates == [_date(2026, m, 1) for m in range(2, 13)]

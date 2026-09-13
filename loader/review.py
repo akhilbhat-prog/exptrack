@@ -329,8 +329,9 @@ def complete_batch(batch_id):
             monthly_amount = round(amount_val / divide_by, 2)
             final_amount = round(monthly_amount * share_ratio, 2)
             time_period = date.strftime("%b-%Y") if date else None
+            stored_amount = monthly_amount if (cadence or "O") == "A" else amount_val
             feed_id = db.insert_data_feed_row(
-                conn, date, entry, subcategory, category, txn_type, amount,
+                conn, date, entry, subcategory, category, txn_type, stored_amount,
                 merchant, vpa, upi_ref,
                 time_period=time_period,
                 cadence=cadence or "O",
@@ -345,9 +346,32 @@ def complete_batch(batch_id):
                 row_date = date.date() if date else None
                 if (shared_expense or "N") == "Y" and row_date and row_date >= _SHARED_SCOPE_START:
                     db.upsert_shared_transaction(
-                        conn, feed_id, amount_val, monthly_amount, share_ratio,
+                        conn, feed_id, stored_amount, monthly_amount, share_ratio,
                         row_date, merchant, category, subcategory, entry or "",
                     )
+
+                if (cadence or "O") == "A" and divide_by > 1 and row_date:
+                    for i in range(1, divide_by):
+                        m = row_date.month - 1 + i
+                        period_date = _date(row_date.year + m // 12, m % 12 + 1, 1)
+                        future_id = db.insert_data_feed_row(
+                            conn, period_date, entry, subcategory, category, txn_type,
+                            monthly_amount,
+                            merchant=merchant, vpa=vpa, upi_ref=upi_ref,
+                            time_period=period_date.strftime("%b-%Y"),
+                            cadence="A",
+                            divide_by=divide_by,
+                            monthly_amount=monthly_amount,
+                            shared_expense=shared_expense or "N",
+                            share_ratio=share_ratio,
+                            final_amount=final_amount,
+                        )
+                        inserted += 1
+                        if (shared_expense or "N") == "Y" and period_date >= _SHARED_SCOPE_START:
+                            db.upsert_shared_transaction(
+                                conn, future_id, monthly_amount, monthly_amount, share_ratio,
+                                period_date, merchant, category, subcategory, entry or "",
+                            )
 
         with conn.cursor() as cur:
             cur.execute(

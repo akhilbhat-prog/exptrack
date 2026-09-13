@@ -156,12 +156,14 @@ def complete_batch(conn: psycopg.Connection, batch_id: int) -> int:
         amount_val = float(r["amount"]) if r.get("amount") is not None else 0.0
         monthly_amount = round(amount_val / divide_by, 2)
         final_amount = round(monthly_amount * share_ratio, 2)
+        cadence = r.get("cadence") or "O"
         date = r["date"]
+        stored_amount = monthly_amount if cadence == "A" else amount_val
         rows.append(
             {
                 "entry_date": date,
                 "entry_text": r["raw_entry"],
-                "amount": r["amount"],
+                "amount": stored_amount,
                 "category": r["category"],
                 "sub_category": r["subcategory"],
                 "spend_type": r["type"],
@@ -169,7 +171,7 @@ def complete_batch(conn: psycopg.Connection, batch_id: int) -> int:
                 "vpa": r["vpa"] or "",
                 "upi_ref": r["upi_ref"] or "",
                 "time_period": date.strftime("%b-%Y") if date else None,
-                "cadence": r.get("cadence") or "O",
+                "cadence": cadence,
                 "divide_by": divide_by,
                 "monthly_amount": monthly_amount,
                 "shared_expense": r.get("shared_expense") or "N",
@@ -177,6 +179,34 @@ def complete_batch(conn: psycopg.Connection, batch_id: int) -> int:
                 "final_amount": final_amount,
             }
         )
+
+        if cadence == "A" and divide_by > 1 and date is not None:
+            base_date = date.date() if hasattr(date, "date") else date
+            for i in range(1, divide_by):
+                m = base_date.month - 1 + i
+                period_date = base_date.replace(
+                    year=base_date.year + m // 12, month=m % 12 + 1, day=1
+                )
+                rows.append(
+                    {
+                        "entry_date": period_date,
+                        "entry_text": r["raw_entry"],
+                        "amount": monthly_amount,
+                        "category": r["category"],
+                        "sub_category": r["subcategory"],
+                        "spend_type": r["type"],
+                        "merchant": r["merchant"] or "",
+                        "vpa": r["vpa"] or "",
+                        "upi_ref": r["upi_ref"] or "",
+                        "time_period": period_date.strftime("%b-%Y"),
+                        "cadence": "A",
+                        "divide_by": divide_by,
+                        "monthly_amount": monthly_amount,
+                        "shared_expense": r.get("shared_expense") or "N",
+                        "share_ratio": share_ratio,
+                        "final_amount": final_amount,
+                    }
+                )
 
     insert_data_feed_history(conn, rows)
 
