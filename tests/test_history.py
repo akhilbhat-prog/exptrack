@@ -456,6 +456,22 @@ class TestCreateHistoryRowCadenceA:
         assert resp.get_json()["count"] == 1
         assert mock_insert.call_count == 1
 
+    def test_cadence_A_stores_divided_amount_not_full_amount(self, client, monkeypatch):
+        """Regression test: every row created for a cadence='A' entry must store the
+        per-month divided amount, not the full lump sum, in the amount column - matching
+        the convention used everywhere else (PATCH expansion, recurring generation)."""
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
+        mock_conn, _ = _make_mock_conn()
+        mock_insert = MagicMock(side_effect=list(range(1, 13)))
+        with patch("history.db.get_connection", return_value=mock_conn), \
+             patch("history.db.create_data_feed_table"), \
+             patch("history.db.insert_data_feed_row", mock_insert):
+            resp = client.post("/api/history", json=self._base)
+        assert resp.status_code == 201
+        for call in mock_insert.call_args_list:
+            amount_arg = call.args[6]
+            assert amount_arg == 1000.0
+
     def test_cadence_A_entry_dates_and_time_periods(self, client, monkeypatch):
         monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()

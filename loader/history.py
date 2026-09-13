@@ -121,7 +121,7 @@ def create_history():
                 tp = period_date.strftime("%b-%Y")
                 row_id = db.insert_data_feed_row(
                     conn, period_date, entry_text, sub_category, category, spend_type,
-                    amount, merchant, None, None,
+                    monthly_amount, merchant, None, None,
                     time_period=tp,
                     cadence=cadence,
                     divide_by=divide_by,
@@ -134,7 +134,7 @@ def create_history():
                 ids.append(row_id)
                 if shared_expense == 'Y' and period_date >= _SHARED_SCOPE_START:
                     db.upsert_shared_transaction(
-                        conn, row_id, amount, monthly_amount, share_ratio,
+                        conn, row_id, monthly_amount, monthly_amount, share_ratio,
                         period_date, merchant, category, sub_category, entry_text,
                     )
             return jsonify({"ok": True, "ids": ids, "count": len(ids)}), 201
