@@ -37,11 +37,11 @@ function prevPeriod(period: string): string | undefined {
 }
 
 interface Filters {
-  merchant: string; category: string; sub_category: string; spend_type: string; amount: string
+  entry_date: string; merchant: string; category: string; sub_category: string; spend_type: string; amount: string
   cadence: string; shared_expense: string
 }
 const BLANK_FILTERS: Filters = {
-  merchant: '', category: '', sub_category: '', spend_type: '', amount: '',
+  entry_date: '', merchant: '', category: '', sub_category: '', spend_type: '', amount: '',
   cadence: '', shared_expense: '',
 }
 
@@ -119,6 +119,7 @@ export function ViewPage() {
     return cats?.categories[cat] ?? []
   }
 
+  const filterMerchantOptions    = useMemo(() => [...new Set(allItems.map(i => i.merchant).filter((v): v is string => !!v))].sort(), [allItems])
   const filterCategoryOptions    = useMemo(() => [...new Set(allItems.map(i => i.category).filter((v): v is string => !!v))].sort(), [allItems])
   const filterSubcategoryOptions = useMemo(() => [...new Set(allItems.map(i => i.sub_category).filter((v): v is string => !!v))].sort(), [allItems])
   const filterTypeOptions        = useMemo(() => [...new Set(allItems.map(i => i.spend_type).filter((v): v is SpendType => !!v))].sort(), [allItems])
@@ -127,7 +128,8 @@ export function ViewPage() {
   // Apply filters + sort
   const filtered = useMemo(() => {
     let r = [...allItems]
-    if (filters.merchant)       r = r.filter(i => (i.merchant ?? i.entry_text).toLowerCase().includes(filters.merchant.toLowerCase()))
+    if (filters.entry_date)     r = r.filter(i => i.entry_date === filters.entry_date)
+    if (filters.merchant)       r = r.filter(i => i.merchant === filters.merchant)
     if (filters.category)       r = r.filter(i => i.category === filters.category)
     if (filters.sub_category)   r = r.filter(i => i.sub_category === filters.sub_category)
     if (filters.spend_type)     r = r.filter(i => i.spend_type === filters.spend_type)
@@ -367,20 +369,31 @@ export function ViewPage() {
                   </th>
                   <th style={{ width: 64 }}></th>
                 </tr>
-                {/* Filter row */}
+                {/* Filter row - one <th> per header column, in the same order */}
                 <tr className="filter-row">
-                  <th></th>
-                  {(['merchant', 'amount'] as (keyof Filters)[]).map(k => (
-                    <th key={k}>
-                      <input
-                        className={`filter-input${filters[k] ? ' active' : ''}`}
-                        value={filters[k]}
-                        onChange={e => { setFilters(f => ({ ...f, [k]: e.target.value })); setPage(1) }}
-                        placeholder={k === 'amount' ? 'e.g. >500' : 'Search…'}
-                      />
-                    </th>
-                  ))}
-                  <th>
+                  <th></th>{/* checkbox */}
+                  <th>{/* Date */}
+                    <input type="date" className={`filter-input${filters.entry_date ? ' active' : ''}`}
+                      value={filters.entry_date}
+                      onChange={e => { setFilters(f => ({ ...f, entry_date: e.target.value })); setPage(1) }} />
+                  </th>
+                  <th>{/* Merchant */}
+                    <select className="filter-input" style={{ padding: '2px 4px' }}
+                      value={filters.merchant}
+                      onChange={e => { setFilters(f => ({ ...f, merchant: e.target.value })); setPage(1) }}>
+                      <option value="">All</option>
+                      {filterMerchantOptions.map(s => <option key={s}>{s}</option>)}
+                    </select>
+                  </th>
+                  <th>{/* Amount */}
+                    <input
+                      className={`filter-input${filters.amount ? ' active' : ''}`}
+                      value={filters.amount}
+                      onChange={e => { setFilters(f => ({ ...f, amount: e.target.value })); setPage(1) }}
+                      placeholder="e.g. >500"
+                    />
+                  </th>
+                  <th>{/* Category */}
                     <select className="filter-input" style={{ padding: '2px 4px' }}
                       value={filters.category}
                       onChange={e => { setFilters(f => ({ ...f, category: e.target.value })); setPage(1) }}>
@@ -388,7 +401,7 @@ export function ViewPage() {
                       {filterCategoryOptions.map(s => <option key={s}>{s}</option>)}
                     </select>
                   </th>
-                  <th>
+                  <th>{/* Subcategory */}
                     <select className="filter-input" style={{ padding: '2px 4px' }}
                       value={filters.sub_category}
                       onChange={e => { setFilters(f => ({ ...f, sub_category: e.target.value })); setPage(1) }}>
@@ -396,7 +409,7 @@ export function ViewPage() {
                       {filterSubcategoryOptions.map(s => <option key={s}>{s}</option>)}
                     </select>
                   </th>
-                  <th>
+                  <th>{/* Type */}
                     <select className="filter-input" style={{ padding: '2px 4px' }}
                       value={filters.spend_type}
                       onChange={e => { setFilters(f => ({ ...f, spend_type: e.target.value })); setPage(1) }}>
@@ -404,9 +417,9 @@ export function ViewPage() {
                       {filterTypeOptions.map(s => <option key={s}>{s}</option>)}
                     </select>
                   </th>
-                  <th></th>
-                  <th></th>
-                  <th>
+                  <th></th>{/* Monthly - no filter */}
+                  <th></th>{/* Final - no filter */}
+                  <th>{/* Shared (cadence bundled in, matching the tbody cell layout) */}
                     <div style={{ display: 'flex', gap: 4 }}>
                       <select className="filter-input" style={{ padding: '2px 4px' }}
                         value={filters.cadence}
@@ -423,7 +436,7 @@ export function ViewPage() {
                       </select>
                     </div>
                   </th>
-                  <th>
+                  <th>{/* actions */}
                     {Object.values(filters).some(Boolean) && (
                       <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }}
                         onClick={() => setFilters(BLANK_FILTERS)}>Clear</button>
