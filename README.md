@@ -18,68 +18,73 @@ A personal financial pipeline that polls HDFC Bank transaction alert emails via 
 
 ## Web UI pages
 
-| Page | Route | Purpose |
-|------|-------|---------|
-| Batch Review | `/review` | Edit and approve ML-predicted categories; complete batches to finalize |
-| History Editor | `/view` | Browse and edit `data_feed_history` by period; add manual entries |
-| Shared Expenses | `/shared` | Track shared expenses with balances, settlements, and payments by FY |
-| Recurring Manager | `/recurring` | Define auto-generated monthly/annual recurring entries |
+| Page              | Route        | Purpose                                                                |
+| ----------------- | ------------ | ---------------------------------------------------------------------- |
+| Batch Review      | `/review`    | Edit and approve ML-predicted categories; complete batches to finalize |
+| History Editor    | `/view`      | Browse and edit `data_feed_history` by period; add manual entries      |
+| Shared Expenses   | `/shared`    | Track shared expenses with balances, settlements, and payments by FY   |
+| Recurring Manager | `/recurring` | Define auto-generated monthly/annual recurring entries                 |
 
 ---
 
 ## API routes
 
 ### Review (`loader/review.py`)
-| Method | Route | Description |
-|--------|-------|-------------|
-| GET | `/api/batches` | List batches (`?include_complete=1` for all) |
-| GET | `/api/batches/<id>` | Batch detail + items |
-| PATCH | `/api/batches/<id>/items/<txn_id>` | Edit category/subcategory/type/cadence/divide_by/shared_expense/share_ratio/amount |
-| DELETE | `/api/batches/<id>/items/<txn_id>` | Remove item; adds to `transaction_exclusions` |
-| DELETE | `/api/batches/<id>` | Delete pending/reviewed batch |
-| POST | `/api/batches/<id>/mark-reviewed` | Transition batch to `reviewed` |
-| POST | `/api/batches/<id>/complete` | Finalize to `data_feed_history`, mirror shared rows, trigger retraining |
-| GET | `/api/categories` | `{categories, types}` merged from `rules.json` + `data_feed_history` |
+
+| Method | Route                              | Description                                                                        |
+| ------ | ---------------------------------- | ---------------------------------------------------------------------------------- |
+| GET    | `/api/batches`                     | List batches (`?include_complete=1` for all)                                       |
+| GET    | `/api/batches/<id>`                | Batch detail + items                                                               |
+| PATCH  | `/api/batches/<id>/items/<txn_id>` | Edit category/subcategory/type/cadence/divide_by/shared_expense/share_ratio/amount |
+| DELETE | `/api/batches/<id>/items/<txn_id>` | Remove item; adds to `transaction_exclusions`                                      |
+| DELETE | `/api/batches/<id>`                | Delete pending/reviewed batch                                                      |
+| POST   | `/api/batches/<id>/mark-reviewed`  | Transition batch to `reviewed`                                                     |
+| POST   | `/api/batches/<id>/complete`       | Finalize to `data_feed_history`, mirror shared rows, trigger retraining            |
+| GET    | `/api/categories`                  | `{categories, types}` merged from `rules.json` + `data_feed_history`               |
 
 ### History (`loader/history.py`)
-| Method | Route | Description |
-|--------|-------|-------------|
-| GET | `/api/history/periods` | Distinct `time_period` values with row counts, newest first |
-| GET | `/api/history` | Paginated rows (`?period=May-2026&page=1`) |
-| GET | `/api/history/summary` | Top-5 categories + period total (`?period=&prev_period=` optional) |
-| POST | `/api/history` | Create manual entry; cadence=A + divide_by>1 auto-generates future rows |
-| PATCH | `/api/history/<id>` | Update row fields; recomputes monthly_amount and final_amount |
-| DELETE | `/api/history/<id>` | Delete row |
-| GET | `/api/settings` | Return `{default_share_ratio, default_annual_divisor}` |
-| PATCH | `/api/settings` | Update allowed settings keys |
+
+| Method | Route                  | Description                                                             |
+| ------ | ---------------------- | ----------------------------------------------------------------------- |
+| GET    | `/api/history/periods` | Distinct `time_period` values with row counts, newest first             |
+| GET    | `/api/history`         | Paginated rows (`?period=May-2026&page=1`)                              |
+| GET    | `/api/history/summary` | Top-5 categories + period total (`?period=&prev_period=` optional)      |
+| POST   | `/api/history`         | Create manual entry; cadence=A + divide_by>1 auto-generates future rows |
+| PATCH  | `/api/history/<id>`    | Update row fields; recomputes monthly_amount and final_amount           |
+| DELETE | `/api/history/<id>`    | Delete row                                                              |
+| GET    | `/api/settings`        | Return `{default_share_ratio, default_annual_divisor}`                  |
+| PATCH  | `/api/settings`        | Update allowed settings keys                                            |
 
 ### Shared (`loader/shared.py`)
-| Method | Route | Description |
-|--------|-------|-------------|
-| GET | `/api/shared/fy-list` | FY start years present in `shared_transactions` |
-| GET | `/api/shared` | All rows for FY (`?fy=2026`) |
-| GET | `/api/shared/summary` | `{net_balance, total_akhil_paid, total_aditi_paid}` for FY |
-| POST | `/api/shared` | Bulk-insert manual shared entries |
-| POST | `/api/shared/payment` | Record a settlement payment |
-| PATCH | `/api/shared/<id>` | Update paid_by/owed_by/share_ratio/settled/is_ignored |
-| DELETE | `/api/shared/<id>` | Delete shared row |
+
+| Method | Route                 | Description                                                |
+| ------ | --------------------- | ---------------------------------------------------------- |
+| GET    | `/api/shared/fy-list` | FY start years present in `shared_transactions`            |
+| GET    | `/api/shared`         | All rows for FY (`?fy=2026`)                               |
+| GET    | `/api/shared/summary` | `{net_balance, total_akhil_paid, total_aditi_paid}` for FY |
+| POST   | `/api/shared`         | Bulk-insert manual shared entries                          |
+| POST   | `/api/shared/payment` | Record a settlement payment                                |
+| PATCH  | `/api/shared/<id>`    | Update paid_by/owed_by/share_ratio/settled/is_ignored      |
+| DELETE | `/api/shared/<id>`    | Delete shared row                                          |
 
 ### Recurring (`loader/recurring.py`)
-| Method | Route | Description |
-|--------|-------|-------------|
-| GET | `/api/recurring` | List all recurring definitions |
-| POST | `/api/recurring` | Create new definition |
-| PUT | `/api/recurring/<id>` | Update definition |
-| DELETE | `/api/recurring/<id>` | Delete definition |
-| POST | `/api/recurring/generate` | Manually trigger generation (`?date=YYYY-MM-DD` optional) |
+
+| Method | Route                     | Description                                               |
+| ------ | ------------------------- | --------------------------------------------------------- |
+| GET    | `/api/recurring`          | List all recurring definitions                            |
+| POST   | `/api/recurring`          | Create new definition                                     |
+| PUT    | `/api/recurring/<id>`     | Update definition                                         |
+| DELETE | `/api/recurring/<id>`     | Delete definition                                         |
+| POST   | `/api/recurring/generate` | Manually trigger generation (`?date=YYYY-MM-DD` optional) |
 
 ### Auth (`loader/auth_routes.py`)
-| Method | Route | Description |
-|--------|-------|-------------|
-| GET/POST | `/login` | Login form; sets session cookie |
-| GET | `/logout` | Clear session |
-| GET/POST | `/register` | Registration form (requires `INVITE_CODE`) |
-| GET | `/api/me` | Current user `{username, role}` for the SPA, or 401 |
+
+| Method   | Route       | Description                                         |
+| -------- | ----------- | --------------------------------------------------- |
+| GET/POST | `/login`    | Login form; sets session cookie                     |
+| GET      | `/logout`   | Clear session                                       |
+| GET/POST | `/register` | Registration form (requires `INVITE_CODE`)          |
+| GET      | `/api/me`   | Current user `{username, role}` for the SPA, or 401 |
 
 Page routes (`/review`, `/view`, `/shared`, `/recurring`) are all served by the React SPA via `loader/app.py`'s `spa_catch_all` — see [Project structure](#project-structure).
 
@@ -87,17 +92,17 @@ Page routes (`/review`, `/view`, `/shared`, `/recurring`) are all served by the 
 
 ## Database tables
 
-| Table | Purpose |
-|-------|---------|
-| `transactions` | Raw parsed bank transactions (one per email alert) |
-| `processed_emails` | Idempotency log for every Gmail message ID |
-| `transaction_exclusions` | Transactions removed from review batches |
-| `transaction_batches` | Batch lifecycle: pending → reviewed → complete |
-| `transaction_batch_items` | Per-transaction ML predictions and human edits |
-| `data_feed_history` | Ground-truth categorised transactions (the canonical table) |
-| `recurring_transactions` | User-defined recurring entries auto-generated monthly |
-| `shared_transactions` | Mirror of shared-expense rows with balance tracking |
-| `app_settings` | Configurable defaults (`default_share_ratio`, `default_annual_divisor`) |
+| Table                     | Purpose                                                                 |
+| ------------------------- | ----------------------------------------------------------------------- |
+| `transactions`            | Raw parsed bank transactions (one per email alert)                      |
+| `processed_emails`        | Idempotency log for every Gmail message ID                              |
+| `transaction_exclusions`  | Transactions removed from review batches                                |
+| `transaction_batches`     | Batch lifecycle: pending → reviewed → complete                          |
+| `transaction_batch_items` | Per-transaction ML predictions and human edits                          |
+| `data_feed_history`       | Ground-truth categorised transactions (the canonical table)             |
+| `recurring_transactions`  | User-defined recurring entries auto-generated monthly                   |
+| `shared_transactions`     | Mirror of shared-expense rows with balance tracking                     |
+| `app_settings`            | Configurable defaults (`default_share_ratio`, `default_annual_divisor`) |
 
 ---
 
@@ -105,25 +110,25 @@ Page routes (`/review`, `/view`, `/shared`, `/recurring`) are all served by the 
 
 ### Loader
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `GMAIL_CLIENT_ID` | Yes | OAuth2 client ID |
-| `GMAIL_CLIENT_SECRET` | Yes | OAuth2 client secret |
-| `GMAIL_REFRESH_TOKEN` | Yes | Long-lived refresh token |
-| `DATABASE_URL` | Yes | Neon PostgreSQL connection string |
-| `NOTIFICATION_EMAIL` | Yes | Recipient for nightly summary email |
-| `POLL_DAYS` | No | Days back to search (default: `1`) |
-| `AFTER_DATE` | No | Override `POLL_DAYS` with a `YYYY/MM/DD` date |
-| `MAX_MESSAGES` | No | Cap on messages processed (default: no limit) |
-| `ADMIN_TOKEN` | No | If set, admin `/api/*` routes require `?token=` or `Authorization: Bearer`. The SPA page shell is always served; auth is enforced on the underlying API calls. |
-| `PORT` | No | Flask server port (default: `8080`) |
+| Variable              | Required | Description                                                                                                                                                    |
+| --------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GMAIL_CLIENT_ID`     | Yes      | OAuth2 client ID                                                                                                                                               |
+| `GMAIL_CLIENT_SECRET` | Yes      | OAuth2 client secret                                                                                                                                           |
+| `GMAIL_REFRESH_TOKEN` | Yes      | Long-lived refresh token                                                                                                                                       |
+| `DATABASE_URL`        | Yes      | Neon PostgreSQL connection string                                                                                                                              |
+| `NOTIFICATION_EMAIL`  | Yes      | Recipient for nightly summary email                                                                                                                            |
+| `POLL_DAYS`           | No       | Days back to search (default: `1`)                                                                                                                             |
+| `AFTER_DATE`          | No       | Override `POLL_DAYS` with a `YYYY/MM/DD` date                                                                                                                  |
+| `MAX_MESSAGES`        | No       | Cap on messages processed (default: no limit)                                                                                                                  |
+| `ADMIN_TOKEN`         | No       | If set, admin `/api/*` routes require `?token=` or `Authorization: Bearer`. The SPA page shell is always served; auth is enforced on the underlying API calls. |
+| `PORT`                | No       | Flask server port (default: `8080`)                                                                                                                            |
 
 ### Categoriser
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `DATABASE_URL` | Yes | Same Neon connection string |
-| `GCS_MODEL_BUCKET` | Yes | GCS bucket for model artefacts |
+| Variable           | Required | Description                    |
+| ------------------ | -------- | ------------------------------ |
+| `DATABASE_URL`     | Yes      | Same Neon connection string    |
+| `GCS_MODEL_BUCKET` | Yes      | GCS bucket for model artefacts |
 
 ---
 
@@ -150,7 +155,7 @@ For frontend development with hot reload, see [`frontend/README.md`](frontend/RE
 
 ## Obtaining Gmail OAuth2 credentials
 
-1. In [Google Cloud Console](https://console.cloud.google.com), create an OAuth 2.0 Client ID of type *Desktop app*.
+1. In [Google Cloud Console](https://console.cloud.google.com), create an OAuth 2.0 Client ID of type _Desktop app_.
 2. Download the JSON as `credentials.json`.
 3. Run the one-time authorisation flow:
    ```bash
@@ -193,6 +198,7 @@ curl "https://exptrack-878109220582.asia-south1.run.app/trigger?token=YOUR_ADMIN
 ```
 
 Response:
+
 ```json
 {
   "status": "ok",
