@@ -158,12 +158,11 @@ def complete_batch(conn: psycopg.Connection, batch_id: int) -> int:
         final_amount = round(monthly_amount * share_ratio, 2)
         cadence = r.get("cadence") or "O"
         date = r["date"]
-        stored_amount = monthly_amount if cadence == "A" else amount_val
         rows.append(
             {
                 "entry_date": date,
                 "entry_text": r["raw_entry"],
-                "amount": stored_amount,
+                "amount": amount_val,
                 "category": r["category"],
                 "sub_category": r["subcategory"],
                 "spend_type": r["type"],
@@ -191,7 +190,7 @@ def complete_batch(conn: psycopg.Connection, batch_id: int) -> int:
                     {
                         "entry_date": period_date,
                         "entry_text": r["raw_entry"],
-                        "amount": monthly_amount,
+                        "amount": amount_val,
                         "category": r["category"],
                         "sub_category": r["subcategory"],
                         "spend_type": r["type"],

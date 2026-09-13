@@ -492,8 +492,9 @@ class TestCompleteBatch:
     def test_amortised_cadence_expands_to_future_months(self, client, monkeypatch):
         """Regression test: a batch item marked cadence='A' with divide_by>1 must
         generate divide_by rows in data_feed_history (one per month, each carrying
-        monthly_amount), not just a single row for the transaction's own month -
-        matching the behaviour of the /api/history create/update endpoints."""
+        the full lump-sum amount, with monthly_amount as the derived divided
+        figure), not just a single row for the transaction's own month - matching
+        the behaviour of the /api/history create/update endpoints."""
         monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn = self._make_complete_conn("reviewed")
         annual_row = (
@@ -511,10 +512,12 @@ class TestCompleteBatch:
         assert resp.status_code == 200
         assert resp.get_json()["inserted"] == 12
         assert mock_insert.call_count == 12
-        # every inserted row (including the first) stores the divided amount, not
-        # the full lump sum, in the actual `amount` column that persists to the DB
+        # every inserted row (including the first) stores the full lump-sum amount,
+        # constant across the series, in the actual `amount` column that persists
+        # to the DB - monthly_amount is the derived, divided figure
         for call in mock_insert.call_args_list:
-            assert call.args[6] == 1000.0
+            assert call.args[6] == 12000.0
+            assert call.kwargs["monthly_amount"] == 1000.0
         # the 12 rows land in 12 distinct, sequential calendar months
         first_call_args = mock_insert.call_args_list[0][0]
         assert first_call_args[1] == datetime(2026, 1, 15, tzinfo=timezone.utc)

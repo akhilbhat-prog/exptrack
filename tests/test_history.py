@@ -456,10 +456,10 @@ class TestCreateHistoryRowCadenceA:
         assert resp.get_json()["count"] == 1
         assert mock_insert.call_count == 1
 
-    def test_cadence_A_stores_divided_amount_not_full_amount(self, client, monkeypatch):
+    def test_cadence_A_stores_full_amount_not_divided_amount(self, client, monkeypatch):
         """Regression test: every row created for a cadence='A' entry must store the
-        per-month divided amount, not the full lump sum, in the amount column - matching
-        the convention used everywhere else (PATCH expansion, recurring generation)."""
+        full lump-sum amount (constant across the series) in the amount column -
+        monthly_amount is the derived, divided figure, computed separately."""
         monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()
         mock_insert = MagicMock(side_effect=list(range(1, 13)))
@@ -470,7 +470,8 @@ class TestCreateHistoryRowCadenceA:
         assert resp.status_code == 201
         for call in mock_insert.call_args_list:
             amount_arg = call.args[6]
-            assert amount_arg == 1000.0
+            assert amount_arg == 12000.0
+            assert call.kwargs["monthly_amount"] == 1000.0
 
     def test_cadence_A_entry_dates_and_time_periods(self, client, monkeypatch):
         monkeypatch.delenv("ADMIN_TOKEN", raising=False)
@@ -559,6 +560,32 @@ class TestUpdateHistoryCadenceA:
         assert data["ok"] is True
         assert data["rows_created"] == 2
         assert len(insert_calls) == 2
+
+    def test_future_rows_store_full_amount_not_monthly_amount(self, client, monkeypatch):
+        """Regression test: auto-generated future-month rows must store the full
+        lump-sum amount (constant across the series), not the divided monthly_amount,
+        in their amount column - this was a real bug that corrupted real data."""
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
+        mock_conn, _ = _make_mock_conn()
+        insert_calls = []
+        def fake_insert(conn, entry_date, entry_text, sub_category, category, spend_type, amount, **kwargs):
+            insert_calls.append({"amount": amount, "monthly_amount": kwargs.get("monthly_amount")})
+            return len(insert_calls) + 10
+        with patch("history.db.get_connection", return_value=mock_conn), \
+             patch("history.db.update_history_row",
+                   return_value={
+                       "amount": 66000.0, "monthly_amount": 22000.0, "final_amount": 22000.0,
+                       "category": "Bills", "sub_category": "School Fees", "spend_type": "Expense",
+                       "cadence": "A", "divide_by": 3, "shared_expense": "N", "share_ratio": 1.0,
+                   }), \
+             patch("history.db.get_history_row", return_value=self._existing), \
+             patch("history.db.insert_data_feed_row", side_effect=fake_insert):
+            resp = client.patch("/api/history/1", json=self._patch_payload)
+        assert resp.status_code == 200
+        assert len(insert_calls) == 2
+        for call in insert_calls:
+            assert call["amount"] == 66000.0
+            assert call["monthly_amount"] == 22000.0
 
     def test_delete_scoped_to_merchant_and_category_not_just_entry_text(self, client, monkeypatch):
         """Regression test: the future-rows cleanup must not delete sibling recurring
