@@ -354,6 +354,13 @@ export function ViewPage() {
                       {label}<span className="sort-icon">{arr(k)}</span>
                     </th>
                   ))}
+                  <th style={{ textAlign: 'right', width: 56 }}>Cadence</th>
+                  <th style={{ textAlign: 'right', width: 56 }}>Div By</th>
+                  <th className={`sortable${sortCol === 'shared_expense' ? ' sort-active' : ''}`}
+                    onClick={() => sort('shared_expense')} style={{ textAlign: 'center', width: 60 }}>
+                    Shared<span className="sort-icon">{arr('shared_expense')}</span>
+                  </th>
+                  <th style={{ textAlign: 'right', width: 66 }}>Share %</th>
                   {([
                     ['monthly_amount', 'Monthly'],
                     ['final_amount',   'Final'],
@@ -363,10 +370,6 @@ export function ViewPage() {
                       {label}<span className="sort-icon">{arr(k)}</span>
                     </th>
                   ))}
-                  <th className={`sortable${sortCol === 'shared_expense' ? ' sort-active' : ''}`}
-                    onClick={() => sort('shared_expense')} style={{ textAlign: 'center', width: 72 }}>
-                    Shared<span className="sort-icon">{arr('shared_expense')}</span>
-                  </th>
                   <th style={{ width: 64 }}></th>
                 </tr>
                 {/* Filter row - one <th> per header column, in the same order */}
@@ -417,25 +420,27 @@ export function ViewPage() {
                       {filterTypeOptions.map(s => <option key={s}>{s}</option>)}
                     </select>
                   </th>
+                  <th>{/* Cadence */}
+                    <select className="filter-input" style={{ padding: '2px 4px' }}
+                      value={filters.cadence}
+                      onChange={e => { setFilters(f => ({ ...f, cadence: e.target.value })); setPage(1) }}>
+                      <option value="">All</option>
+                      {filterCadenceOptions.map(s => <option key={s}>{s}</option>)}
+                    </select>
+                  </th>
+                  <th></th>{/* Div By - no filter */}
+                  <th>{/* Shared */}
+                    <select className="filter-input" style={{ padding: '2px 4px' }}
+                      value={filters.shared_expense}
+                      onChange={e => { setFilters(f => ({ ...f, shared_expense: e.target.value })); setPage(1) }}>
+                      <option value="">All</option>
+                      <option value="Y">Y</option>
+                      <option value="N">N</option>
+                    </select>
+                  </th>
+                  <th></th>{/* Share % - no filter */}
                   <th></th>{/* Monthly - no filter */}
                   <th></th>{/* Final - no filter */}
-                  <th>{/* Shared (cadence bundled in, matching the tbody cell layout) */}
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      <select className="filter-input" style={{ padding: '2px 4px' }}
-                        value={filters.cadence}
-                        onChange={e => { setFilters(f => ({ ...f, cadence: e.target.value })); setPage(1) }}>
-                        <option value="">All</option>
-                        {filterCadenceOptions.map(s => <option key={s}>{s}</option>)}
-                      </select>
-                      <select className="filter-input" style={{ padding: '2px 4px' }}
-                        value={filters.shared_expense}
-                        onChange={e => { setFilters(f => ({ ...f, shared_expense: e.target.value })); setPage(1) }}>
-                        <option value="">All</option>
-                        <option value="Y">Y</option>
-                        <option value="N">N</option>
-                      </select>
-                    </div>
-                  </th>
                   <th>{/* actions */}
                     {Object.values(filters).some(Boolean) && (
                       <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }}
@@ -493,29 +498,34 @@ export function ViewPage() {
                           onChange={v => setField(row.id, 'spend_type', v as SpendType)}
                           style={{ width: 100 }} />
                       </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <input type="text" className="field-input" style={{ width: 46 }}
+                          value={cadence ?? 'O'}
+                          onChange={e => {
+                            setField(row.id, 'cadence', e.target.value as Cadence)
+                            if (e.target.value === 'A') setField(row.id, 'divide_by', settings.default_annual_divisor)
+                          }} />
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <input type="number" className="field-input" style={{ width: 44 }} min="1"
+                          value={divideBy}
+                          onChange={e => setField(row.id, 'divide_by', parseInt(e.target.value) || 1)} />
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <input type="checkbox" checked={shared === 'Y'}
+                          onChange={e => {
+                            setField(row.id, 'shared_expense', e.target.checked ? 'Y' : 'N')
+                            if (e.target.checked) setField(row.id, 'share_ratio', settings.default_share_ratio)
+                          }} />
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <input type="number" className="field-input" style={{ width: 52 }}
+                          min="0.01" max="1" step="0.01"
+                          value={ratio}
+                          onChange={e => setField(row.id, 'share_ratio', parseFloat(e.target.value) || 1)} />
+                      </td>
                       <td style={{ color: 'var(--muted)', fontSize: 12, textAlign: 'right' }}>{monthly.toFixed(2)}</td>
                       <td style={{ color: 'var(--teal)', fontSize: 12, textAlign: 'right' }}>{final_amt.toFixed(2)}</td>
-                      <td style={{ textAlign: 'center' }}>
-                        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                          <input type="checkbox" checked={shared === 'Y'}
-                            onChange={e => {
-                              setField(row.id, 'shared_expense', e.target.checked ? 'Y' : 'N')
-                              if (e.target.checked) setField(row.id, 'share_ratio', settings.default_share_ratio)
-                            }} />
-                          {shared === 'Y' && (
-                            <input type="number" className="field-input" style={{ width: 52, fontSize: 11 }}
-                              min="0.01" max="1" step="0.01"
-                              value={ratio}
-                              onChange={e => setField(row.id, 'share_ratio', parseFloat(e.target.value) || 1)} />
-                          )}
-                          <input type="text" className="field-input" style={{ width: 38, fontSize: 11 }}
-                            value={cadence ?? 'O'}
-                            onChange={e => {
-                              setField(row.id, 'cadence', e.target.value as Cadence)
-                              if (e.target.value === 'A') setField(row.id, 'divide_by', settings.default_annual_divisor)
-                            }} />
-                        </div>
-                      </td>
                       <td>
                         <div style={{ display: 'flex', gap: 4 }}>
                           {isDirty && (
