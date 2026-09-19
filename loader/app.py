@@ -59,7 +59,9 @@ try:
     _db.create_data_feed_table(_startup_conn)
     _db.create_recurring_table(_startup_conn)
     _db.create_settings_table(_startup_conn)
-    _db.create_shared_transactions_table(_startup_conn)
+    # TEMPORARILY DISABLED: shared_transactions is being manually rebuilt
+    # month-by-month (2026-09-19) — re-enable once that's done.
+    # _db.create_shared_transactions_table(_startup_conn)
     _db.create_users_table(_startup_conn)
     _startup_conn.close()
 except Exception as _e:
