@@ -72,7 +72,7 @@ export function ViewPage() {
   const [dirty, setDirty]       = useState<Map<number, Partial<HistoryRow>>>(new Map())
   const [addModal, setAddModal] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [settings, setSettings] = useState<AppSettings>({ default_share_ratio: 0.7, default_annual_divisor: 12 })
+  const [settings, setSettings] = useState<AppSettings>({ default_share_ratio: 0.7, default_annual_divisor: 12, shared_backfill_floor: '' })
   const [bulkFields, setBulkFields] = useState({ category: '', sub_category: '', spend_type: '' })
 
   const { data: periods = [] } = useQuery({
@@ -637,6 +637,14 @@ function SettingsPanel({ settings, onSave, onClose }: {
             onChange={e => setLocal(prev => ({ ...prev, [k]: parseFloat(e.target.value) }))} />
         </div>
       ))}
+      <div style={{ marginBottom: 10 }}>
+        <label style={{ fontSize: 12, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>
+          Shared Backfill Floor
+        </label>
+        <input type="date" className="field-input" style={{ width: '100%' }}
+          value={local.shared_backfill_floor}
+          onChange={e => setLocal(prev => ({ ...prev, shared_backfill_floor: e.target.value }))} />
+      </div>
       <button className="btn btn-primary btn-sm" style={{ width: '100%' }} onClick={() => { onSave(local); onClose() }}>
         Save
       </button>

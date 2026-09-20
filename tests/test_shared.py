@@ -49,17 +49,33 @@ def _make_mock_conn(fetchone=None, fetchall=None, rowcount=1):
 
 class TestCreateSharedTransactionsTable:
     def test_creates_table_and_backfills(self):
-        conn, cur = _make_mock_conn()
+        conn, cur = _make_mock_conn(fetchone=None)
         db.create_shared_transactions_table(conn)
-        assert cur.execute.call_count == 3  # CREATE+ALTER, INSERT backfill, UPDATE patch
+        # CREATE+ALTER, SELECT floor setting, INSERT backfill, UPDATE patch
+        assert cur.execute.call_count == 4
         first_sql = cur.execute.call_args_list[0][0][0]
         assert "CREATE TABLE IF NOT EXISTS shared_transactions" in first_sql
         second_sql = cur.execute.call_args_list[1][0][0]
-        assert "INSERT INTO shared_transactions" in second_sql
-        assert "ON CONFLICT (history_id) DO NOTHING" in second_sql
-        third_sql = cur.execute.call_args_list[2][0][0]
-        assert "monthly_amount IS NULL" in third_sql
+        assert "SELECT value FROM app_settings WHERE key = 'shared_backfill_floor'" in second_sql
+        third_sql, third_params = cur.execute.call_args_list[2][0]
+        assert "INSERT INTO shared_transactions" in third_sql
+        assert "ON CONFLICT (history_id) DO NOTHING" in third_sql
+        assert "GREATEST(%s::date, %s::date)" in third_sql
+        fourth_sql = cur.execute.call_args_list[3][0][0]
+        assert "monthly_amount IS NULL" in fourth_sql
         conn.commit.assert_called_once()
+
+    def test_falls_back_to_scope_start_when_setting_missing(self):
+        conn, cur = _make_mock_conn(fetchone=None)
+        db.create_shared_transactions_table(conn)
+        _, params = cur.execute.call_args_list[2][0]
+        assert params == (db._SHARED_SCOPE_START.isoformat(), db._SHARED_SCOPE_START)
+
+    def test_uses_configured_floor_when_present(self):
+        conn, cur = _make_mock_conn(fetchone=("2026-09-20",))
+        db.create_shared_transactions_table(conn)
+        _, params = cur.execute.call_args_list[2][0]
+        assert params == ("2026-09-20", db._SHARED_SCOPE_START)
 
 
 # ---------------------------------------------------------------------------

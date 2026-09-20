@@ -312,7 +312,7 @@ def get_settings():
 @_require_token
 def update_settings():
     data = request.get_json(force=True)
-    allowed = {"default_share_ratio", "default_annual_divisor"}
+    allowed = {"default_share_ratio", "default_annual_divisor", "shared_backfill_floor"}
     updates = {k: v for k, v in data.items() if k in allowed}
     if not updates:
         abort(400, f"No valid settings keys provided. Allowed: {sorted(allowed)}")
@@ -336,6 +336,15 @@ def update_settings():
                 updates["default_annual_divisor"] = v
         except (TypeError, ValueError):
             errors["default_annual_divisor"] = "must be an integer"
+    if "shared_backfill_floor" in updates:
+        try:
+            v = _date.fromisoformat(str(updates["shared_backfill_floor"]).strip())
+            if v < _SHARED_SCOPE_START:
+                errors["shared_backfill_floor"] = f"must be on/after {_SHARED_SCOPE_START.isoformat()}"
+            else:
+                updates["shared_backfill_floor"] = v.isoformat()
+        except (TypeError, ValueError):
+            errors["shared_backfill_floor"] = "must be YYYY-MM-DD"
     if errors:
         abort(400, str(errors))
 

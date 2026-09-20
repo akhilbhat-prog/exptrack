@@ -131,6 +131,8 @@ def create_settings_table(conn) -> None:
                 ON CONFLICT (key) DO NOTHING;
             INSERT INTO app_settings (key, value) VALUES ('default_annual_divisor', '12')
                 ON CONFLICT (key) DO NOTHING;
+            INSERT INTO app_settings (key, value) VALUES ('shared_backfill_floor', '2026-09-20')
+                ON CONFLICT (key) DO NOTHING;
         """)
     conn.commit()
 
@@ -520,6 +522,12 @@ def create_shared_transactions_table(conn) -> None:
             ALTER TABLE IF EXISTS shared_transactions ADD COLUMN IF NOT EXISTS is_payment BOOLEAN NOT NULL DEFAULT FALSE;
             ALTER TABLE IF EXISTS shared_transactions ADD COLUMN IF NOT EXISTS is_ignored BOOLEAN NOT NULL DEFAULT FALSE;
         """)
+        # Only auto-backfill rows dated on/after the configured floor — rows before it are
+        # considered already addressed (manually reconciled) and must never be swept in here,
+        # even if a real gap exists, so a restart can't silently re-import old/duplicate data.
+        cur.execute("SELECT value FROM app_settings WHERE key = 'shared_backfill_floor'")
+        floor_row = cur.fetchone()
+        backfill_floor = floor_row[0] if floor_row else _SHARED_SCOPE_START.isoformat()
         cur.execute("""
             INSERT INTO shared_transactions
                 (history_id, amount, monthly_amount, share_ratio, akhil_share, aditi_share, balance,
@@ -539,9 +547,9 @@ def create_shared_transactions_table(conn) -> None:
                 entry_text
             FROM data_feed_history
             WHERE shared_expense = 'Y'
-              AND entry_date >= %s
+              AND entry_date >= GREATEST(%s::date, %s::date)
             ON CONFLICT (history_id) DO NOTHING
-        """, (_SHARED_SCOPE_START,))
+        """, (backfill_floor, _SHARED_SCOPE_START))
         # Patch existing rows that have monthly_amount = NULL (rows inserted before this column existed)
         cur.execute("""
             UPDATE shared_transactions st

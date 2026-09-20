@@ -801,6 +801,29 @@ class TestSettings:
         resp = client.patch("/api/settings", json={"unknown_key": "value"})
         assert resp.status_code == 400
 
+    def test_patch_updates_shared_backfill_floor(self, client, monkeypatch):
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
+        mock_conn, _ = _make_mock_conn()
+        updated = {"default_share_ratio": 0.7, "default_annual_divisor": 12, "shared_backfill_floor": "2026-10-01"}
+        with patch("history.db.get_connection", return_value=mock_conn), \
+             patch("history.db.update_setting") as mock_update, \
+             patch("history.db.get_settings", return_value=updated):
+            resp = client.patch("/api/settings", json={"shared_backfill_floor": "2026-10-01"})
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["shared_backfill_floor"] == "2026-10-01"
+        mock_update.assert_called_once_with(mock_conn, "shared_backfill_floor", "2026-10-01")
+
+    def test_patch_rejects_invalid_shared_backfill_floor_format(self, client, monkeypatch):
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
+        resp = client.patch("/api/settings", json={"shared_backfill_floor": "not-a-date"})
+        assert resp.status_code == 400
+
+    def test_patch_rejects_shared_backfill_floor_before_scope_start(self, client, monkeypatch):
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
+        resp = client.patch("/api/settings", json={"shared_backfill_floor": "2026-01-01"})
+        assert resp.status_code == 400
+
     def test_patch_requires_token(self, client, monkeypatch):
         monkeypatch.setenv("ADMIN_TOKEN", "tok")
         assert client.patch("/api/settings", json={"default_share_ratio": 0.5}).status_code == 401

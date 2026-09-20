@@ -348,6 +348,17 @@ class TestGetHistoryRow:
 # get_settings / update_setting
 # ---------------------------------------------------------------------------
 
+class TestCreateSettingsTable:
+    def test_seeds_three_default_rows(self):
+        mock_conn, cur = _make_mock_conn()
+        db.create_settings_table(mock_conn)
+        sql = cur.execute.call_args[0][0]
+        assert "'default_share_ratio', '0.7'" in sql
+        assert "'default_annual_divisor', '12'" in sql
+        assert "'shared_backfill_floor', '2026-09-20'" in sql
+        mock_conn.commit.assert_called_once()
+
+
 class TestGetSettings:
     def test_returns_typed_dict(self):
         mock_conn, _ = _make_mock_conn(fetchall=[("default_share_ratio", "0.7"), ("default_annual_divisor", "12")])
@@ -356,6 +367,12 @@ class TestGetSettings:
         assert isinstance(result["default_share_ratio"], float)
         assert result["default_annual_divisor"] == 12
         assert isinstance(result["default_annual_divisor"], int)
+
+    def test_shared_backfill_floor_returned_as_string(self):
+        mock_conn, _ = _make_mock_conn(fetchall=[("shared_backfill_floor", "2026-09-20")])
+        result = db.get_settings(mock_conn)
+        assert result["shared_backfill_floor"] == "2026-09-20"
+        assert isinstance(result["shared_backfill_floor"], str)
 
     def test_unknown_key_returned_as_string(self):
         mock_conn, _ = _make_mock_conn(fetchall=[("some_flag", "yes")])

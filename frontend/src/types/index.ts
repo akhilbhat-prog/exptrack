@@ -91,6 +91,7 @@ export interface HistorySummary {
 export interface AppSettings {
   default_share_ratio: number
   default_annual_divisor: number
+  shared_backfill_floor: string
 }
 
 // ── Shared ───────────────────────────────────────────────────────
