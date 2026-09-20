@@ -201,6 +201,16 @@ Replaced the four vanilla HTML/CSS/JS templates (`review.html`, `view.html`, `sh
 
 ---
 
+## BL-27 — Per-item day-of-month for recurring transactions
+
+**Status:** Open (logged 2026-09-14)
+
+`recurring_transactions` has no per-definition day field: all active definitions generate together in one batch, gated only on `_date.today().day == 1` in `app.py`, and every generated row is stamped `entry_date` = the 1st of the month regardless of the real debit day. Surfaced while adding a term insurance recurring entry that actually debits on the 12th — added manually for now, dated the 1st like everything else, with past months backfilled by hand.
+
+Needed: a `day_of_month` column on `recurring_transactions`; `generate_recurring_entries` changed to check each row's day against `today.day` instead of one global 1st-of-month gate; `entry_date` stamped as the actual day; `Recurring.tsx` add/edit modal gets a day-of-month input. Also revisit the "Generate Now" button (`POST /api/recurring/generate`) — it currently regenerates *all* pending active definitions in one shot with no way to target a single definition, which is too broad once per-day generation exists.
+
+---
+
 ## BL-15 — Context management strategy
 
 **Status:** Complete (2026-06-20)

@@ -8,7 +8,7 @@ export function setToken(t: string) {
 }
 export function getToken() { return _token }
 
-function withToken(path: string): string {
+export function withToken(path: string): string {
   if (!_token) return path
   const sep = path.includes('?') ? '&' : '?'
   return `${path}${sep}token=${encodeURIComponent(_token)}`

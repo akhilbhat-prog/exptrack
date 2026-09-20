@@ -6,15 +6,18 @@ Routes:
   GET   /api/shared/fy-list         — available financial year start years
   GET   /api/shared?fy=<year>       — all shared rows for a financial year
   GET   /api/shared/summary?fy=<y>  — aggregate stats for summary cards
+  GET   /api/shared/export          — CSV download of all shared rows, every FY
   PATCH /api/shared/<id>            — update paid_by, owed_by, or settled
   DELETE /api/shared/<id>           — remove row from mirror
 
 Auth: ADMIN_TOKEN grants full access. Valid user session (role='user') also grants access.
 """
 
+import csv
+import io
 from datetime import date as _date
 
-from flask import Blueprint, abort, jsonify, request
+from flask import Blueprint, Response, abort, jsonify, request
 
 import db
 from token_auth import require_any_auth as _require_token
@@ -70,6 +73,39 @@ def shared_summary():
         return jsonify(summary)
     finally:
         conn.close()
+
+
+_EXPORT_COLUMNS = [
+    "id", "history_id", "entry_date", "merchant", "category", "subcategory",
+    "entry_text", "paid_by", "owed_by", "amount", "monthly_amount", "share_ratio",
+    "akhil_share", "aditi_share", "balance", "settled", "settled_at",
+    "is_payment", "is_ignored",
+]
+
+
+@shared_bp.route("/api/shared/export")
+@_require_token
+def export_shared():
+    conn = db.get_connection()
+    try:
+        years = db.get_shared_fy_list(conn) or [_current_fy_year()]
+        rows = []
+        for fy_year in years:
+            rows.extend(db.get_shared_transactions(conn, fy_year))
+    finally:
+        conn.close()
+
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=_EXPORT_COLUMNS, extrasaction="ignore")
+    writer.writeheader()
+    writer.writerows(rows)
+
+    filename = f"shared_transactions_{_date.today().isoformat()}.csv"
+    return Response(
+        buf.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 @shared_bp.route("/api/shared/payment", methods=["POST"])

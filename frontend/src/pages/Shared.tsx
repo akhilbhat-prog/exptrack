@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, CreditCard, X } from 'lucide-react'
+import { Plus, CreditCard, Download, X } from 'lucide-react'
 import { Layout } from '../components/Layout'
 import { useToast } from '../hooks/useToast'
 import { sharedApi, type CreateSharedPayload, type PaymentPayload } from '../api/shared'
@@ -129,6 +129,9 @@ export function SharedPage() {
       sidebar={sidebar}
       headerExtra={
         <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-secondary btn-sm" onClick={() => window.open(sharedApi.exportUrl(), '_blank')}>
+            <Download size={13} /> Download All
+          </button>
           <button className="btn btn-secondary btn-sm" onClick={() => setPayModal(true)}>
             <CreditCard size={13} /> Payment
           </button>

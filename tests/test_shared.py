@@ -351,6 +351,63 @@ class TestListShared:
 
 
 # ---------------------------------------------------------------------------
+# Flask routes â€” GET /api/shared/export
+# ---------------------------------------------------------------------------
+
+class TestExportShared:
+    _ROW = {
+        "id": 1, "history_id": 10, "paid_by": "Akhil", "owed_by": "Aditi",
+        "amount": 1000.0, "monthly_amount": 1000.0, "share_ratio": 0.7,
+        "akhil_share": 700.0, "aditi_share": 300.0, "balance": 300.0,
+        "entry_date": "2026-05-01", "merchant": "Swiggy", "category": "Food",
+        "subcategory": "Dining", "entry_text": "Swiggy order", "settled": False,
+        "settled_at": None, "is_payment": False, "is_ignored": False,
+    }
+
+    def test_returns_csv_with_rows_from_every_fy(self, client, monkeypatch):
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
+        with patch("db.get_connection") as mock_fn:
+            mock_conn, _ = _make_mock_conn()
+            mock_fn.return_value = mock_conn
+            with patch("db.get_shared_fy_list", return_value=[2026, 2025]), \
+                 patch("db.get_shared_transactions", return_value=[self._ROW]) as mock_get:
+                resp = client.get("/api/shared/export")
+        assert resp.status_code == 200
+        assert resp.content_type.startswith("text/csv")
+        assert "attachment" in resp.headers["Content-Disposition"]
+        body = resp.get_data(as_text=True)
+        assert "Swiggy" in body
+        assert mock_get.call_count == 2
+        mock_get.assert_any_call(mock_conn, 2026)
+        mock_get.assert_any_call(mock_conn, 2025)
+
+    def test_no_fy_falls_back_to_current(self, client, monkeypatch):
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
+        with patch("db.get_connection") as mock_fn:
+            mock_conn, _ = _make_mock_conn()
+            mock_fn.return_value = mock_conn
+            with patch("db.get_shared_fy_list", return_value=[]), \
+                 patch("db.get_shared_transactions", return_value=[]):
+                resp = client.get("/api/shared/export")
+        assert resp.status_code == 200
+
+    def test_token_required_without_token(self, client, monkeypatch):
+        monkeypatch.setenv("ADMIN_TOKEN", "secret")
+        resp = client.get("/api/shared/export")
+        assert resp.status_code == 401
+
+    def test_correct_token_grants_access(self, client, monkeypatch):
+        monkeypatch.setenv("ADMIN_TOKEN", "secret")
+        with patch("db.get_connection") as mock_fn:
+            mock_conn, _ = _make_mock_conn()
+            mock_fn.return_value = mock_conn
+            with patch("db.get_shared_fy_list", return_value=[2026]), \
+                 patch("db.get_shared_transactions", return_value=[]):
+                resp = client.get("/api/shared/export?token=secret")
+        assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
 # Flask routes â€” PATCH /api/shared/<id>
 # ---------------------------------------------------------------------------
 

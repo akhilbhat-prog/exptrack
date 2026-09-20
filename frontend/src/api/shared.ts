@@ -1,4 +1,4 @@
-import { api } from './client'
+import { api, withToken } from './client'
 import type { SharedRow, SharedSummary } from '../types'
 
 export interface CreateSharedPayload {
@@ -36,4 +36,5 @@ export const sharedApi = {
   payment:  (payload: PaymentPayload) => api.post<SharedRow>('/api/shared/payment', payload),
   patch:    (id: number, payload: PatchSharedPayload) => api.patch<SharedRow>(`/api/shared/${id}`, payload),
   delete:   (id: number) => api.delete(`/api/shared/${id}`),
+  exportUrl: () => withToken('/api/shared/export'),
 }
