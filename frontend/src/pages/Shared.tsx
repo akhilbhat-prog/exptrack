@@ -20,6 +20,8 @@ export function SharedPage() {
 
   const [fy, setFy] = useState<number | null>(null)
   const [month, setMonth] = useState<string | null>(null)   // 'YYYY-MM' inside the FY, or null for the whole FY
+  const [split, setSplit] = useState(false)                   // month view only: one table per payer
+  const splitOn = split && month != null
   const [expandedFys, setExpandedFys] = useState<Set<number>>(new Set())
   const [sortCol, setSortCol]   = useState<SortKey>('entry_date')
   const [sortDir, setSortDir]   = useState<'asc' | 'desc'>('desc')
@@ -135,7 +137,7 @@ export function SharedPage() {
           <div
             className={`fy-item${activeFy === y && !month ? ' active' : ''}`}
             style={{ display: 'flex', alignItems: 'center', gap: 4 }}
-            onClick={() => { setFy(y); setMonth(null) }}
+            onClick={() => { setFy(y); setMonth(null); setSplit(false) }}
           >
             <button className="sidebar-chevron" title={isOpen(y) ? 'Collapse' : 'Expand'}
               onClick={e => { e.stopPropagation(); toggleFy(y) }}>
@@ -207,10 +209,16 @@ export function SharedPage() {
       <div className="card">
         <div className="card-header" style={{ gap: 8 }}>
           <span>Shared Transactions — FY {fyLabel(activeFy)}{month ? ` · ${monthLabel(month)}` : ''}</span>
+          {month && (
+            <label className="btn btn-secondary btn-sm" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+              <input type="checkbox" checked={split} onChange={e => setSplit(e.target.checked)} />
+              Split view
+            </label>
+          )}
           <input
             className="field-input"
             placeholder="Filter…"
-            style={{ marginLeft: 'auto', width: 200, fontSize: 12 }}
+            style={{ marginLeft: month ? 0 : 'auto', width: 200, fontSize: 12 }}
             value={filter}
             onChange={e => setFilter(e.target.value)}
           />
@@ -219,6 +227,12 @@ export function SharedPage() {
           <div className="empty-state">Loading…</div>
         ) : displayed.length === 0 ? (
           <div className="empty-state">No shared transactions</div>
+        ) : splitOn ? (
+          <SplitViews
+            rows={displayed}
+            onIgnore={row => patchMut.mutate({ id: row.id, payload: { is_ignored: !row.is_ignored } })}
+            onDelete={row => { if (confirm('Delete?')) deleteMut.mutate(row.id) }}
+          />
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table className="data-table">
@@ -358,6 +372,132 @@ export function SharedPage() {
         />
       )}
     </Layout>
+  )
+}
+
+function ratioLabel(r: number) {
+  const a = Math.round(r * 100)
+  return `${a}:${100 - a}`
+}
+
+// Split view: one table per payer, plus a settle-up strip. Read-only apart from Ignore/delete.
+function SplitViews({ rows, onIgnore, onDelete }: {
+  rows: SharedRow[]
+  onIgnore: (r: SharedRow) => void
+  onDelete: (r: SharedRow) => void
+}) {
+  const r2 = (n: number) => Math.round(n * 100) / 100
+  // own = payer's share, owed = the other person's share (or the settlement amount for a payment)
+  function calc(r: SharedRow) {
+    if (r.is_payment) return { base: 0, own: 0, owed: r.balance }
+    const monthly = r.monthly_amount ?? r.amount
+    const akhil = r2(monthly * r.share_ratio)
+    const aditi = r2(monthly * (1 - r.share_ratio))
+    return { base: monthly, own: r.paid_by === 'Akhil' ? akhil : aditi, owed: r.paid_by === 'Akhil' ? aditi : akhil }
+  }
+
+  const tables = (['Akhil', 'Aditi'] as const).map(payer => {
+    const other = payer === 'Akhil' ? 'Aditi' : 'Akhil'
+    const list = rows.filter(r => r.paid_by === payer)
+    const counted = list.filter(r => !r.is_ignored)
+    const sums = counted.reduce(
+      (t, r) => { const c = calc(r); return { amount: t.amount + c.base, own: t.own + c.own, owed: t.owed + c.owed } },
+      { amount: 0, own: 0, owed: 0 },
+    )
+    return { payer, other, list, count: counted.filter(r => !r.is_payment).length, ...sums }
+  })
+  const [byAkhil, byAditi] = tables
+  const net = r2(byAkhil.owed - byAditi.owed)
+
+  return (
+    <div style={{ padding: '4px 0 16px' }}>
+      {tables.map(t => (
+        <div key={t.payer} style={{ marginBottom: 20 }}>
+          <div style={{ padding: '10px 16px', fontWeight: 700, fontSize: 12, letterSpacing: 0.4, textTransform: 'uppercase', color: 'var(--muted)' }}>
+            Paid by {t.payer}
+          </div>
+          {t.list.length === 0 ? (
+            <div className="empty-state" style={{ padding: 16 }}>Nothing paid by {t.payer} this month</div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Merchant</th>
+                    <th>Category</th>
+                    <th style={{ textAlign: 'right' }}>Amount</th>
+                    <th style={{ textAlign: 'right' }} title="Akhil : Aditi">Ratio</th>
+                    <th style={{ textAlign: 'right' }}>{t.payer}'s share</th>
+                    <th style={{ textAlign: 'right' }}>Owed by {t.other}</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {t.list.map(r => {
+                    const c = calc(r)
+                    return (
+                      <tr key={r.id} style={{
+                        opacity: r.is_ignored ? 0.3 : 1,
+                        background: r.is_payment ? 'var(--teal-dim)' : undefined,
+                      }}>
+                        <td style={{ color: 'var(--muted)', whiteSpace: 'nowrap' }}>{fmtDate(r.entry_date)}</td>
+                        <td>{r.merchant ?? r.entry_text}</td>
+                        <td style={{ color: 'var(--muted)' }}>{r.is_payment ? 'Payment' : (r.category ?? '—')}</td>
+                        <td className="amt">{fmtAmt(r.is_payment ? r.amount : c.base)}</td>
+                        <td className="amt" style={{ color: 'var(--muted)' }}>{r.is_payment ? '—' : ratioLabel(r.share_ratio)}</td>
+                        <td className="amt">{r.is_payment ? '—' : fmtAmt(c.own)}</td>
+                        <td className="amt" style={{ fontWeight: 600 }}>{fmtAmt(c.owed)}</td>
+                        <td>
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              style={{ color: r.is_ignored ? 'var(--muted)' : 'var(--amber)', fontSize: 11 }}
+                              onClick={() => onIgnore(r)}
+                              title={r.is_ignored ? 'Include in balance' : 'Ignore from balance'}
+                            >
+                              {r.is_ignored ? 'Include' : 'Ignore'}
+                            </button>
+                            {!r.history_id && (
+                              <button className="btn btn-ghost btn-sm" onClick={() => onDelete(r)}>×</button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                  <tr style={{ fontWeight: 700, borderTop: '2px solid var(--border2)' }}>
+                    <td colSpan={3}>Total · {t.count} transactions</td>
+                    <td className="amt">{fmtAmt(t.amount)}</td>
+                    <td></td>
+                    <td className="amt">{fmtAmt(t.own)}</td>
+                    <td className="amt">{fmtAmt(t.owed)}</td>
+                    <td></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ))}
+
+      <div style={{ margin: '0 16px', padding: '12px 16px', border: '1px solid var(--border)', borderRadius: 'var(--radius)' }}>
+        <div className="sc-label" style={{ marginBottom: 6 }}>Settle up</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+          <span>Aditi owes Akhil</span><span className="amt">{fmtAmt(byAkhil.owed)}</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+          <span>Akhil owes Aditi</span><span className="amt">−{fmtAmt(byAditi.owed)}</span>
+        </div>
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', fontWeight: 700, marginTop: 6, paddingTop: 6,
+          borderTop: '1px solid var(--border)', color: net >= 0 ? 'var(--green)' : 'var(--red)',
+        }}>
+          <span>Net: {net >= 0 ? 'Aditi owes Akhil' : 'Akhil owes Aditi'}</span>
+          <span className="amt">{fmtAmt(Math.abs(net))}</span>
+        </div>
+      </div>
+    </div>
   )
 }
 
