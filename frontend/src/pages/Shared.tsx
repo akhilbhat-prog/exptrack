@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, CreditCard, Download, X } from 'lucide-react'
+import { Plus, CreditCard, Download, X, ChevronDown, ChevronRight } from 'lucide-react'
 import { Layout } from '../components/Layout'
 import { useToast } from '../hooks/useToast'
 import { sharedApi, type CreateSharedPayload, type PaymentPayload } from '../api/shared'
@@ -19,6 +19,8 @@ export function SharedPage() {
   const { toast } = useToast()
 
   const [fy, setFy] = useState<number | null>(null)
+  const [month, setMonth] = useState<string | null>(null)   // 'YYYY-MM' inside the FY, or null for the whole FY
+  const [expandedFys, setExpandedFys] = useState<Set<number>>(new Set())
   const [sortCol, setSortCol]   = useState<SortKey>('entry_date')
   const [sortDir, setSortDir]   = useState<'asc' | 'desc'>('desc')
   const [filter, setFilter]     = useState('')
@@ -44,9 +46,14 @@ export function SharedPage() {
   })
 
   const { data: summary } = useQuery({
-    queryKey: ['shared-summary', activeFy],
-    queryFn: () => sharedApi.summary(activeFy),
+    queryKey: ['shared-summary', activeFy, month],
+    queryFn: () => sharedApi.summary(activeFy, month),
     enabled: !!activeFy,
+  })
+
+  const { data: monthList = [] } = useQuery({
+    queryKey: ['shared-months'],
+    queryFn: sharedApi.months,
   })
 
   const patchMut = useMutation({
@@ -58,7 +65,10 @@ export function SharedPage() {
 
   const deleteMut = useMutation({
     mutationFn: sharedApi.delete,
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['shared'] }); toast('Deleted', 'success') },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['shared'] }); qc.invalidateQueries({ queryKey: ['shared-summary'] })
+      qc.invalidateQueries({ queryKey: ['shared-months'] }); toast('Deleted', 'success')
+    },
     onError: (e: Error) => toast(e.message, 'error'),
   })
 
@@ -74,6 +84,7 @@ export function SharedPage() {
 
   const displayed = useMemo(() => {
     let r = [...rows]
+    if (month) r = r.filter(row => (row.entry_date ?? '').startsWith(month))
     if (filter) {
       const q = filter.toLowerCase()
       r = r.filter(row =>
@@ -88,7 +99,7 @@ export function SharedPage() {
       return sortDir === 'asc' ? cmp : -cmp
     })
     return r
-  }, [rows, filter, sortCol, sortDir])
+  }, [rows, month, filter, sortCol, sortDir])
 
   function setPend(id: number, field: keyof SharedRow, value: unknown) {
     setPending(p => ({ ...p, [id]: { ...p[id], [field]: value } }))
@@ -108,17 +119,40 @@ export function SharedPage() {
   }
 
   const fyLabel = (y: number) => `${y}–${String(y + 1).slice(2)}`
+  const monthLabel = (m: string) =>
+    new Date(`${m}-01T00:00:00`).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })
+  const monthsOf = (y: number) => monthList.filter(m => m.fy === y)   // already newest first
+  const isOpen = (y: number) => expandedFys.has(y) || (y === activeFy && month != null)
+  function toggleFy(y: number) {
+    setExpandedFys(prev => { const n = new Set(prev); if (isOpen(y)) n.delete(y); else n.add(y); return n })
+  }
 
   const sidebar = (
     <>
       <div className="sidebar-header">Financial Year</div>
       {fyList.map(y => (
-        <div
-          key={y}
-          className={`fy-item${activeFy === y ? ' active' : ''}`}
-          onClick={() => setFy(y)}
-        >
-          FY {fyLabel(y)}
+        <div key={y}>
+          <div
+            className={`fy-item${activeFy === y && !month ? ' active' : ''}`}
+            style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+            onClick={() => { setFy(y); setMonth(null) }}
+          >
+            <button className="sidebar-chevron" title={isOpen(y) ? 'Collapse' : 'Expand'}
+              onClick={e => { e.stopPropagation(); toggleFy(y) }}>
+              {isOpen(y) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </button>
+            FY {fyLabel(y)}
+          </div>
+          {isOpen(y) && monthsOf(y).map(m => (
+            <div
+              key={m.month}
+              className={`fy-item fy-item-child${activeFy === y && month === m.month ? ' active' : ''}`}
+              onClick={() => { setFy(y); setMonth(m.month) }}
+            >
+              <span>{monthLabel(m.month)}</span>
+              <span className="fy-item-count">{m.count}</span>
+            </div>
+          ))}
         </div>
       ))}
     </>
@@ -172,7 +206,7 @@ export function SharedPage() {
       {/* Table */}
       <div className="card">
         <div className="card-header" style={{ gap: 8 }}>
-          <span>Shared Transactions — FY {fyLabel(activeFy)}</span>
+          <span>Shared Transactions — FY {fyLabel(activeFy)}{month ? ` · ${monthLabel(month)}` : ''}</span>
           <input
             className="field-input"
             placeholder="Filter…"
@@ -306,7 +340,7 @@ export function SharedPage() {
           onClose={() => setAddModal(false)}
           onSave={(rows) => {
             sharedApi.create(rows)
-              .then(r => { toast(`Added ${r.count} entries`, 'success'); qc.invalidateQueries({ queryKey: ['shared'] }); qc.invalidateQueries({ queryKey: ['shared-summary'] }); setAddModal(false) })
+              .then(r => { toast(`Added ${r.count} entries`, 'success'); qc.invalidateQueries({ queryKey: ['shared'] }); qc.invalidateQueries({ queryKey: ['shared-summary'] }); qc.invalidateQueries({ queryKey: ['shared-months'] }); setAddModal(false) })
               .catch((e: Error) => toast(e.message, 'error'))
           }}
         />
@@ -318,7 +352,7 @@ export function SharedPage() {
           onClose={() => setPayModal(false)}
           onSave={(payload) => {
             sharedApi.payment(payload)
-              .then(() => { toast('Payment recorded', 'success'); qc.invalidateQueries({ queryKey: ['shared'] }); qc.invalidateQueries({ queryKey: ['shared-summary'] }); setPayModal(false) })
+              .then(() => { toast('Payment recorded', 'success'); qc.invalidateQueries({ queryKey: ['shared'] }); qc.invalidateQueries({ queryKey: ['shared-summary'] }); qc.invalidateQueries({ queryKey: ['shared-months'] }); setPayModal(false) })
               .catch((e: Error) => toast(e.message, 'error'))
           }}
         />

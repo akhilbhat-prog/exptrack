@@ -715,3 +715,60 @@ class TestShareRatioWriteThrough:
         conn, cur = _make_mock_conn(fetchone=self._row(history_id=None))
         db.update_shared_row(conn, 1, {"share_ratio": 0.5})
         assert not [c for c in cur.execute.call_args_list if "UPDATE data_feed_history" in c[0][0]]
+
+
+# ---------------------------------------------------------------------------
+# Monthly views: month-scoped summary + months list
+# ---------------------------------------------------------------------------
+
+class TestSharedMonthlyViews:
+    def test_summary_with_month_uses_that_months_date_range(self):
+        conn, cur = _make_mock_conn(fetchone=(100.0, 500.0, 200.0))
+        db.get_shared_summary(conn, 2026, "2026-10")
+        assert cur.execute.call_args[0][1] == (_date(2026, 10, 1), _date(2026, 11, 1))
+
+    def test_summary_december_rolls_into_next_year(self):
+        conn, cur = _make_mock_conn(fetchone=(0, 0, 0))
+        db.get_shared_summary(conn, 2026, "2026-12")
+        assert cur.execute.call_args[0][1] == (_date(2026, 12, 1), _date(2027, 1, 1))
+
+    def test_summary_without_month_still_covers_whole_fy(self):
+        conn, cur = _make_mock_conn(fetchone=(0, 0, 0))
+        db.get_shared_summary(conn, 2026)
+        assert cur.execute.call_args[0][1] == (_date(2026, 4, 1), _date(2027, 4, 1))
+
+    def test_get_shared_months_shape(self):
+        conn, _ = _make_mock_conn(fetchall=[(2026, "2026-10", 4), (2026, "2026-09", 2)])
+        assert db.get_shared_months(conn) == [
+            {"fy": 2026, "month": "2026-10", "count": 4},
+            {"fy": 2026, "month": "2026-09", "count": 2},
+        ]
+
+    def test_months_route(self, client, monkeypatch):
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
+        monkeypatch.delenv("INVITE_CODE", raising=False)
+        mock_conn, _ = _make_mock_conn()
+        with patch("db.get_connection", return_value=mock_conn), \
+             patch("db.get_shared_months", return_value=[{"fy": 2026, "month": "2026-10", "count": 4}]):
+            resp = client.get("/api/shared/months")
+        assert resp.status_code == 200 and resp.get_json()[0]["month"] == "2026-10"
+
+    def test_months_route_requires_auth(self, client, monkeypatch):
+        monkeypatch.setenv("ADMIN_TOKEN", "secret")
+        assert client.get("/api/shared/months").status_code == 401
+
+    def test_summary_route_passes_month(self, client, monkeypatch):
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
+        monkeypatch.delenv("INVITE_CODE", raising=False)
+        mock_conn, _ = _make_mock_conn()
+        with patch("db.get_connection", return_value=mock_conn), \
+             patch("db.get_shared_summary", return_value={"net_balance": 0, "total_akhil_paid": 0, "total_aditi_paid": 0}) as fn:
+            resp = client.get("/api/shared/summary?fy=2026&month=2027-02")
+        assert resp.status_code == 200
+        fn.assert_called_once_with(mock_conn, 2026, "2027-02")
+
+    @pytest.mark.parametrize("q", ["month=2026-03", "month=2027-04", "month=oct", "month=2026-13"])
+    def test_summary_route_rejects_bad_or_out_of_fy_month(self, client, monkeypatch, q):
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
+        monkeypatch.delenv("INVITE_CODE", raising=False)
+        assert client.get(f"/api/shared/summary?fy=2026&{q}").status_code == 400

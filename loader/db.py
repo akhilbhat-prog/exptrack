@@ -997,10 +997,17 @@ def update_shared_row(conn, shared_id: int, fields: dict) -> dict | None:
     }
 
 
-def get_shared_summary(conn, fy_year: int) -> dict:
-    """Return aggregate stats for shared_transactions in a financial year."""
+def get_shared_summary(conn, fy_year: int, month: str | None = None) -> dict:
+    """Return aggregate stats for shared_transactions in a financial year.
+
+    With `month` ("YYYY-MM", inside the FY) the same rules are applied to that month only.
+    """
     fy_start = _date(fy_year, 4, 1)
     fy_end   = _date(fy_year + 1, 4, 1)
+    if month:
+        y, m = int(month[:4]), int(month[5:7])
+        fy_start = _date(y, m, 1)
+        fy_end   = _date(y + (m == 12), m % 12 + 1, 1)
     with conn.cursor() as cur:
         cur.execute("""
             SELECT
@@ -1023,6 +1030,26 @@ def get_shared_summary(conn, fy_year: int) -> dict:
         "total_akhil_paid": float(row[1] or 0),
         "total_aditi_paid": float(row[2] or 0),
     }
+
+
+def get_shared_months(conn) -> list[dict]:
+    """Return [{fy, month: 'YYYY-MM', count}] for every month with shared rows, newest first."""
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT
+                CASE WHEN EXTRACT(MONTH FROM entry_date) >= 4
+                     THEN EXTRACT(YEAR FROM entry_date)::INT
+                     ELSE EXTRACT(YEAR FROM entry_date)::INT - 1
+                END AS fy_year,
+                TO_CHAR(entry_date, 'YYYY-MM') AS month,
+                COUNT(*) AS cnt
+            FROM shared_transactions
+            WHERE entry_date IS NOT NULL
+            GROUP BY 1, 2
+            ORDER BY 2 DESC
+        """)
+        rows = cur.fetchall()
+    return [{"fy": r[0], "month": r[1], "count": r[2]} for r in rows]
 
 
 def get_shared_fy_list(conn) -> list[int]:

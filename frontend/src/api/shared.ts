@@ -1,5 +1,5 @@
 import { api, withToken } from './client'
-import type { SharedRow, SharedSummary } from '../types'
+import type { SharedRow, SharedSummary, SharedMonth } from '../types'
 
 export interface CreateSharedPayload {
   entry_date:     string
@@ -31,7 +31,9 @@ export interface PatchSharedPayload {
 export const sharedApi = {
   fyList:   () => api.get<number[]>('/api/shared/fy-list'),
   list:     (fy: number) => api.get<SharedRow[]>(`/api/shared?fy=${fy}`),
-  summary:  (fy: number) => api.get<SharedSummary>(`/api/shared/summary?fy=${fy}`),
+  summary:  (fy: number, month?: string | null) =>
+              api.get<SharedSummary>(`/api/shared/summary?fy=${fy}${month ? `&month=${month}` : ''}`),
+  months:   () => api.get<SharedMonth[]>('/api/shared/months'),
   create:   (rows: CreateSharedPayload[]) => api.post<{ ok: boolean; count: number }>('/api/shared', rows),
   payment:  (payload: PaymentPayload) => api.post<SharedRow>('/api/shared/payment', payload),
   patch:    (id: number, payload: PatchSharedPayload) => api.patch<SharedRow>(`/api/shared/${id}`, payload),

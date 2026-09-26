@@ -222,6 +222,8 @@ body.light .toggle-thumb { transform: translateX(20px); background: #ffffff; }
   transition: background var(--transition);
 }
 .fy-item:hover { background: var(--surface2); }
+.fy-item.fy-item-child { padding-left: 38px; font-size: 12px; display: flex; justify-content: space-between; }
+.fy-item-count { color: var(--muted); font-size: 11px; }
 .fy-item.active { background: var(--teal-dim); border-left-color: var(--teal); color: var(--teal); font-weight: 600; }
 
 .amt { font-variant-numeric: tabular-nums; font-family: 'SF Mono', 'Fira Code', monospace; text-align: right; }

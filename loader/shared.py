@@ -67,10 +67,28 @@ def shared_summary():
         fy_year = int(request.args.get("fy", _current_fy_year()))
     except (ValueError, TypeError):
         fy_year = _current_fy_year()
+    month = request.args.get("month", "").strip() or None
+    if month:
+        try:
+            m = _date.fromisoformat(month + "-01")
+        except ValueError:
+            abort(400, "month must be YYYY-MM")
+        if (m.year if m.month >= 4 else m.year - 1) != fy_year:
+            abort(400, "month is not inside the requested financial year")
     conn = db.get_connection()
     try:
-        summary = db.get_shared_summary(conn, fy_year)
+        summary = db.get_shared_summary(conn, fy_year, month)
         return jsonify(summary)
+    finally:
+        conn.close()
+
+
+@shared_bp.route("/api/shared/months")
+@_require_token
+def shared_months():
+    conn = db.get_connection()
+    try:
+        return jsonify(db.get_shared_months(conn))
     finally:
         conn.close()
 

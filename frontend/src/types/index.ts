@@ -133,6 +133,12 @@ export interface SharedRow {
   created_at: string
 }
 
+export interface SharedMonth {
+  fy: number
+  month: string   // 'YYYY-MM'
+  count: number
+}
+
 export interface SharedSummary {
   net_balance: number
   total_akhil_paid: number
