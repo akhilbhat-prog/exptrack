@@ -140,9 +140,12 @@ export interface SharedMonth {
 }
 
 export interface SharedSummary {
-  net_balance: number
+  net_balance: number          // closing balance: carried_over + this range's own net
   total_akhil_paid: number
   total_aditi_paid: number
+  carried_over: number         // net of everything before this range (positive = Aditi owes Akhil)
+  expenses_net: number
+  settlements_net: number
 }
 
 // ── Recurring ────────────────────────────────────────────────────

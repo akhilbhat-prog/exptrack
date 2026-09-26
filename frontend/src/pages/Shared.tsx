@@ -4,7 +4,7 @@ import { Plus, CreditCard, Download, X, ChevronDown, ChevronRight } from 'lucide
 import { Layout } from '../components/Layout'
 import { useToast } from '../hooks/useToast'
 import { sharedApi, type CreateSharedPayload, type PaymentPayload } from '../api/shared'
-import type { SharedRow } from '../types'
+import type { SharedRow, SharedSummary } from '../types'
 
 function fmtAmt(n: number)  { return '₹' + n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
 function fmtDate(s: string | null) {
@@ -183,7 +183,7 @@ export function SharedPage() {
       }
     >
       {/* Summary cards (Split view swaps them for the settle-up panel) */}
-      {splitOn && month && <SettleUpPanel rows={monthRows} title={monthLabel(month)} />}
+      {splitOn && month && <SettleUpPanel rows={monthRows} title={monthLabel(month)} summary={summary} />}
       {!splitOn && summary && (
         <div className="summary-cards">
           {[
@@ -204,6 +204,11 @@ export function SharedPage() {
               {s.isBalance && (
                 <div className="sc-sub">
                   {s.value >= 0 ? 'Aditi owes Akhil' : 'Akhil owes Aditi'}
+                </div>
+              )}
+              {s.isBalance && summary.carried_over !== 0 && (
+                <div className="sc-sub">
+                  incl. {fmtAmt(Math.abs(summary.carried_over))} ({summary.carried_over > 0 ? 'Aditi owes Akhil' : 'Akhil owes Aditi'}) carried from previous months
                 </div>
               )}
             </div>
@@ -312,11 +317,17 @@ export function SharedPage() {
                           />
                         )}
                       </td>
-                      <td className="amt">{row.is_payment ? fmtAmt(row.amount) : fmtAmt(akhil)}</td>
+                      <td className="amt">{row.is_payment ? '—' : fmtAmt(akhil)}</td>
                       <td className="amt">{row.is_payment ? '—' : fmtAmt(aditi)}</td>
-                      <td className="amt" style={{ color: balance > 0 ? 'var(--red)' : 'var(--green)', fontWeight: 600 }}>
-                        {fmtAmt(balance)}
-                      </td>
+                      {row.is_payment ? (
+                        <td className="amt" style={{ color: 'var(--green)', fontWeight: 600 }} title="Settlement, not a shared expense">
+                          Settlement {fmtSigned(settleEffect(row))}
+                        </td>
+                      ) : (
+                        <td className="amt" style={{ color: balance > 0 ? 'var(--red)' : 'var(--green)', fontWeight: 600 }}>
+                          {fmtAmt(balance)}
+                        </td>
+                      )}
                       <td>
                         <input
                           type="checkbox" checked={!!settled}
@@ -388,43 +399,67 @@ function ratioLabel(r: number) {
 
 const r2 = (n: number) => Math.round(n * 100) / 100
 
-// own = payer's share, owed = the other person's share (or the settlement amount for a payment)
+// A leading minus for negatives, e.g. −₹32,000.00
+function fmtSigned(n: number) { return n < 0 ? `−${fmtAmt(-n)}` : fmtAmt(n) }
+
+// Effect of a settlement on "Aditi owes Akhil": Aditi paying reduces it, Akhil paying increases it.
+function settleEffect(r: SharedRow) { return r.paid_by === 'Aditi' ? -r.amount : r.amount }
+
+// Payments are settlements between the two, not shared expenses: no shares, never split.
 function calcRow(r: SharedRow) {
-  if (r.is_payment) return { base: 0, own: 0, owed: r.balance }
   const monthly = r.monthly_amount ?? r.amount
   const akhil = r2(monthly * r.share_ratio)
   const aditi = r2(monthly * (1 - r.share_ratio))
+  // own = payer's share, owed = the other person's share
   return { base: monthly, own: r.paid_by === 'Akhil' ? akhil : aditi, owed: r.paid_by === 'Akhil' ? aditi : akhil }
 }
 
-// One entry per payer. Ignored rows are listed but excluded from the sums.
+// One entry per payer, expenses only (settlements excluded). Ignored rows are listed but not summed.
 function splitTotals(rows: SharedRow[]) {
   return (['Akhil', 'Aditi'] as const).map(payer => {
     const other = payer === 'Akhil' ? 'Aditi' : 'Akhil'
-    const list = rows.filter(r => r.paid_by === payer)
+    const list = rows.filter(r => r.paid_by === payer && !r.is_payment)
     const counted = list.filter(r => !r.is_ignored)
     const sums = counted.reduce(
       (t, r) => { const c = calcRow(r); return { amount: t.amount + c.base, own: t.own + c.own, owed: t.owed + c.owed } },
       { amount: 0, own: 0, owed: 0 },
     )
-    return { payer, other, list, count: counted.filter(r => !r.is_payment).length, ...sums }
+    return { payer, other, list, count: counted.length, ...sums }
   })
 }
 
+function otherOf(p: string) { return p === 'Akhil' ? 'Aditi' : 'Akhil' }
+
 // Top-of-page panel in Split view (replaces the three summary cards). Takes the month's rows
-// without the text Filter, so it always agrees with the month's Net Balance.
-function SettleUpPanel({ rows, title }: { rows: SharedRow[]; title: string }) {
+// without the text Filter; the net is the server's closing balance so it always agrees with it.
+function SettleUpPanel({ rows, title, summary }: { rows: SharedRow[]; title: string; summary?: SharedSummary }) {
   const [byAkhil, byAditi] = splitTotals(rows)
-  const net = r2(byAkhil.owed - byAditi.owed)
+  const settlements = rows.filter(r => r.is_payment && !r.is_ignored)
+  const carried = summary?.carried_over ?? 0
+  const net = summary ? summary.net_balance
+    : r2(byAkhil.owed - byAditi.owed + settlements.reduce((t, r) => t + settleEffect(r), 0))
+  const line = (label: string, who: string, value: string, bold = false) => (
+    <div style={{ display: 'flex', gap: 16, fontSize: 14, fontWeight: bold ? 700 : 400 }}>
+      <span style={{ flex: '1 1 0' }}>{label}</span>
+      <span style={{ flex: '1 1 0' }}>{who}</span>
+      <span className="amt" style={{ minWidth: 130 }}>{value}</span>
+    </div>
+  )
   return (
     <div className="summary-card" style={{ marginBottom: 14 }}>
       <div className="sc-label" style={{ marginBottom: 8 }}>Settle up · {title}</div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
-        <span>Aditi owes Akhil</span><span className="amt">{fmtAmt(byAkhil.owed)}</span>
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
-        <span>Akhil owes Aditi</span><span className="amt">−{fmtAmt(byAditi.owed)}</span>
-      </div>
+      {carried !== 0 && line(
+        'Carried over from previous months',
+        carried > 0 ? 'Aditi owes Akhil' : 'Akhil owes Aditi',
+        fmtAmt(Math.abs(carried)),
+      )}
+      {line(`${title.split(' ')[0]} shared expenses`, 'Aditi owes Akhil', fmtAmt(byAkhil.owed))}
+      {line('', 'Akhil owes Aditi', `−${fmtAmt(byAditi.owed)}`)}
+      {settlements.map(r => line(
+        `Settlement · ${fmtDate(r.entry_date)}`,
+        `${r.paid_by} paid ${otherOf(r.paid_by)}`,
+        fmtSigned(settleEffect(r)),
+      ))}
       <div style={{
         display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 16, marginTop: 8, paddingTop: 8,
         borderTop: '1px solid var(--border)', color: net >= 0 ? 'var(--green)' : 'var(--red)',
@@ -442,8 +477,9 @@ function SplitViews({ rows, onIgnore, onDelete }: {
   onIgnore: (r: SharedRow) => void
   onDelete: (r: SharedRow) => void
 }) {
-  const [open, setOpen] = useState<Record<string, boolean>>({ Akhil: false, Aditi: false })
+  const [open, setOpen] = useState<Record<string, boolean>>({ Akhil: false, Aditi: false, Settlements: false })
   const tables = splitTotals(rows)
+  const settlements = rows.filter(r => r.is_payment)
 
   return (
     <div style={{ padding: '4px 0 16px' }}>
@@ -491,14 +527,13 @@ function SplitViews({ rows, onIgnore, onDelete }: {
                       return (
                         <tr key={r.id} style={{
                           opacity: r.is_ignored ? 0.3 : 1,
-                          background: r.is_payment ? 'var(--teal-dim)' : undefined,
                         }}>
                           <td style={{ color: 'var(--muted)', whiteSpace: 'nowrap' }}>{fmtDate(r.entry_date)}</td>
                           <td>{r.merchant ?? r.entry_text}</td>
-                          <td style={{ color: 'var(--muted)' }}>{r.is_payment ? 'Payment' : (r.category ?? '—')}</td>
-                          <td className="amt">{fmtAmt(r.is_payment ? r.amount : c.base)}</td>
-                          <td className="amt" style={{ color: 'var(--muted)' }}>{r.is_payment ? '—' : ratioLabel(r.share_ratio)}</td>
-                          <td className="amt">{r.is_payment ? '—' : fmtAmt(c.own)}</td>
+                          <td style={{ color: 'var(--muted)' }}>{r.category ?? '—'}</td>
+                          <td className="amt">{fmtAmt(c.base)}</td>
+                          <td className="amt" style={{ color: 'var(--muted)' }}>{ratioLabel(r.share_ratio)}</td>
+                          <td className="amt">{fmtAmt(c.own)}</td>
                           <td className="amt" style={{ fontWeight: 600 }}>{fmtAmt(c.owed)}</td>
                           <td>
                             <div style={{ display: 'flex', gap: 4 }}>
@@ -533,6 +568,70 @@ function SplitViews({ rows, onIgnore, onDelete }: {
           </div>
         )
       })}
+      {settlements.length > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <div
+            onClick={() => setOpen(o => ({ ...o, Settlements: !o.Settlements }))}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap', padding: '10px 16px', cursor: 'pointer',
+              background: 'var(--surface2)', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)',
+              fontSize: 13,
+            }}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, fontSize: 12, letterSpacing: 0.4, textTransform: 'uppercase', minWidth: 150 }}>
+              {open.Settlements ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              Settlements
+            </span>
+            <span>{settlements.length} {settlements.length === 1 ? 'payment' : 'payments'}</span>
+            {(['Aditi', 'Akhil'] as const).map(p => {
+              const sum = settlements.filter(r => r.paid_by === p && !r.is_ignored).reduce((t, r) => t + r.amount, 0)
+              return sum > 0 ? (
+                <span key={p}>{p} paid {otherOf(p)} <b className="amt">{fmtAmt(sum)}</b></span>
+              ) : null
+            })}
+          </div>
+          {open.Settlements && (
+            <div style={{ overflowX: 'auto' }}>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>From → To</th>
+                    <th>Note</th>
+                    <th style={{ textAlign: 'right' }}>Amount</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {settlements.map(r => (
+                    <tr key={r.id} style={{ opacity: r.is_ignored ? 0.3 : 1 }}>
+                      <td style={{ color: 'var(--muted)', whiteSpace: 'nowrap' }}>{fmtDate(r.entry_date)}</td>
+                      <td>{r.paid_by} → {otherOf(r.paid_by)}</td>
+                      <td style={{ color: 'var(--muted)' }}>{r.entry_text ?? '—'}</td>
+                      <td className="amt">{fmtAmt(r.amount)}</td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            style={{ color: r.is_ignored ? 'var(--muted)' : 'var(--amber)', fontSize: 11 }}
+                            onClick={() => onIgnore(r)}
+                            title={r.is_ignored ? 'Include in balance' : 'Ignore from balance'}
+                          >
+                            {r.is_ignored ? 'Include' : 'Ignore'}
+                          </button>
+                          {!r.history_id && (
+                            <button className="btn btn-ghost btn-sm" onClick={() => onDelete(r)}>×</button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

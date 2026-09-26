@@ -203,27 +203,67 @@ class TestUpdateSharedRow:
 # ---------------------------------------------------------------------------
 
 class TestGetSharedSummary:
+    # fetchone shape: (range_net, akhil_paid, aditi_paid, carried_over, settlements_net)
     def test_returns_expected_shape(self):
-        # (net_balance, akhil_paid, aditi_paid)
-        row = (3000.0, 5000.0, 1000.0)
-        conn, cur = _make_mock_conn(fetchone=row)
+        conn, cur = _make_mock_conn(fetchone=(3000.0, 5000.0, 1000.0, 0.0, 0.0))
         result = db.get_shared_summary(conn, 2026)
-        assert "net_balance"      in result
-        assert "total_akhil_paid" in result
-        assert "total_aditi_paid" in result
+        for key in ("net_balance", "total_akhil_paid", "total_aditi_paid",
+                    "carried_over", "expenses_net", "settlements_net"):
+            assert key in result
         assert result["net_balance"]      == 3000.0
         assert result["total_akhil_paid"] == 5000.0
 
     def test_handles_none_row(self):
         conn, cur = _make_mock_conn(fetchone=None)
         result = db.get_shared_summary(conn, 2026)
-        assert result["net_balance"] == 0.0
+        assert result["net_balance"] == 0.0 and result["carried_over"] == 0.0
 
     def test_summary_sql_excludes_ignored(self):
-        conn, cur = _make_mock_conn(fetchone=(0.0, 0.0, 0.0))
+        conn, cur = _make_mock_conn(fetchone=(0.0, 0.0, 0.0, 0.0, 0.0))
         db.get_shared_summary(conn, 2026)
         sql = cur.execute.call_args[0][0]
         assert "is_ignored" in sql
+
+    def test_closing_balance_is_carried_over_plus_range_net(self):
+        # May 2026: April closed at +9,927.56; May's own net is -25,309.40 (incl. a -32,000 settlement)
+        conn, _ = _make_mock_conn(fetchone=(-25309.40, 46446.0, 21377.0, 9927.56, -32000.0))
+        r = db.get_shared_summary(conn, 2026, "2026-05")
+        assert r["carried_over"] == 9927.56
+        assert r["net_balance"] == -15381.84
+        assert r["settlements_net"] == -32000.0
+        assert r["expenses_net"] == 6690.60
+        assert r["total_akhil_paid"] == 46446.0  # payments are not "paid" totals
+
+    def test_carry_over_is_bounded_by_scope_start_and_range_start(self):
+        conn, cur = _make_mock_conn(fetchone=(0, 0, 0, 0, 0))
+        db.get_shared_summary(conn, 2026, "2026-05")
+        params = cur.execute.call_args[0][1]
+        assert params["scope"] == db._SHARED_SCOPE_START == _date(2026, 4, 1)
+        assert params["start"] == _date(2026, 5, 1) and params["end"] == _date(2026, 6, 1)
+
+    def test_april_2026_opens_at_zero(self):
+        # nothing exists before the scope start, so the DB returns 0 carried over for the first month
+        conn, cur = _make_mock_conn(fetchone=(9927.56, 47045.53, 19386.0, 0, 0))
+        r = db.get_shared_summary(conn, 2026, "2026-04")
+        assert r["carried_over"] == 0 and r["net_balance"] == 9927.56
+
+    def test_fy_2026_range_is_the_whole_year_from_scope_start(self):
+        conn, cur = _make_mock_conn(fetchone=(30404.66, 0, 0, 0, 0))
+        r = db.get_shared_summary(conn, 2026)
+        params = cur.execute.call_args[0][1]
+        assert params["start"] == _date(2026, 4, 1) and params["end"] == _date(2027, 4, 1)
+        assert r["net_balance"] == 30404.66
+
+    def test_later_fy_carries_the_earlier_balance(self):
+        conn, cur = _make_mock_conn(fetchone=(1000.0, 0, 0, 30404.66, 0))
+        r = db.get_shared_summary(conn, 2027)
+        assert r["carried_over"] == 30404.66 and r["net_balance"] == 31404.66
+
+    def test_payment_sign_is_in_the_sql(self):
+        conn, cur = _make_mock_conn(fetchone=(0, 0, 0, 0, 0))
+        db.get_shared_summary(conn, 2026)
+        sql = cur.execute.call_args[0][0]
+        assert "is_payment" in sql and "-balance" in sql
 
 
 # ---------------------------------------------------------------------------
@@ -723,19 +763,22 @@ class TestShareRatioWriteThrough:
 
 class TestSharedMonthlyViews:
     def test_summary_with_month_uses_that_months_date_range(self):
-        conn, cur = _make_mock_conn(fetchone=(100.0, 500.0, 200.0))
+        conn, cur = _make_mock_conn(fetchone=(100.0, 500.0, 200.0, 0, 0))
         db.get_shared_summary(conn, 2026, "2026-10")
-        assert cur.execute.call_args[0][1] == (_date(2026, 10, 1), _date(2026, 11, 1))
+        p = cur.execute.call_args[0][1]
+        assert (p["start"], p["end"]) == (_date(2026, 10, 1), _date(2026, 11, 1))
 
     def test_summary_december_rolls_into_next_year(self):
-        conn, cur = _make_mock_conn(fetchone=(0, 0, 0))
+        conn, cur = _make_mock_conn(fetchone=(0, 0, 0, 0, 0))
         db.get_shared_summary(conn, 2026, "2026-12")
-        assert cur.execute.call_args[0][1] == (_date(2026, 12, 1), _date(2027, 1, 1))
+        p = cur.execute.call_args[0][1]
+        assert (p["start"], p["end"]) == (_date(2026, 12, 1), _date(2027, 1, 1))
 
     def test_summary_without_month_still_covers_whole_fy(self):
-        conn, cur = _make_mock_conn(fetchone=(0, 0, 0))
+        conn, cur = _make_mock_conn(fetchone=(0, 0, 0, 0, 0))
         db.get_shared_summary(conn, 2026)
-        assert cur.execute.call_args[0][1] == (_date(2026, 4, 1), _date(2027, 4, 1))
+        p = cur.execute.call_args[0][1]
+        assert (p["start"], p["end"]) == (_date(2026, 4, 1), _date(2027, 4, 1))
 
     def test_get_shared_months_shape(self):
         conn, _ = _make_mock_conn(fetchall=[(2026, "2026-10", 4), (2026, "2026-09", 2)])

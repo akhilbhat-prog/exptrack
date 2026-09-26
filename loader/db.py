@@ -998,37 +998,52 @@ def update_shared_row(conn, shared_id: int, fields: dict) -> dict | None:
 
 
 def get_shared_summary(conn, fy_year: int, month: str | None = None) -> dict:
-    """Return aggregate stats for shared_transactions in a financial year.
+    """Return aggregate stats for shared_transactions in a financial year, or one month of it.
 
-    With `month` ("YYYY-MM", inside the FY) the same rules are applied to that month only.
+    Sign convention: positive net = Aditi owes Akhil. Payments (settlements) are not expenses:
+    a payment by Aditi reduces the net, a payment by Akhil increases it.
+
+    net_balance is the *closing* balance: `carried_over` (the net of every non-ignored row since
+    _SHARED_SCOPE_START up to the start of the range - 0 for April 2026) plus the range's own net.
+    expenses_net / settlements_net split the range's own net into its two parts.
     """
-    fy_start = _date(fy_year, 4, 1)
-    fy_end   = _date(fy_year + 1, 4, 1)
+    range_start = _date(fy_year, 4, 1)
+    range_end   = _date(fy_year + 1, 4, 1)
     if month:
         y, m = int(month[:4]), int(month[5:7])
-        fy_start = _date(y, m, 1)
-        fy_end   = _date(y + (m == 12), m % 12 + 1, 1)
+        range_start = _date(y, m, 1)
+        range_end   = _date(y + (m == 12), m % 12 + 1, 1)
     with conn.cursor() as cur:
         cur.execute("""
             SELECT
-                COALESCE(
-                    SUM(CASE WHEN paid_by = 'Akhil' THEN balance ELSE 0 END)
-                    - SUM(CASE WHEN paid_by = 'Aditi' THEN balance ELSE 0 END),
-                    0
-                ) AS net_balance,
-                COALESCE(SUM(CASE WHEN NOT is_payment AND paid_by = 'Akhil' THEN monthly_amount ELSE 0 END), 0) AS akhil_paid,
-                COALESCE(SUM(CASE WHEN NOT is_payment AND paid_by = 'Aditi' THEN monthly_amount ELSE 0 END), 0) AS aditi_paid
+                COALESCE(SUM(CASE WHEN paid_by = 'Akhil' THEN balance ELSE -balance END)
+                         FILTER (WHERE entry_date >= %(start)s), 0) AS range_net,
+                COALESCE(SUM(CASE WHEN NOT is_payment AND paid_by = 'Akhil' THEN monthly_amount ELSE 0 END)
+                         FILTER (WHERE entry_date >= %(start)s), 0) AS akhil_paid,
+                COALESCE(SUM(CASE WHEN NOT is_payment AND paid_by = 'Aditi' THEN monthly_amount ELSE 0 END)
+                         FILTER (WHERE entry_date >= %(start)s), 0) AS aditi_paid,
+                COALESCE(SUM(CASE WHEN paid_by = 'Akhil' THEN balance ELSE -balance END)
+                         FILTER (WHERE entry_date < %(start)s), 0) AS carried_over,
+                COALESCE(SUM(CASE WHEN is_payment THEN (CASE WHEN paid_by = 'Akhil' THEN balance ELSE -balance END) ELSE 0 END)
+                         FILTER (WHERE entry_date >= %(start)s), 0) AS settlements_net
             FROM shared_transactions
-            WHERE entry_date >= %s AND entry_date < %s
+            WHERE entry_date >= %(scope)s AND entry_date < %(end)s
               AND NOT is_ignored
-        """, (fy_start, fy_end))
+        """, {"scope": _SHARED_SCOPE_START, "start": range_start, "end": range_end})
         row = cur.fetchone()
     if not row:
-        return {"net_balance": 0.0, "total_akhil_paid": 0.0, "total_aditi_paid": 0.0}
+        return {
+            "net_balance": 0.0, "total_akhil_paid": 0.0, "total_aditi_paid": 0.0,
+            "carried_over": 0.0, "expenses_net": 0.0, "settlements_net": 0.0,
+        }
+    range_net, akhil_paid, aditi_paid, carried, settlements = (float(v or 0) for v in row)
     return {
-        "net_balance":      float(row[0] or 0),
-        "total_akhil_paid": float(row[1] or 0),
-        "total_aditi_paid": float(row[2] or 0),
+        "net_balance":      round(carried + range_net, 2),
+        "total_akhil_paid": akhil_paid,
+        "total_aditi_paid": aditi_paid,
+        "carried_over":     round(carried, 2),
+        "expenses_net":     round(range_net - settlements, 2),
+        "settlements_net":  round(settlements, 2),
     }
 
 
