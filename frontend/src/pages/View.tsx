@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { X, ChevronLeft, ChevronRight } from 'lucide-react'
+import { X, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react'
 import { Layout } from '../components/Layout'
 import { ComboInput } from '../components/ComboInput'
 import { useToast } from '../hooks/useToast'
@@ -22,7 +22,7 @@ function fmtDateShort(s: string) {
 }
 
 const COL_WIDTH: Partial<Record<SortKey, number>> = {
-  entry_date: 76, merchant: 200, amount: 90, category: 128, sub_category: 148, spend_type: 106,
+  time_period: 84, entry_date: 76, merchant: 200, amount: 90, category: 128, sub_category: 148, spend_type: 106,
   monthly_amount: 100, final_amount: 100,
 }
 
@@ -339,6 +339,7 @@ export function ViewPage() {
                       style={{ cursor: 'pointer' }} ref={el => { if (el) el.indeterminate = selectedIds.size > 0 && !allSelected }} />
                   </th>
                   {([
+                    ['time_period',  'Time Period'],
                     ['entry_date',   'Date'],
                     ['merchant',     'Merchant'],
                     ['amount',       'Amount'],
@@ -375,6 +376,7 @@ export function ViewPage() {
                 {/* Filter row - one <th> per header column, in the same order */}
                 <tr className="filter-row">
                   <th></th>{/* checkbox */}
+                  <th></th>{/* Time Period - no filter */}
                   <th>{/* Date */}
                     <input type="date" className={`filter-input${filters.entry_date ? ' active' : ''}`}
                       value={filters.entry_date}
@@ -470,6 +472,9 @@ export function ViewPage() {
                           onChange={() => toggleRow(row.id)} style={{ cursor: 'pointer' }} />
                       </td>
                       <td style={{ color: 'var(--muted)', whiteSpace: 'nowrap', fontSize: 12 }}>
+                        {row.time_period}
+                      </td>
+                      <td style={{ color: 'var(--muted)', whiteSpace: 'nowrap', fontSize: 12 }}>
                         {fmtDateShort(row.entry_date)}
                       </td>
                       <td>
@@ -537,8 +542,9 @@ export function ViewPage() {
                           <button
                             className="btn btn-ghost btn-icon"
                             style={{ color: 'var(--red)' }}
+                            title="Delete row"
                             onClick={() => { if (confirm('Delete row?')) deleteMut.mutate(row.id) }}
-                          >×</button>
+                          ><Trash2 size={14} /></button>
                         </div>
                       </td>
                     </tr>
