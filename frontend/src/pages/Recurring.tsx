@@ -194,7 +194,6 @@ export function RecurringPage() {
                         <button className="btn btn-ghost btn-sm" onClick={() => openEdit(d)}>Edit</button>
                         <button
                           className="btn btn-ghost btn-sm"
-                          style={{ color: 'var(--red)' }}
                           onClick={() => {
                             if (confirm('Delete this definition?')) deleteMut.mutate(d.id)
                           }}

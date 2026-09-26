@@ -547,7 +547,7 @@ export function ReviewPage() {
                                 onClick={() => revertItem(item)}>
                                 <CornerDownLeft size={12} />
                               </button>
-                              <button className="btn btn-ghost btn-icon danger" title="Delete row"
+                              <button className="btn btn-ghost btn-icon" title="Delete row"
                                 onClick={() => { if (confirm('Remove from batch?')) deleteItem(item.transaction_id) }}>
                                 <Trash2 size={12} />
                               </button>

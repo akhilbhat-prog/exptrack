@@ -286,7 +286,6 @@ export function SharedPage() {
                           {!row.history_id && (
                             <button
                               className="btn btn-ghost btn-sm"
-                              style={{ color: 'var(--red)' }}
                               onClick={() => { if (confirm('Delete?')) deleteMut.mutate(row.id) }}
                             >×</button>
                           )}

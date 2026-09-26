@@ -541,7 +541,6 @@ export function ViewPage() {
                           )}
                           <button
                             className="btn btn-ghost btn-icon"
-                            style={{ color: 'var(--red)' }}
                             title="Delete row"
                             onClick={() => { if (confirm('Delete row?')) deleteMut.mutate(row.id) }}
                           ><Trash2 size={14} /></button>
