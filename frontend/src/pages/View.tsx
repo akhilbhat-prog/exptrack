@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { X, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react'
+import { X, ChevronLeft, ChevronRight, ChevronDown, Trash2 } from 'lucide-react'
 import { Layout } from '../components/Layout'
 import { ComboInput } from '../components/ComboInput'
 import { ConfirmDialog } from '../components/ConfirmDialog'
@@ -31,6 +31,14 @@ const COL_WIDTH: Partial<Record<SortKey, number>> = {
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
 function fyLabel(fy: number) { return `FY${String(fy % 100).padStart(2, '0')}` }
+
+function fyOfPeriod(period: string): number | null {
+  const [mon, yr] = period.split('-')
+  const mi = MONTHS.indexOf(mon)
+  return mi < 0 ? null : parseInt(yr) + (mi >= 3 ? 1 : 0)
+}
+
+function fmtPeriod(period: string) { return period.replace('-', ' ') }
 
 function prevPeriod(period: string): string | undefined {
   const months = MONTHS
@@ -101,15 +109,16 @@ export function ViewPage() {
     if (settingsData) setSettings(settingsData)
   }, [settingsData])
 
-  // Financial years present in the data (FY27 = Apr 2026 - Mar 2027), newest first.
-  const fyList = useMemo(() => {
-    const years = new Set<number>()
+  // Financial years present in the data (FY27 = Apr 2026 - Mar 2027), newest first,
+  // each with its periods newest first (the API already returns periods newest first).
+  const fyTree = useMemo(() => {
+    const byFy = new Map<number, typeof periods>()
     for (const p of periods) {
-      const [mon, yr] = p.period.split('-')
-      const mi = MONTHS.indexOf(mon)
-      if (mi >= 0) years.add(parseInt(yr) + (mi >= 3 ? 1 : 0))
+      const y = fyOfPeriod(p.period)
+      if (y == null) continue
+      byFy.set(y, [...(byFy.get(y) ?? []), p])
     }
-    return [...years].sort((a, b) => b - a)
+    return [...byFy.entries()].sort((a, b) => b[0] - a[0]).map(([y, ps]) => ({ fy: y, periods: ps }))
   }, [periods])
 
   const { data: fySummary } = useQuery({
@@ -119,6 +128,17 @@ export function ViewPage() {
   })
 
   const activePeriod = period ?? periods[0]?.period ?? null
+
+  // Which FY groups are expanded in the sidebar; the FY of the current selection opens
+  // whenever the selection changes, and can then be collapsed by hand.
+  const [expandedFys, setExpandedFys] = useState<Set<number>>(new Set())
+  const selectedFy = fy ?? (activePeriod ? fyOfPeriod(activePeriod) : null)
+  useEffect(() => {
+    if (selectedFy != null) setExpandedFys(prev => prev.has(selectedFy) ? prev : new Set(prev).add(selectedFy))
+  }, [selectedFy])
+  function toggleFy(y: number) {
+    setExpandedFys(prev => { const n = new Set(prev); if (n.has(y)) n.delete(y); else n.add(y); return n })
+  }
 
   const { data: histPage, isLoading } = useQuery({
     queryKey: ['history', activePeriod],
@@ -313,26 +333,32 @@ export function ViewPage() {
 
   const sidebar = (
     <>
-      <div className="sidebar-header">Financial Years</div>
-      {fyList.map(y => (
-        <div
-          key={y}
-          className={`sidebar-item${fy === y ? ' active' : ''}`}
-          onClick={() => { setFy(y); setSelected(new Set()) }}
-        >
-          <div className="sidebar-item-title">{fyLabel(y)}</div>
-          <div className="sidebar-item-meta">Apr {y - 1} – Mar {y}</div>
-        </div>
-      ))}
       <div className="sidebar-header">Time Periods</div>
-      {periods.map(p => (
-        <div
-          key={p.period}
-          className={`sidebar-item${fy == null && activePeriod === p.period ? ' active' : ''}`}
-          onClick={() => { setFy(null); setPeriod(p.period); setPage(1) }}
-        >
-          <div className="sidebar-item-title">{p.period}</div>
-          <div className="sidebar-item-meta">{p.count} rows</div>
+      {fyTree.map(g => (
+        <div key={g.fy}>
+          <div
+            className={`sidebar-item${fy === g.fy ? ' active' : ''}`}
+            onClick={() => { setFy(g.fy); setSelected(new Set()); setExpandedFys(prev => new Set(prev).add(g.fy)) }}
+          >
+            <div className="sidebar-item-title" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <button className="sidebar-chevron" title={expandedFys.has(g.fy) ? 'Collapse' : 'Expand'}
+                onClick={e => { e.stopPropagation(); toggleFy(g.fy) }}>
+                {expandedFys.has(g.fy) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              </button>
+              {fyLabel(g.fy)}
+            </div>
+            <div className="sidebar-item-meta" style={{ paddingLeft: 22 }}>Apr {g.fy - 1} – Mar {g.fy}</div>
+          </div>
+          {expandedFys.has(g.fy) && g.periods.map(p => (
+            <div
+              key={p.period}
+              className={`sidebar-item sidebar-child${fy == null && activePeriod === p.period ? ' active' : ''}`}
+              onClick={() => { setFy(null); setPeriod(p.period); setPage(1) }}
+            >
+              <div className="sidebar-item-title">{fmtPeriod(p.period)}</div>
+              <div className="sidebar-item-meta">{p.count} rows</div>
+            </div>
+          ))}
         </div>
       ))}
     </>
