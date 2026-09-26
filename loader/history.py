@@ -62,6 +62,22 @@ def list_history():
         conn.close()
 
 
+@history_bp.route("/api/history/fy-summary")
+@_require_token
+def history_fy_summary():
+    try:
+        fy = int(request.args.get("fy", ""))
+    except (ValueError, TypeError):
+        abort(400, "fy must be an integer (the year the financial year ends, e.g. 2027)")
+    if not 2000 <= fy <= 2100:
+        abort(400, "fy out of range")
+    conn = db.get_connection()
+    try:
+        return jsonify(db.get_fy_month_totals(conn, fy))
+    finally:
+        conn.close()
+
+
 @history_bp.route("/api/history/summary")
 @_require_token
 def history_summary():

@@ -28,8 +28,12 @@ const COL_WIDTH: Partial<Record<SortKey, number>> = {
   monthly_amount: 100, final_amount: 100,
 }
 
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
+function fyLabel(fy: number) { return `FY${String(fy % 100).padStart(2, '0')}` }
+
 function prevPeriod(period: string): string | undefined {
-  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+  const months = MONTHS
   const [mon, yr] = period.split('-')
   const mi = months.indexOf(mon)
   if (mi < 0) return undefined
@@ -66,6 +70,7 @@ export function ViewPage() {
   const { toast } = useToast()
 
   const [period, setPeriod]     = useState<string | null>(null)
+  const [fy, setFy]             = useState<number | null>(null)  // financial year (ending year) being viewed
   const [page, setPage]         = useState(1)
   const [sortCol, setSortCol]   = useState<SortKey>('entry_date')
   const [sortDir, setSortDir]   = useState<'asc' | 'desc'>('desc')
@@ -95,6 +100,23 @@ export function ViewPage() {
   useEffect(() => {
     if (settingsData) setSettings(settingsData)
   }, [settingsData])
+
+  // Financial years present in the data (FY27 = Apr 2026 - Mar 2027), newest first.
+  const fyList = useMemo(() => {
+    const years = new Set<number>()
+    for (const p of periods) {
+      const [mon, yr] = p.period.split('-')
+      const mi = MONTHS.indexOf(mon)
+      if (mi >= 0) years.add(parseInt(yr) + (mi >= 3 ? 1 : 0))
+    }
+    return [...years].sort((a, b) => b - a)
+  }, [periods])
+
+  const { data: fySummary } = useQuery({
+    queryKey: ['history-fy', fy],
+    queryFn: () => historyApi.fySummary(fy!),
+    enabled: fy != null,
+  })
 
   const activePeriod = period ?? periods[0]?.period ?? null
 
@@ -181,6 +203,7 @@ export function ViewPage() {
       qc.invalidateQueries({ queryKey: ['history', activePeriod] })
       qc.invalidateQueries({ queryKey: ['history-summary', activePeriod] })
       qc.invalidateQueries({ queryKey: ['history-periods'] })
+      qc.invalidateQueries({ queryKey: ['history-fy'] })
       setDirty(prev => { const n = new Map(prev); n.delete(id); return n })
       toast('Updated', 'success')
     },
@@ -224,6 +247,7 @@ export function ViewPage() {
     qc.invalidateQueries({ queryKey: ['history'] })
     qc.invalidateQueries({ queryKey: ['history-summary'] })
     qc.invalidateQueries({ queryKey: ['history-periods'] })
+    qc.invalidateQueries({ queryKey: ['history-fy'] })
   }
 
   function deleteRow(id: number) {
@@ -289,12 +313,23 @@ export function ViewPage() {
 
   const sidebar = (
     <>
+      <div className="sidebar-header">Financial Years</div>
+      {fyList.map(y => (
+        <div
+          key={y}
+          className={`sidebar-item${fy === y ? ' active' : ''}`}
+          onClick={() => { setFy(y); setSelected(new Set()) }}
+        >
+          <div className="sidebar-item-title">{fyLabel(y)}</div>
+          <div className="sidebar-item-meta">Apr {y - 1} – Mar {y}</div>
+        </div>
+      ))}
       <div className="sidebar-header">Time Periods</div>
       {periods.map(p => (
         <div
           key={p.period}
-          className={`sidebar-item${activePeriod === p.period ? ' active' : ''}`}
-          onClick={() => { setPeriod(p.period); setPage(1) }}
+          className={`sidebar-item${fy == null && activePeriod === p.period ? ' active' : ''}`}
+          onClick={() => { setFy(null); setPeriod(p.period); setPage(1) }}
         >
           <div className="sidebar-item-title">{p.period}</div>
           <div className="sidebar-item-meta">{p.count} rows</div>
@@ -320,8 +355,34 @@ export function ViewPage() {
 
   return (
     <Layout sidebar={sidebar} headerExtra={headerExtra}>
+      {/* Financial year: one tile per month */}
+      {fy != null && (
+        <div className="card">
+          <div className="card-header">
+            <div>
+              <div>
+                {fySummary ? `${fySummary.label} (${fmtAmt(fySummary.fy_total)})` : fyLabel(fy)}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 400, marginTop: 2 }}>
+                Apr {fy - 1} – Mar {fy}
+              </div>
+            </div>
+          </div>
+          <div className="fy-grid">
+            {(fySummary?.months ?? []).map(m => (
+              <div key={m.period} className="summary-card" title={`Open ${m.period}`}
+                onClick={() => { setFy(null); setPeriod(m.period); setPage(1) }}>
+                <div className="sc-label">{m.month} {m.period.split('-')[1]}</div>
+                <div className="sc-value">{fmtAmt(m.total)}</div>
+                <div className="sc-sub">{m.count} rows</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Summary cards */}
-      {summary && (
+      {fy == null && summary && (
         <div className="summary-cards">
           {summary.top_categories.slice(0, 5).map(c => {
             const delta = c.prev_total != null ? c.total - c.prev_total : null
@@ -341,6 +402,7 @@ export function ViewPage() {
       )}
 
       {/* Table */}
+      {fy == null && (
       <div className="card">
         <div className="card-header">
           <div>
@@ -604,6 +666,7 @@ export function ViewPage() {
           </div>
         )}
       </div>
+      )}
 
       {/* Bulk bar */}
       <div className={`bulk-bar${selectedIds.size > 0 ? ' visible' : ''}`}>
@@ -642,6 +705,7 @@ export function ViewPage() {
                 qc.invalidateQueries({ queryKey: ['history', activePeriod] })
                 qc.invalidateQueries({ queryKey: ['history-periods'] })
                 qc.invalidateQueries({ queryKey: ['history-summary', activePeriod] })
+                qc.invalidateQueries({ queryKey: ['history-fy'] })
                 toast(`Added ${r.count} row(s)`, 'success')
                 setAddModal(false)
               })

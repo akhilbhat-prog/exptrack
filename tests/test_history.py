@@ -1002,3 +1002,24 @@ class TestSeriesRespread:
                 "entry_date": "2026-05-10", "entry_text": "Ins", "amount": 1400, "cadence": "A", "divide_by": 14})
         assert resp.status_code == 201 and len(inserts) == 14
         assert len({k["series_id"] for k in inserts}) == 1 and inserts[0]["series_id"]
+
+
+class TestFySummary:
+    def test_returns_month_tiles(self, client, monkeypatch):
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
+        mock_conn, _ = _make_mock_conn()
+        payload = {"fy": 2027, "label": "FY27", "fy_total": 0.0, "months": []}
+        with patch("history.db.get_connection", return_value=mock_conn), \
+             patch("history.db.get_fy_month_totals", return_value=payload) as fn:
+            resp = client.get("/api/history/fy-summary?fy=2027")
+        assert resp.status_code == 200 and resp.get_json()["label"] == "FY27"
+        fn.assert_called_once_with(mock_conn, 2027)
+
+    def test_requires_token(self, client, monkeypatch):
+        monkeypatch.setenv("ADMIN_TOKEN", "tok")
+        assert client.get("/api/history/fy-summary?fy=2027").status_code == 401
+
+    @pytest.mark.parametrize("q", ["", "?fy=abc", "?fy=1"])
+    def test_rejects_bad_fy(self, client, monkeypatch, q):
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
+        assert client.get(f"/api/history/fy-summary{q}").status_code == 400

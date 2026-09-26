@@ -606,3 +606,25 @@ class TestSyncSharedFromHistory:
         with patch("db.delete_shared_transaction") as dele:
             db.sync_shared_from_history(conn, 7)
         dele.assert_called_once_with(conn, 7)
+
+
+class TestFyMonthTotals:
+    def test_builds_apr_to_mar_across_year_boundary_and_zero_fills(self):
+        conn, cur = _make_mock_conn(fetchall=[("Apr-2026", Decimal("100.50"), 3), ("Jan-2027", Decimal("40"), 1)])
+        out = db.get_fy_month_totals(conn, 2027)
+        assert [m["period"] for m in out["months"]] == [
+            "Apr-2026", "May-2026", "Jun-2026", "Jul-2026", "Aug-2026", "Sep-2026",
+            "Oct-2026", "Nov-2026", "Dec-2026", "Jan-2027", "Feb-2027", "Mar-2027",
+        ]
+        assert out["label"] == "FY27" and out["fy"] == 2027
+        assert out["months"][0]["total"] == 100.5 and out["months"][0]["count"] == 3
+        assert out["months"][1]["total"] == 0.0 and out["months"][1]["count"] == 0
+        assert out["months"][9]["month"] == "Jan"
+        assert out["fy_total"] == 140.5
+        assert cur.execute.call_args[0][1][0][0] == "Apr-2026"
+
+    def test_fy25_starts_in_2024(self):
+        conn, _ = _make_mock_conn(fetchall=[])
+        out = db.get_fy_month_totals(conn, 2025)
+        assert out["months"][0]["period"] == "Apr-2024" and out["months"][-1]["period"] == "Mar-2025"
+        assert out["label"] == "FY25" and out["fy_total"] == 0

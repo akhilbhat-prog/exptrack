@@ -1,6 +1,6 @@
 import { api } from './client'
 import type {
-  HistoryPeriod, HistoryPage, HistoryRow, HistorySummary, AppSettings,
+  HistoryPeriod, HistoryPage, HistoryRow, HistorySummary, FySummary, AppSettings,
 } from '../types'
 
 export interface CreateHistoryPayload {
@@ -49,6 +49,7 @@ export const historyApi = {
                 `/api/history/summary?period=${encodeURIComponent(period)}` +
                 (prevPeriod ? `&prev_period=${encodeURIComponent(prevPeriod)}` : '')
               ),
+  fySummary: (fy: number) => api.get<FySummary>(`/api/history/fy-summary?fy=${fy}`),
   create:   (payload: CreateHistoryPayload) => api.post<{ ok: boolean; count: number }>('/api/history', payload),
   patch:    (id: number, payload: PatchHistoryPayload) =>
               api.patch<PatchHistoryResponse>(`/api/history/${id}`, payload),

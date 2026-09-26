@@ -88,6 +88,20 @@ export interface HistorySummary {
   period_total: number
 }
 
+export interface FyMonth {
+  period: string
+  month: string
+  total: number
+  count: number
+}
+
+export interface FySummary {
+  fy: number
+  label: string
+  months: FyMonth[]
+  fy_total: number
+}
+
 export interface AppSettings {
   default_share_ratio: number
   default_annual_divisor: number

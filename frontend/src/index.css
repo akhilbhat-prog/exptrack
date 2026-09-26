@@ -427,6 +427,10 @@ input[type=number] { -moz-appearance: textfield; }
   gap: 14px;
   margin-bottom: 14px;
 }
+.fy-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 16px; }
+.fy-grid .summary-card { cursor: pointer; }
+.fy-grid .summary-card:hover { border-color: var(--teal); }
+@media (max-width: 560px) { .fy-grid { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 900px) { .summary-cards { grid-template-columns: repeat(3, 1fr); } }
 @media (max-width: 560px) { .summary-cards { grid-template-columns: repeat(2, 1fr); } }
 .summary-card {

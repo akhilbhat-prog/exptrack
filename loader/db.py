@@ -595,6 +595,45 @@ def remove_series_row_and_recalc(conn, row_id: int, series_id: str) -> int:
     return len(remaining)
 
 
+_MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
+def get_fy_month_totals(conn, fy: int) -> dict:
+    """Return the 12 monthly totals of financial year `fy` (FY27 = Apr-2026 .. Mar-2027).
+
+    Totals are SUM(COALESCE(final_amount, amount)) per period, the same figure
+    get_history_summary reports as period_total. Months with no rows are zero-filled.
+    """
+    keys = []
+    for i in range(12):
+        m = 3 + i  # index into _MONTH_ABBR, starting at Apr
+        year = fy - 1 + m // 12
+        keys.append((f"{_MONTH_ABBR[m % 12]}-{year}", _MONTH_ABBR[m % 12]))
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT COALESCE(NULLIF(TRIM(time_period), ''), TO_CHAR(entry_date, 'Mon-YYYY')) AS period,
+                   SUM(COALESCE(final_amount, amount)) AS total,
+                   COUNT(*) AS cnt
+            FROM data_feed_history
+            WHERE COALESCE(NULLIF(TRIM(time_period), ''), TO_CHAR(entry_date, 'Mon-YYYY')) = ANY(%s)
+            GROUP BY 1
+            """,
+            ([k for k, _ in keys],),
+        )
+        found = {r[0]: (float(r[1] or 0), r[2]) for r in cur.fetchall()}
+    months = [
+        {"period": k, "month": label, "total": found.get(k, (0.0, 0))[0], "count": found.get(k, (0.0, 0))[1]}
+        for k, label in keys
+    ]
+    return {
+        "fy": fy,
+        "label": f"FY{fy % 100:02d}",
+        "months": months,
+        "fy_total": round(sum(m["total"] for m in months), 2),
+    }
+
+
 def get_history_summary(conn, period: str, prev_period: str | None = None) -> dict:
     """Return top-5 categories by spend for a time period, plus the period grand total.
 
