@@ -1023,3 +1023,53 @@ class TestFySummary:
     def test_rejects_bad_fy(self, client, monkeypatch, q):
         monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         assert client.get(f"/api/history/fy-summary{q}").status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Share ratio 0 kept; out-of-range rejected (never silently turned into 1)
+# ---------------------------------------------------------------------------
+
+class TestHistoryShareRatioZero:
+    def _env(self, monkeypatch):
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
+        monkeypatch.delenv("INVITE_CODE", raising=False)
+
+    def test_patch_zero_ratio_passed_through(self, client, monkeypatch):
+        self._env(monkeypatch)
+        mock_conn, _ = _make_mock_conn()
+        with patch("db.get_connection", return_value=mock_conn), \
+             patch("history.apply_history_patch", return_value={"share_ratio": 0.0, "rows_created": 0}) as ap:
+            resp = client.patch("/api/history/1", json={"share_ratio": 0})
+        assert resp.status_code == 200
+        assert ap.call_args[0][2] == {"share_ratio": 0.0}
+
+    @pytest.mark.parametrize("bad", [1.5, -0.1, "abc"])
+    def test_patch_out_of_range_ratio_rejected(self, client, monkeypatch, bad):
+        self._env(monkeypatch)
+        with patch("history.apply_history_patch") as ap:
+            resp = client.patch("/api/history/1", json={"share_ratio": bad})
+        assert resp.status_code == 400
+        ap.assert_not_called()
+
+    def test_post_zero_ratio_kept(self, client, monkeypatch):
+        self._env(monkeypatch)
+        mock_conn, _ = _make_mock_conn()
+        with patch("db.get_connection", return_value=mock_conn), \
+             patch("db.create_data_feed_table"), \
+             patch("db.insert_data_feed_row", return_value=7) as ins, \
+             patch("db.upsert_shared_transaction") as ups:
+            resp = client.post("/api/history", json={
+                "entry_date": "2026-09-01", "entry_text": "Auto", "amount": 400,
+                "shared_expense": "Y", "share_ratio": 0,
+            })
+        assert resp.status_code == 201
+        assert ins.call_args.kwargs["share_ratio"] == 0.0
+        assert ins.call_args.kwargs["final_amount"] == 0.0
+        assert ups.call_args[0][4] == 0.0
+
+    def test_post_out_of_range_ratio_rejected(self, client, monkeypatch):
+        self._env(monkeypatch)
+        resp = client.post("/api/history", json={
+            "entry_date": "2026-09-01", "entry_text": "Auto", "amount": 400, "share_ratio": 2,
+        })
+        assert resp.status_code == 400

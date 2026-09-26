@@ -12,7 +12,7 @@ import os
 import threading
 
 from dotenv import load_dotenv
-from datetime import date as _date, timedelta
+from datetime import timedelta
 from flask import Flask, abort, jsonify, redirect, send_from_directory, url_for
 from auth_routes import auth_bp
 from token_auth import require_admin, _is_valid_admin_token, _is_valid_user_session
@@ -105,14 +105,15 @@ def _run_trigger():
         cat_status = run_categorization()
     test_output = run_parser_tests()
 
+    # Every night: add any recurring entry whose debit day has arrived this month and is still
+    # missing (a night missed on the debit day is caught up on the next run).
     _recurring_count = 0
-    if _date.today().day == 1:
-        try:
-            _rec_conn = _db.get_connection()
-            _recurring_count = len(_db.generate_recurring_entries(_rec_conn))
-            _rec_conn.close()
-        except Exception as _re:
-            _logging.getLogger(__name__).warning("Recurring generation failed: %s", _re)
+    try:
+        _rec_conn = _db.get_connection()
+        _recurring_count = len(_db.generate_recurring_entries(_rec_conn))
+        _rec_conn.close()
+    except Exception as _re:
+        _logging.getLogger(__name__).warning("Recurring generation failed: %s", _re)
 
     send_summary_email(service, summary, test_output, categorization_status=cat_status)
 

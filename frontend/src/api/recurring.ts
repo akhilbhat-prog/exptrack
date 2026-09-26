@@ -13,6 +13,9 @@ export interface RecurringPayload {
   shared_expense?: 'Y' | 'N'
   share_ratio?:    number
   active?:         boolean
+  day_of_month?:   number
+  paid_by?:        'Akhil' | 'Aditi'
+  start_this_month?: boolean     // create only: generate from this month instead of next
 }
 
 export const recurringApi = {

@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, CreditCard, Download, X, ChevronDown, ChevronRight } from 'lucide-react'
 import { Layout } from '../components/Layout'
+import { NumberInput, validNumber, numberError } from '../components/NumberInput'
 import { useToast } from '../hooks/useToast'
 import { sharedApi, type CreateSharedPayload, type PaymentPayload } from '../api/shared'
 import type { SharedRow, SharedSummary } from '../types'
@@ -14,6 +15,9 @@ function fmtDate(s: string | null) {
 
 type SortKey = keyof Pick<SharedRow, 'entry_date' | 'amount' | 'balance' | 'merchant' | 'category'>
 
+// Unsaved edits for one row. amount/share_ratio are null while their field is blank or invalid.
+type SharedEdits = Partial<Omit<SharedRow, 'amount' | 'share_ratio'>> & { amount?: number | null; share_ratio?: number | null }
+
 export function SharedPage() {
   const qc = useQueryClient()
   const { toast } = useToast()
@@ -25,7 +29,7 @@ export function SharedPage() {
   const [sortCol, setSortCol]   = useState<SortKey>('entry_date')
   const [sortDir, setSortDir]   = useState<'asc' | 'desc'>('desc')
   const [filter, setFilter]     = useState('')
-  const [pending, setPending]   = useState<Record<number, Partial<SharedRow>>>({})
+  const [pending, setPending]   = useState<Record<number, SharedEdits>>({})
   const [addModal, setAddModal] = useState(false)
   const [payModal, setPayModal] = useState(false)
 
@@ -117,8 +121,9 @@ export function SharedPage() {
   function saveRow(row: SharedRow) {
     const edits = pending[row.id] ?? {}
     if (!Object.keys(edits).length) return
-    if (edits.amount !== undefined && !(edits.amount > 0)) { toast('Amount must be greater than 0', 'error'); return }
-    const payload = { amount: edits.amount, share_ratio: edits.share_ratio, paid_by: edits.paid_by }
+    if ('amount' in edits && !validNumber('amount', edits.amount)) { toast(numberError('Amount', 'amount'), 'error'); return }
+    if ('share_ratio' in edits && !validNumber('ratio', edits.share_ratio)) { toast(numberError('Ratio', 'ratio'), 'error'); return }
+    const payload = { amount: edits.amount ?? undefined, share_ratio: edits.share_ratio ?? undefined, paid_by: edits.paid_by }
     patchMut.mutate({ id: row.id, payload }, {
       onSuccess: () => toast(
         edits.amount !== undefined && row.divide_by > 1
@@ -267,11 +272,11 @@ export function SharedPage() {
                       </td>
                       <td style={{ color: 'var(--muted)' }}>{row.category ?? '—'}</td>
                       <td style={{ textAlign: 'right' }}>
-                        <AmountInput row={row} value={c.amount} onChange={v => setPend(row.id, 'amount', v)} />
+                        <AmountInput row={row} edits={pending[row.id]} onChange={v => setPend(row.id, 'amount', v)} />
                       </td>
                       <td className="amt"><MonthlyCell row={row} mo={c.mo} /></td>
                       <td style={{ textAlign: 'right' }}>
-                        {row.is_payment ? '—' : <RatioInput value={c.ratio} onChange={v => setPend(row.id, 'share_ratio', v)} />}
+                        {row.is_payment ? '—' : <RatioInput row={row} edits={pending[row.id]} onChange={v => setPend(row.id, 'share_ratio', v)} />}
                       </td>
                       <td className="amt">{row.is_payment ? '—' : fmtAmt(c.akhil)}</td>
                       <td className="amt">{row.is_payment ? '—' : fmtAmt(c.aditi)}</td>
@@ -369,12 +374,13 @@ function fmtSigned(n: number) { return n < 0 ? `−${fmtAmt(-n)}` : fmtAmt(n) }
 function settleEffect(r: SharedRow) { return r.paid_by === 'Aditi' ? -r.amount : r.amount }
 
 // Row values with any unsaved edits applied, so computed columns update live before Update.
+// A blank/invalid field (null) falls back to the saved value for the computed columns.
 // Mo. Amt = Amount / the History row's divisor (a cadence-A lump sum is spread over its series).
-function liveCalc(r: SharedRow, e: Partial<SharedRow> = {}) {
+function liveCalc(r: SharedRow, e: SharedEdits = {}) {
   const amount = e.amount ?? r.amount
   const ratio = e.share_ratio ?? r.share_ratio
   const paidBy = e.paid_by ?? r.paid_by
-  const mo = e.amount === undefined ? (r.monthly_amount ?? r.amount) : r2(amount / (r.divide_by || 1))
+  const mo = e.amount == null ? (r.monthly_amount ?? r.amount) : r2(amount / (r.divide_by || 1))
   const akhil = r.is_payment ? 0 : r2(mo * ratio)
   const aditi = r.is_payment ? 0 : r2(mo * (1 - ratio))
   const owed = paidBy === 'Akhil' ? aditi : akhil
@@ -382,14 +388,17 @@ function liveCalc(r: SharedRow, e: Partial<SharedRow> = {}) {
            balance: r.is_payment ? amount : owed }
 }
 
-function AmountInput({ row, value, onChange }: { row: SharedRow; value: number; onChange: (v: number) => void }) {
+// The field shows the edit if there is one (even a blank one), otherwise the saved value.
+function editedValue(row: SharedRow, edits: SharedEdits | undefined, k: 'amount' | 'share_ratio'): number | null {
+  return edits && k in edits ? (edits[k] ?? null) : row[k]
+}
+
+function AmountInput({ row, edits, onChange }: { row: SharedRow; edits?: SharedEdits; onChange: (v: number | null) => void }) {
   return (
-    <input
-      type="number" className="field-input"
+    <NumberInput
+      kind="amount" value={editedValue(row, edits, 'amount')} onChange={onChange}
       style={{ width: 96, padding: '3px 6px', fontSize: 12, textAlign: 'right' }}
-      min="0.01" step="0.01" value={value}
       title={row.divide_by > 1 ? `Lump sum spread over ${row.divide_by} months; saving re-spreads the whole series` : undefined}
-      onChange={e => onChange(parseFloat(e.target.value) || 0)}
     />
   )
 }
@@ -403,13 +412,12 @@ function MonthlyCell({ row, mo }: { row: SharedRow; mo: number }) {
   )
 }
 
-function RatioInput({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+function RatioInput({ row, edits, onChange }: { row: SharedRow; edits?: SharedEdits; onChange: (v: number | null) => void }) {
   return (
-    <input
-      type="number" className="field-input"
+    <NumberInput
+      kind="ratio" value={editedValue(row, edits, 'share_ratio')} onChange={onChange}
       style={{ width: 64, padding: '3px 6px', fontSize: 12 }}
-      min="0.01" max="1" step="0.01" value={value}
-      onChange={e => onChange(parseFloat(e.target.value) || 1)}
+      title="Akhil's share, 0 to 1"
     />
   )
 }
@@ -426,7 +434,7 @@ function PaidBySelect({ value, onChange }: { value: string; onChange: (v: string
 
 // Unsaved-edit state owned by SharedPage, shared with the Split tables.
 interface RowEditor {
-  pending: Record<number, Partial<SharedRow>>
+  pending: Record<number, SharedEdits>
   setPend: (id: number, field: keyof SharedRow, value: unknown) => void
   isDirty: (id: number) => boolean
   saveRow: (row: SharedRow) => void
@@ -565,11 +573,11 @@ function SplitViews({ rows, editor, onIgnore, onDelete }: {
                           <td>{r.merchant ?? r.entry_text}</td>
                           <td style={{ color: 'var(--muted)' }}>{r.category ?? '—'}</td>
                           <td style={{ textAlign: 'right' }}>
-                            <AmountInput row={r} value={c.amount} onChange={v => editor.setPend(r.id, 'amount', v)} />
+                            <AmountInput row={r} edits={editor.pending[r.id]} onChange={v => editor.setPend(r.id, 'amount', v)} />
                           </td>
                           <td className="amt"><MonthlyCell row={r} mo={c.mo} /></td>
                           <td style={{ textAlign: 'right' }}>
-                            <RatioInput value={c.ratio} onChange={v => editor.setPend(r.id, 'share_ratio', v)} />
+                            <RatioInput row={r} edits={editor.pending[r.id]} onChange={v => editor.setPend(r.id, 'share_ratio', v)} />
                             <div style={{ fontSize: 11, color: 'var(--muted)' }}>{ratioLabel(c.ratio)}</div>
                           </td>
                           <td className="amt">{fmtAmt(c.own)}</td>
@@ -654,8 +662,7 @@ function SplitViews({ rows, editor, onIgnore, onDelete }: {
                       <td>{r.paid_by} → {otherOf(r.paid_by)}</td>
                       <td style={{ color: 'var(--muted)' }}>{r.entry_text ?? '—'}</td>
                       <td style={{ textAlign: 'right' }}>
-                        <AmountInput row={r} value={editor.pending[r.id]?.amount ?? r.amount}
-                          onChange={v => editor.setPend(r.id, 'amount', v)} />
+                        <AmountInput row={r} edits={editor.pending[r.id]} onChange={v => editor.setPend(r.id, 'amount', v)} />
                       </td>
                       <td>
                         <div style={{ display: 'flex', gap: 4 }}>
@@ -687,22 +694,30 @@ function SplitViews({ rows, editor, onIgnore, onDelete }: {
   )
 }
 
+// Draft row: amount/ratio are null while their field is blank or invalid.
+type DraftShared = Omit<CreateSharedPayload, 'monthly_amount' | 'share_ratio'> & { monthly_amount: number | null; share_ratio: number | null }
+
 function AddEntryModal({ onClose, onSave }: { onClose: () => void; onSave: (rows: CreateSharedPayload[]) => void }) {
   const today = new Date().toISOString().slice(0, 10)
-  const blank = (): CreateSharedPayload => ({
-    entry_date: today, merchant: '', category: '', monthly_amount: 0, share_ratio: 0.7, paid_by: 'Akhil', owed_by: 'Aditi',
+  const blank = (): DraftShared => ({
+    entry_date: today, merchant: '', category: '', monthly_amount: null, share_ratio: 0.7, paid_by: 'Akhil', owed_by: 'Aditi',
   })
-  const [rows, setRows] = useState<CreateSharedPayload[]>([blank()])
+  const [rows, setRows] = useState<DraftShared[]>([blank()])
+  const [error, setError] = useState('')
 
-  function update(i: number, k: keyof CreateSharedPayload, v: unknown) {
+  function update(i: number, k: keyof DraftShared, v: unknown) {
     setRows(prev => prev.map((r, idx) => idx === i ? { ...r, [k]: v } : r))
+    setError('')
   }
 
   function submit() {
-    if (rows.some(r => !r.entry_date || !r.monthly_amount || r.monthly_amount <= 0)) {
-      return
+    for (const [i, r] of rows.entries()) {
+      const where = rows.length > 1 ? `Row ${i + 1}: ` : ''
+      if (!r.entry_date) return setError(`${where}Date is required`)
+      if (!validNumber('amount', r.monthly_amount)) return setError(where + numberError('Amount', 'amount'))
+      if (!validNumber('ratio', r.share_ratio)) return setError(where + numberError('Ratio', 'ratio'))
     }
-    onSave(rows)
+    onSave(rows.map(r => ({ ...r, monthly_amount: r.monthly_amount as number, share_ratio: r.share_ratio as number })))
   }
 
   return (
@@ -738,13 +753,12 @@ function AddEntryModal({ onClose, onSave }: { onClose: () => void; onSave: (rows
                       value={row.category ?? ''} onChange={e => update(i, 'category', e.target.value)} />
                   </td>
                   <td style={{ padding: '3px 4px' }}>
-                    <input type="number" className="field-input" style={{ width: 90 }} step="0.01"
-                      value={row.monthly_amount || ''}
-                      onChange={e => update(i, 'monthly_amount', parseFloat(e.target.value) || 0)} />
+                    <NumberInput kind="amount" style={{ width: 90 }}
+                      value={row.monthly_amount} onChange={v => update(i, 'monthly_amount', v)} />
                   </td>
                   <td style={{ padding: '3px 4px' }}>
-                    <input type="number" className="field-input" style={{ width: 60 }} min="0.01" max="1" step="0.01"
-                      value={row.share_ratio} onChange={e => update(i, 'share_ratio', parseFloat(e.target.value) || 1)} />
+                    <NumberInput kind="ratio" style={{ width: 60 }} title="Akhil's share, 0 to 1"
+                      value={row.share_ratio} onChange={v => update(i, 'share_ratio', v)} />
                   </td>
                   <td style={{ padding: '3px 4px' }}>
                     <select className="field-input" style={{ width: 80 }}
@@ -769,6 +783,7 @@ function AddEntryModal({ onClose, onSave }: { onClose: () => void; onSave: (rows
             onClick={() => setRows(prev => [...prev, { ...prev[prev.length - 1] }])}>
             + Add Row
           </button>
+          {error && <div style={{ color: 'var(--red)', fontSize: 12, marginTop: 8 }}>{error}</div>}
         </div>
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
@@ -780,11 +795,13 @@ function AddEntryModal({ onClose, onSave }: { onClose: () => void; onSave: (rows
 }
 
 function PaymentModal({ onClose, onSave }: { onClose: () => void; onSave: (p: PaymentPayload) => void }) {
-  const [form, setForm] = useState<PaymentPayload>({
+  // amount is null while its field is blank or invalid
+  const [form, setForm] = useState<Omit<PaymentPayload, 'amount'> & { amount: number | null }>({
     entry_date: new Date().toISOString().slice(0, 10),
-    paid_by: 'Aditi', amount: 0,
+    paid_by: 'Aditi', amount: null,
   })
   function f(k: keyof PaymentPayload, v: unknown) { setForm(p => ({ ...p, [k]: v })) }
+  const amountOk = validNumber('amount', form.amount)
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -794,9 +811,13 @@ function PaymentModal({ onClose, onSave }: { onClose: () => void; onSave: (p: Pa
           {([['Date*', 'entry_date', 'date'], ['Amount*', 'amount', 'number'], ['Note', 'note', 'text']] as const).map(([label, key, type]) => (
             <div key={key}>
               <label style={{ fontSize: 12, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>{label}</label>
-              <input type={type} className="field-input" style={{ width: '100%' }}
-                value={(form[key] as string | number | undefined) ?? ''}
-                onChange={e => f(key, type === 'number' ? parseFloat(e.target.value) || 0 : e.target.value)} />
+              {key === 'amount' ? (
+                <NumberInput kind="amount" style={{ width: '100%' }} value={form.amount} onChange={v => f('amount', v)} />
+              ) : (
+                <input type={type} className="field-input" style={{ width: '100%' }}
+                  value={form[key] ?? ''}
+                  onChange={e => f(key, e.target.value)} />
+              )}
             </div>
           ))}
           <div>
@@ -811,8 +832,8 @@ function PaymentModal({ onClose, onSave }: { onClose: () => void; onSave: (p: Pa
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary"
-            disabled={!form.amount || form.amount <= 0}
-            onClick={() => onSave(form)}>Record</button>
+            disabled={!amountOk}
+            onClick={() => { if (amountOk) onSave({ ...form, amount: form.amount as number }) }}>Record</button>
         </div>
       </div>
     </div>

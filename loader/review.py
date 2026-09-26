@@ -148,7 +148,7 @@ _ITEM_FIELD_COERCERS = {
     "cadence":        lambda v: (v or "O").strip(),
     "divide_by":      lambda v: int(v or 1),
     "shared_expense": lambda v: (v or "N").strip().upper()[:1],
-    "share_ratio":    lambda v: float(v or 1.0),
+    "share_ratio":    lambda v: db.parse_share_ratio(v),
     "amount":         lambda v: float(v) if v is not None else None,
 }
 
@@ -163,7 +163,10 @@ def update_item(batch_id, txn_id):
     for field, coerce in _ITEM_FIELD_COERCERS.items():
         if field in data:
             columns.append(field)
-            params.append(coerce(data[field]))
+            try:
+                params.append(coerce(data[field]))
+            except (TypeError, ValueError) as e:
+                abort(400, f"{field}: {e}")
 
     if not columns:
         abort(400, "No recognized fields to update")

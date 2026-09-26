@@ -152,7 +152,7 @@ def complete_batch(conn: psycopg.Connection, batch_id: int) -> int:
     for item in items:
         r = dict(zip(cols, item))
         divide_by = r.get("divide_by") or 1
-        share_ratio = float(r.get("share_ratio") or 1.0)
+        share_ratio = 1.0 if r.get("share_ratio") is None else float(r["share_ratio"])   # 0 is valid
         amount_val = float(r["amount"]) if r.get("amount") is not None else 0.0
         monthly_amount = round(amount_val / divide_by, 2)
         final_amount = round(monthly_amount * share_ratio, 2)

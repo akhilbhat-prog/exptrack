@@ -303,6 +303,9 @@ shared_expense  CHAR(1) NOT NULL DEFAULT 'N'
 share_ratio     NUMERIC(6,4) NOT NULL DEFAULT 1.0
 active          BOOLEAN NOT NULL DEFAULT TRUE
 last_generated  DATE                -- tracks when last auto-generated (idempotency)
+day_of_month    SMALLINT NOT NULL DEFAULT 1   -- debit day 1-31 (31 = last day of shorter months); entry is dated this day
+paid_by         TEXT NOT NULL DEFAULT 'Akhil' -- payer recorded on the shared_transactions row of a shared item
+start_month     DATE                -- 1st of the first month to generate; new items default to next month
 created_at      TIMESTAMPTZ DEFAULT NOW()
 ```
 
@@ -365,7 +368,7 @@ pytest tests/ -v
 
 `tests/conftest.py` adds both `loader/` and `categorizer/` to `sys.path`.
 
-**Current test files (451 tests across 18 files, no DB or network required):**
+**Current test files (572 tests across 18 files, no DB or network required — `conftest.py` pins an unreachable `DATABASE_URL`):**
 
 | File | Covers |
 |---|---|
@@ -564,7 +567,7 @@ The old manual SQL approach has been replaced by a web UI. Current workflow:
 - Add entry modal and payment modal for quick manual entry
 
 ### Recurring Transactions Workflow
-`/recurring` manages definitions of recurring expenses. On the 1st of each month, `app.py` calls `db.generate_recurring_entries()` which inserts one row per active definition into `data_feed_history` (and mirrors to `shared_transactions` if shared).
+`/recurring` manages definitions of recurring expenses. Every night `app.py` calls `db.generate_recurring_entries()`, which inserts this month's row into `data_feed_history` for each active definition whose debit day (`day_of_month`, clamped to the month's length) has arrived, whose `start_month` is not in the future, and which has not been generated this month — dated on the debit day, and mirrored to `shared_transactions` (with the definition's `paid_by`) if shared. A missed night is caught up the next night; only the current month is ever filled. "Today" is IST (`db.today_ist()`).
 
 **Implementation files:**
 - `loader/recurring.py` — Flask Blueprint; all API logic is here
@@ -577,7 +580,7 @@ The old manual SQL approach has been replaced by a web UI. Current workflow:
 | `POST /api/recurring` | Create new definition (`entry_text` and `amount` required) |
 | `PUT /api/recurring/<id>` | Full update of a definition |
 | `DELETE /api/recurring/<id>` | Delete definition |
-| `POST /api/recurring/generate` | Manually trigger generation (`?date=YYYY-MM-DD` optional; defaults to today) |
+| `POST /api/recurring/generate` | Run the nightly due-check now (`?date=YYYY-MM-DD` optional; defaults to today IST) — never generates ahead of an item's debit day |
 
 **Generation idempotency:** `last_generated` is stamped after each run. The SELECT query uses `DATE_TRUNC('month', last_generated) < DATE_TRUNC('month', today)` so re-triggering on the same day is safe.
 

@@ -866,3 +866,46 @@ class TestSharedMonthlyViews:
         monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         monkeypatch.delenv("INVITE_CODE", raising=False)
         assert client.get(f"/api/shared/summary?fy=2026&{q}").status_code == 400
+
+
+class TestSharedRatioZero:
+    def _env(self, monkeypatch):
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
+        monkeypatch.delenv("INVITE_CODE", raising=False)
+
+    def test_patch_zero_ratio_accepted(self, client, monkeypatch):
+        self._env(monkeypatch)
+        mock_conn, _ = _make_mock_conn(fetchone=(None,))
+        with patch("db.get_connection", return_value=mock_conn), \
+             patch("db.update_shared_row", return_value={"share_ratio": 0.0}) as upd:
+            resp = client.patch("/api/shared/1", json={"share_ratio": 0})
+        assert resp.status_code == 200
+        assert upd.call_args[0][2] == {"share_ratio": 0.0}
+
+    def test_patch_ratio_above_one_rejected(self, client, monkeypatch):
+        self._env(monkeypatch)
+        resp = client.patch("/api/shared/1", json={"share_ratio": 1.5})
+        assert resp.status_code == 400
+
+    def test_post_zero_ratio_not_clamped(self, client, monkeypatch):
+        self._env(monkeypatch)
+        mock_conn, _ = _make_mock_conn()
+        with patch("db.get_connection", return_value=mock_conn), \
+             patch("db.insert_manual_shared_transaction", return_value=5) as ins:
+            resp = client.post("/api/shared", json=[{"entry_date": "2026-09-01", "monthly_amount": 100, "share_ratio": 0}])
+        assert resp.status_code == 201
+        assert ins.call_args.kwargs["share_ratio"] == 0.0
+
+    def test_post_missing_ratio_defaults_to_point_seven(self, client, monkeypatch):
+        self._env(monkeypatch)
+        mock_conn, _ = _make_mock_conn()
+        with patch("db.get_connection", return_value=mock_conn), \
+             patch("db.insert_manual_shared_transaction", return_value=5) as ins:
+            resp = client.post("/api/shared", json=[{"entry_date": "2026-09-01", "monthly_amount": 100}])
+        assert resp.status_code == 201
+        assert ins.call_args.kwargs["share_ratio"] == 0.7
+
+    def test_post_ratio_above_one_rejected(self, client, monkeypatch):
+        self._env(monkeypatch)
+        resp = client.post("/api/shared", json=[{"entry_date": "2026-09-01", "monthly_amount": 100, "share_ratio": 1.2}])
+        assert resp.status_code == 400

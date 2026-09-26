@@ -327,6 +327,7 @@ input[type=number] { -moz-appearance: textfield; }
   transition: border-color 0.15s;
 }
 .field-input:focus { border-color: var(--teal); }
+.field-input.invalid, .field-input.invalid:focus { border-color: var(--red); }
 .field-input::placeholder { color: var(--muted2); }
 
 /* ── Status pills ──────────────────────────────────────────────── */

@@ -203,11 +203,27 @@ Replaced the four vanilla HTML/CSS/JS templates (`review.html`, `view.html`, `sh
 
 ## BL-27 — Per-item day-of-month for recurring transactions
 
-**Status:** Open (logged 2026-09-14)
+**Status:** Complete (2026-09-26) — `recurring_transactions` gained `day_of_month` (1-31, clamped to the
+month's length), `paid_by` and `start_month`. Generation now runs every night (not only on the 1st),
+adds each item once its debit day has arrived this month (a missed night is caught up, still dated
+the debit day), dates the entry that day, and uses the item's payer for the Shared row. New items
+start next month unless "Start this month" is ticked. Generate Now runs the same due-check, so it no
+longer creates entries ahead of their debit day. "Today" is taken in IST.
 
 `recurring_transactions` has no per-definition day field: all active definitions generate together in one batch, gated only on `_date.today().day == 1` in `app.py`, and every generated row is stamped `entry_date` = the 1st of the month regardless of the real debit day. Surfaced while adding a term insurance recurring entry that actually debits on the 12th — added manually for now, dated the 1st like everything else, with past months backfilled by hand.
 
 Needed: a `day_of_month` column on `recurring_transactions`; `generate_recurring_entries` changed to check each row's day against `today.day` instead of one global 1st-of-month gate; `entry_date` stamped as the actual day; `Recurring.tsx` add/edit modal gets a day-of-month input. Also revisit the "Generate Now" button (`POST /api/recurring/generate`) — it currently regenerates *all* pending active definitions in one shot with no way to target a single definition, which is too broad once per-day generation exists.
+
+---
+
+## BL-28 — Visual check of deployed /view, /shared and /recurring
+
+**Status:** Open (logged 2026-09-26)
+
+Several UI changes shipped (or are about to ship) without a browser check against the deployed service. Walk through each on the Cloud Run URL:
+- `/view`: FY tree in the sidebar, FY month tiles, "+ Add Entry" from both the FY view and a month view; number fields can be cleared and retyped (Amount, ÷By, Ratio, Settings).
+- `/shared`: FY and monthly views, Split view on by default, settle-up panel in both views (FY carry-over, May 2026 carry-over), editable Amount/Ratio/Paid By with Update, and Mo. Amt/Final Amt columns; edits reflected in `/view`.
+- `/recurring`: Day column, "paid by" under Shared, "Starts <month>" for new items, and the Debit day / Paid by / Start this month form fields.
 
 ---
 

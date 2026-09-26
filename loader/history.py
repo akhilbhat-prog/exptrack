@@ -118,7 +118,10 @@ def create_history():
     cadence = (data.get("cadence") or "O").strip()
     divide_by = max(1, int(data.get("divide_by") or 1))
     shared_expense = (data.get("shared_expense") or "N").strip().upper()[:1]
-    share_ratio = float(data.get("share_ratio") or 1.0)
+    try:
+        share_ratio = db.parse_share_ratio(data.get("share_ratio"))
+    except ValueError as e:
+        abort(400, str(e))
     monthly_amount = round(amount / divide_by, 2)
     final_amount = round(monthly_amount * share_ratio, 2)
     time_period = entry_date.strftime("%b-%Y")
@@ -227,7 +230,10 @@ def update_history(row_id):
     if "shared_expense" in data:
         fields["shared_expense"] = (data.get("shared_expense") or "N").strip().upper()[:1]
     if "share_ratio" in data:
-        fields["share_ratio"] = float(data.get("share_ratio") or 1.0)
+        try:
+            fields["share_ratio"] = db.parse_share_ratio(data.get("share_ratio"))
+        except ValueError as e:
+            abort(400, str(e))
 
     conn = db.get_connection()
     try:
@@ -387,7 +393,7 @@ def update_settings():
     if "default_share_ratio" in updates:
         try:
             v = float(updates["default_share_ratio"])
-            if not (0 < v <= 1):
+            if not (0 <= v <= 1):
                 errors["default_share_ratio"] = "must be between 0 and 1"
             else:
                 updates["default_share_ratio"] = v

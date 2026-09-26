@@ -289,7 +289,7 @@ class TestGenerateRecurringEntries:
     def test_generates_one_row_calls_insert(self):
         import db
         row = (1, "Groww SIP", "Groww", Decimal("5000.00"),
-               "Investment", "SIP", "Investment", "O", 1, "N", Decimal("1.0"))
+               "Investment", "SIP", "Investment", "O", 1, "N", Decimal("1.0"), 1, "Akhil")
         mock_conn, _ = self._make_conn_with_rows([row])
         with patch.object(db, "insert_data_feed_row", return_value=42) as mock_insert:
             result = db.generate_recurring_entries(mock_conn, today=_date(2026, 6, 1))
@@ -302,7 +302,7 @@ class TestGenerateRecurringEntries:
     def test_entry_date_is_first_of_month(self):
         import db
         row = (1, "SIP", "Groww", Decimal("5000.00"),
-               "Investment", "SIP", "Investment", "O", 1, "N", Decimal("1.0"))
+               "Investment", "SIP", "Investment", "O", 1, "N", Decimal("1.0"), 1, "Akhil")
         mock_conn, _ = self._make_conn_with_rows([row])
         captured = {}
         def capture(conn, entry_date, *args, **kwargs):
@@ -314,7 +314,7 @@ class TestGenerateRecurringEntries:
 
     def test_time_period_matches_first_of_month(self):
         import db
-        row = (1, "SIP", None, Decimal("1000.00"), None, None, None, "O", 1, "N", Decimal("1.0"))
+        row = (1, "SIP", None, Decimal("1000.00"), None, None, None, "O", 1, "N", Decimal("1.0"), 1, "Akhil")
         mock_conn, _ = self._make_conn_with_rows([row])
         captured = {}
         def capture(conn, entry_date, *args, **kwargs):
@@ -326,7 +326,7 @@ class TestGenerateRecurringEntries:
 
     def test_exclude_from_training_is_true(self):
         import db
-        row = (1, "SIP", None, Decimal("1000.00"), None, None, None, "O", 1, "N", Decimal("1.0"))
+        row = (1, "SIP", None, Decimal("1000.00"), None, None, None, "O", 1, "N", Decimal("1.0"), 1, "Akhil")
         mock_conn, _ = self._make_conn_with_rows([row])
         captured = {}
         def capture(conn, *args, **kwargs):
@@ -339,7 +339,7 @@ class TestGenerateRecurringEntries:
     def test_computes_monthly_and_final_amount(self):
         import db
         row = (1, "Annual Plan", None, Decimal("12000.00"),
-               "Expense", "Subscription", "Expense", "A", 12, "N", Decimal("0.5"))
+               "Expense", "Subscription", "Expense", "A", 12, "N", Decimal("0.5"), 1, "Akhil")
         mock_conn, _ = self._make_conn_with_rows([row])
         captured = {}
         def capture(conn, *args, **kwargs):
@@ -354,7 +354,7 @@ class TestGenerateRecurringEntries:
     def test_last_generated_updated_after_insert(self):
         import db
         row = (7, "RD Transfer", None, Decimal("2000.00"),
-               "Saving", "RD", "Saving", "O", 1, "N", Decimal("1.0"))
+               "Saving", "RD", "Saving", "O", 1, "N", Decimal("1.0"), 1, "Akhil")
         mock_conn, mock_cursor = self._make_conn_with_rows([row])
         with patch.object(db, "insert_data_feed_row", return_value=99):
             db.generate_recurring_entries(mock_conn, today=_date(2026, 6, 1))
@@ -368,3 +368,173 @@ class TestGenerateRecurringEntries:
         select_sql = mock_cursor.execute.call_args_list[0][0][0]
         assert "DATE_TRUNC" in select_sql
         assert "last_generated" in select_sql
+
+
+class TestRecurringShareRatioZero:
+    def _env(self, monkeypatch):
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
+        monkeypatch.delenv("INVITE_CODE", raising=False)
+
+    def test_create_zero_ratio_kept(self, client, monkeypatch):
+        self._env(monkeypatch)
+        mock_conn, _ = _make_mock_conn()
+        with patch("db.get_connection", return_value=mock_conn), \
+             patch("db.create_recurring_table"), \
+             patch("db.upsert_recurring_transaction", return_value=3) as up:
+            resp = client.post("/api/recurring", json={"entry_text": "Maid", "amount": 5000, "share_ratio": 0})
+        assert resp.status_code == 201
+        assert up.call_args[0][1]["share_ratio"] == 0.0
+
+    def test_update_out_of_range_ratio_rejected(self, client, monkeypatch):
+        self._env(monkeypatch)
+        resp = client.put("/api/recurring/3", json={"entry_text": "Maid", "amount": 5000, "share_ratio": 1.5})
+        assert resp.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# BL-27 / nightly catch-up / paid_by / start month
+# ---------------------------------------------------------------------------
+
+def _rec_row(day=1, paid_by="Akhil", shared="N", ratio="1.0", rec_id=1):
+    # SELECT order: id, entry_text, merchant, amount, category, sub_category, spend_type,
+    #               cadence, divide_by, shared_expense, share_ratio, day_of_month, paid_by
+    return (rec_id, "Item", "Merchant", Decimal("14000.00"), "Bills", "Car EMI", "Expense",
+            "M", 1, shared, Decimal(ratio), day, paid_by)
+
+
+class TestRecurringDebitDay:
+    def _gen(self, rows, today):
+        import db
+        mock_conn, cur = _make_mock_conn(fetchall=rows)
+        dates = []
+        def capture(conn, entry_date, *a, **k):
+            dates.append((entry_date, k.get("time_period")))
+            return 1
+        with patch.object(db, "insert_data_feed_row", side_effect=capture), \
+             patch.object(db, "upsert_shared_transaction") as ups:
+            result = db.generate_recurring_entries(mock_conn, today=today)
+        return result, dates, ups, cur
+
+    def test_not_generated_before_debit_day(self):
+        result, dates, _, _ = self._gen([_rec_row(day=12)], _date(2026, 10, 5))
+        assert result == [] and dates == []
+
+    def test_generated_on_debit_day_dated_that_day(self):
+        result, dates, _, _ = self._gen([_rec_row(day=12)], _date(2026, 10, 12))
+        assert len(result) == 1
+        assert dates == [(_date(2026, 10, 12), "Oct-2026")]
+
+    def test_missed_night_caught_up_later_but_dated_debit_day(self):
+        _, dates, _, _ = self._gen([_rec_row(day=12)], _date(2026, 10, 20))
+        assert dates == [(_date(2026, 10, 12), "Oct-2026")]
+
+    def test_day_31_falls_on_last_day_of_short_months(self):
+        _, sep, _, _ = self._gen([_rec_row(day=31)], _date(2026, 9, 30))
+        _, feb, _, _ = self._gen([_rec_row(day=31)], _date(2027, 2, 28))
+        assert sep[0][0] == _date(2026, 9, 30)
+        assert feb[0][0] == _date(2027, 2, 28)
+
+    def test_effective_day_helper(self):
+        import db
+        assert db.recurring_effective_day(31, 2028, 2) == 29
+        assert db.recurring_effective_day(None, 2026, 10) == 1
+        assert db.recurring_effective_day(15, 2026, 10) == 15
+
+    def test_select_filters_start_month_and_this_month(self):
+        _, _, _, cur = self._gen([], _date(2026, 10, 20))
+        sql, params = cur.execute.call_args_list[0][0]
+        assert "start_month IS NULL OR start_month <=" in sql
+        assert params == ("2026-10-01", "2026-10-20")
+
+    def test_shared_row_uses_item_payer(self):
+        _, _, ups, _ = self._gen([_rec_row(shared="Y", ratio="0.5", paid_by="Aditi")], _date(2026, 10, 1))
+        assert ups.call_args.kwargs["paid_by"] == "Aditi"
+
+    def test_default_today_is_ist(self, monkeypatch):
+        import db
+        monkeypatch.setattr(db, "today_ist", lambda: _date(2026, 10, 1))
+        mock_conn, cur = _make_mock_conn(fetchall=[])
+        db.generate_recurring_entries(mock_conn)
+        assert cur.execute.call_args_list[0][0][1] == ("2026-10-01", "2026-10-01")
+
+
+class TestUpsertSharedPaidBy:
+    def test_aditi_paid_insert_sets_owed_by_and_balance(self):
+        import db
+        mock_conn, cur = _make_mock_conn()
+        db.upsert_shared_transaction(mock_conn, 9, 14000.0, 14000.0, 0.5, _date(2026, 10, 1),
+                                     "SAP", "Bills", "Car EMI", "Car Lease", paid_by="Aditi")
+        params = cur.execute.call_args[0][1]
+        assert params[6] == 7000.0              # balance = Akhil's share (Akhil owes Aditi)
+        assert params[-2:] == ("Aditi", "Akhil")
+
+    def test_default_payer_is_akhil(self):
+        import db
+        mock_conn, cur = _make_mock_conn()
+        db.upsert_shared_transaction(mock_conn, 9, 1000.0, 1000.0, 0.7, _date(2026, 10, 1),
+                                     None, None, None, None)
+        params = cur.execute.call_args[0][1]
+        assert params[6] == 300.0               # Aditi's share
+        assert params[-2:] == ("Akhil", "Aditi")
+
+
+class TestRecurringApiNewFields:
+    def _env(self, monkeypatch):
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
+        monkeypatch.delenv("INVITE_CODE", raising=False)
+
+    def _create(self, client, monkeypatch, body):
+        self._env(monkeypatch)
+        mock_conn, _ = _make_mock_conn()
+        with patch("db.get_connection", return_value=mock_conn), \
+             patch("db.create_recurring_table"), \
+             patch("db.today_ist", return_value=_date(2026, 9, 26)), \
+             patch("db.upsert_recurring_transaction", return_value=3) as up:
+            resp = client.post("/api/recurring", json=body)
+        return resp, up
+
+    def test_new_item_starts_next_month_by_default(self, client, monkeypatch):
+        resp, up = self._create(client, monkeypatch, {"entry_text": "SAP", "amount": 14000})
+        assert resp.status_code == 201
+        payload = up.call_args[0][1]
+        assert payload["start_month"] == _date(2026, 10, 1)
+        assert (payload["day_of_month"], payload["paid_by"]) == (1, "Akhil")
+
+    def test_start_this_month(self, client, monkeypatch):
+        resp, up = self._create(client, monkeypatch, {"entry_text": "SAP", "amount": 14000, "start_this_month": True})
+        assert up.call_args[0][1]["start_month"] == _date(2026, 9, 1)
+
+    def test_day_and_payer_saved(self, client, monkeypatch):
+        resp, up = self._create(client, monkeypatch,
+                                {"entry_text": "Term", "amount": 900, "day_of_month": 12, "paid_by": "Aditi"})
+        assert resp.status_code == 201
+        assert (up.call_args[0][1]["day_of_month"], up.call_args[0][1]["paid_by"]) == (12, "Aditi")
+
+    @pytest.mark.parametrize("bad", [0, 32, 2.5, "x"])
+    def test_invalid_day_rejected(self, client, monkeypatch, bad):
+        resp, up = self._create(client, monkeypatch, {"entry_text": "T", "amount": 1, "day_of_month": bad})
+        assert resp.status_code == 400
+        up.assert_not_called()
+
+    def test_invalid_payer_rejected(self, client, monkeypatch):
+        resp, up = self._create(client, monkeypatch, {"entry_text": "T", "amount": 1, "paid_by": "Bob"})
+        assert resp.status_code == 400
+
+    def test_update_without_new_fields_keeps_them(self, client, monkeypatch):
+        self._env(monkeypatch)
+        mock_conn, _ = _make_mock_conn()
+        with patch("db.get_connection", return_value=mock_conn), \
+             patch("db.upsert_recurring_transaction", return_value=3) as up:
+            resp = client.put("/api/recurring/3", json={"entry_text": "SAP", "amount": 14000})
+        assert resp.status_code == 200
+        payload = up.call_args[0][1]
+        assert payload["day_of_month"] is None and payload["paid_by"] is None
+        assert "start_month" not in payload
+
+    def test_update_sql_coalesces_new_fields(self):
+        import db
+        mock_conn, cur = _make_mock_conn(fetchone=(3,))
+        db.upsert_recurring_transaction(mock_conn, {"entry_text": "SAP", "amount": 1}, row_id=3)
+        sql = cur.execute.call_args[0][0]
+        assert "COALESCE(%s, day_of_month)" in sql and "COALESCE(%s, paid_by)" in sql
+

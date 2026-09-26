@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { X, ChevronLeft, ChevronRight, ChevronDown, Trash2 } from 'lucide-react'
 import { Layout } from '../components/Layout'
 import { ComboInput } from '../components/ComboInput'
+import { NumberInput, validNumber, numberError, type NumberKind } from '../components/NumberInput'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { ApiError } from '../api/client'
 import { useToast } from '../hooks/useToast'
@@ -279,6 +280,12 @@ export function ViewPage() {
   function saveRow(row: HistoryRow) {
     const d = dirty.get(row.id)
     if (!d) return
+    const checks: [keyof HistoryRow, string, NumberKind][] = [
+      ['amount', 'Amount', 'amount'], ['divide_by', 'Div By', 'divisor'], ['share_ratio', 'Ratio', 'ratio'],
+    ]
+    for (const [k, label, kind] of checks) {
+      if (k in d && !validNumber(kind, d[k] as number | null)) { toast(numberError(label, kind), 'error'); return }
+    }
     patchMut.mutate({ id: row.id, payload: d as PatchHistoryPayload })
   }
 
@@ -393,6 +400,13 @@ export function ViewPage() {
                 Apr {fy - 1} – Mar {fy}
               </div>
             </div>
+            <button
+              className="btn btn-ghost btn-sm"
+              style={{ borderRadius: 6, border: '1px solid var(--border2)' }}
+              onClick={() => setAddModal(true)}
+            >
+              + Add Entry
+            </button>
           </div>
           <div className="fy-grid">
             {(fySummary?.months ?? []).map(m => (
@@ -584,9 +598,9 @@ export function ViewPage() {
                   const sub  = getVal(row, 'sub_category') ?? ''
                   const type = getVal(row, 'spend_type') ?? ''
                   const cadence   = getVal(row, 'cadence')
-                  const divideBy  = getVal(row, 'divide_by') ?? 1
+                  const divideBy  = getVal(row, 'divide_by') ?? row.divide_by ?? 1
                   const shared    = getVal(row, 'shared_expense') ?? 'N'
-                  const ratio     = getVal(row, 'share_ratio') ?? 1
+                  const ratio     = getVal(row, 'share_ratio') ?? row.share_ratio ?? 1
                   const amount    = getVal(row, 'amount') ?? row.amount
                   const monthly   = amount / divideBy
                   const final_amt = monthly * ratio
@@ -610,9 +624,9 @@ export function ViewPage() {
                         {row.merchant && <div className="merchant-entry" title={row.entry_text}>{row.entry_text}</div>}
                       </td>
                       <td style={{ textAlign: 'right' }}>
-                        <input type="number" className="field-input" style={{ width: 90 }} step="0.01"
-                          value={amount}
-                          onChange={e => setField(row.id, 'amount', parseFloat(e.target.value) || 0)} />
+                        <NumberInput kind="amount" style={{ width: 90 }}
+                          value={getVal(row, 'amount')}
+                          onChange={v => setField(row.id, 'amount', v)} />
                       </td>
                       <td>
                         <ComboInput value={cat} options={categoryOptions}
@@ -638,9 +652,9 @@ export function ViewPage() {
                           }} />
                       </td>
                       <td style={{ textAlign: 'right' }}>
-                        <input type="number" className="field-input" style={{ width: 44 }} min="1"
-                          value={divideBy}
-                          onChange={e => setField(row.id, 'divide_by', parseInt(e.target.value) || 1)} />
+                        <NumberInput kind="divisor" style={{ width: 44 }}
+                          value={getVal(row, 'divide_by')}
+                          onChange={v => setField(row.id, 'divide_by', v)} />
                       </td>
                       <td style={{ textAlign: 'center' }}>
                         <input type="checkbox" checked={shared === 'Y'}
@@ -650,10 +664,9 @@ export function ViewPage() {
                           }} />
                       </td>
                       <td style={{ textAlign: 'right' }}>
-                        <input type="number" className="field-input" style={{ width: 52 }}
-                          min="0.01" max="1" step="0.01"
-                          value={ratio}
-                          onChange={e => setField(row.id, 'share_ratio', parseFloat(e.target.value) || 1)} />
+                        <NumberInput kind="ratio" style={{ width: 52 }} title="Akhil's share, 0 to 1"
+                          value={getVal(row, 'share_ratio')}
+                          onChange={v => setField(row.id, 'share_ratio', v)} />
                       </td>
                       <td style={{ color: 'var(--muted)', fontSize: 12, textAlign: 'right' }}>{monthly.toFixed(2)}</td>
                       <td style={{ color: 'var(--teal)', fontSize: 12, textAlign: 'right' }}>{final_amt.toFixed(2)}</td>
@@ -757,7 +770,11 @@ function SettingsPanel({ settings, onSave, onClose }: {
   onSave: (s: AppSettings) => void
   onClose: () => void
 }) {
-  const [local, setLocal] = useState(settings)
+  const [local, setLocal] = useState<Omit<AppSettings, 'default_share_ratio' | 'default_annual_divisor'> & {
+    default_share_ratio: number | null; default_annual_divisor: number | null
+  }>(settings)
+  const problem = !validNumber('ratio', local.default_share_ratio) ? numberError('Default Share Ratio', 'ratio')
+    : !validNumber('divisor', local.default_annual_divisor) ? numberError('Annual Divisor', 'divisor') : ''
   return (
     <div style={{
       position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 200,
@@ -769,14 +786,13 @@ function SettingsPanel({ settings, onSave, onClose }: {
         Settings
         <button className="btn btn-ghost btn-icon" onClick={onClose}><X size={14} /></button>
       </div>
-      {([['Default Share Ratio', 'default_share_ratio', 0.01, 1, 0.01],
-         ['Annual Divisor',      'default_annual_divisor', 1, 12, 1]] as const).map(([label, k, min, max, step]) => (
+      {([['Default Share Ratio', 'default_share_ratio', 'ratio'],
+         ['Annual Divisor',      'default_annual_divisor', 'divisor']] as const).map(([label, k, kind]) => (
         <div key={k} style={{ marginBottom: 10 }}>
           <label style={{ fontSize: 12, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>{label}</label>
-          <input type="number" className="field-input" style={{ width: '100%' }}
-            min={min} max={max} step={step}
+          <NumberInput kind={kind} style={{ width: '100%' }}
             value={local[k]}
-            onChange={e => setLocal(prev => ({ ...prev, [k]: parseFloat(e.target.value) }))} />
+            onChange={v => setLocal(prev => ({ ...prev, [k]: v }))} />
         </div>
       ))}
       <div style={{ marginBottom: 10 }}>
@@ -787,7 +803,14 @@ function SettingsPanel({ settings, onSave, onClose }: {
           value={local.shared_backfill_floor}
           onChange={e => setLocal(prev => ({ ...prev, shared_backfill_floor: e.target.value }))} />
       </div>
-      <button className="btn btn-primary btn-sm" style={{ width: '100%' }} onClick={() => { onSave(local); onClose() }}>
+      {problem && <div style={{ color: 'var(--red)', fontSize: 12, marginBottom: 8 }}>{problem}</div>}
+      <button className="btn btn-primary btn-sm" style={{ width: '100%' }} disabled={!!problem}
+        onClick={() => {
+          if (problem) return
+          onSave({ ...local, default_share_ratio: local.default_share_ratio as number,
+                   default_annual_divisor: local.default_annual_divisor as number })
+          onClose()
+        }}>
         Save
       </button>
     </div>
@@ -808,39 +831,47 @@ function AddEntryModal({ settings, categoryOptions, subcatsFor, typeOptions, onC
     entry_date:     string
     entry_text:     string
     merchant:       string
-    amount:         number
+    amount:         number | null
     category:       string
     sub_category:   string
     spend_type:     string
     cadence:        Cadence
-    divide_by:      number
+    divide_by:      number | null
     shared_expense: 'Y' | 'N'
-    share_ratio:    number
+    share_ratio:    number | null
   }
   const blank = (id: number): FormRow => ({
-    id, entry_date: today, entry_text: '', merchant: '', amount: 0,
+    id, entry_date: today, entry_text: '', merchant: '', amount: null,
     category: '', sub_category: '', spend_type: 'Expense',
     cadence: 'O', divide_by: 1, shared_expense: 'N', share_ratio: settings.default_share_ratio,
   })
   const [rows, setRows] = useState<FormRow[]>([blank(1)])
   const [counter, setCounter] = useState(2)
+  const [error, setError] = useState('')
 
   function upd(id: number, k: keyof FormRow, v: unknown) {
     setRows(prev => prev.map(r => r.id === id ? { ...r, [k]: v } : r))
+    setError('')
   }
   function addRow() { setRows(p => [...p, blank(counter)]); setCounter(c => c + 1) }
   function dupRow(r: FormRow) { setRows(p => [...p, { ...r, id: counter }]); setCounter(c => c + 1) }
   function delRow(id: number) { if (rows.length > 1) setRows(p => p.filter(r => r.id !== id)) }
 
   function submit() {
-    if (rows.some(r => !r.entry_date || !r.entry_text.trim() || !r.amount)) return
+    for (const [i, r] of rows.entries()) {
+      const where = rows.length > 1 ? `Row ${i + 1}: ` : ''
+      if (!r.entry_date || !r.entry_text.trim()) return setError(`${where}Date and Description are required`)
+      if (!validNumber('amount', r.amount)) return setError(where + numberError('Amount', 'amount'))
+      if (!validNumber('divisor', r.divide_by)) return setError(where + numberError('÷By', 'divisor'))
+      if (r.shared_expense === 'Y' && !validNumber('ratio', r.share_ratio)) return setError(where + numberError('Ratio', 'ratio'))
+    }
     // Submit each row individually
     rows.forEach(r => {
       onSave({
         entry_date: r.entry_date, entry_text: r.entry_text, merchant: r.merchant,
-        amount: r.amount, category: r.category, sub_category: r.sub_category,
-        spend_type: r.spend_type, cadence: r.cadence, divide_by: r.divide_by,
-        shared_expense: r.shared_expense, share_ratio: r.share_ratio,
+        amount: r.amount as number, category: r.category, sub_category: r.sub_category,
+        spend_type: r.spend_type, cadence: r.cadence, divide_by: r.divide_by as number,
+        shared_expense: r.shared_expense, share_ratio: r.share_ratio ?? settings.default_share_ratio,
       })
     })
   }
@@ -878,8 +909,8 @@ function AddEntryModal({ settings, categoryOptions, subcatsFor, typeOptions, onC
                       value={r.merchant} onChange={e => upd(r.id, 'merchant', e.target.value)} />
                   </td>
                   <td style={{ padding: '2px 3px' }}>
-                    <input type="number" className="field-input" style={{ width: 90 }} step="0.01"
-                      value={r.amount || ''} onChange={e => upd(r.id, 'amount', parseFloat(e.target.value) || 0)} />
+                    <NumberInput kind="amount" style={{ width: 90 }}
+                      value={r.amount} onChange={v => upd(r.id, 'amount', v)} />
                   </td>
                   <td style={{ padding: '2px 3px' }}>
                     <ComboInput value={r.category} options={categoryOptions}
@@ -907,8 +938,8 @@ function AddEntryModal({ settings, categoryOptions, subcatsFor, typeOptions, onC
                     </select>
                   </td>
                   <td style={{ padding: '2px 3px' }}>
-                    <input type="number" className="field-input" style={{ width: 44 }} min="1"
-                      value={r.divide_by} onChange={e => upd(r.id, 'divide_by', parseInt(e.target.value) || 1)} />
+                    <NumberInput kind="divisor" style={{ width: 44 }}
+                      value={r.divide_by} onChange={v => upd(r.id, 'divide_by', v)} />
                   </td>
                   <td style={{ padding: '2px 3px' }}>
                     <select className="field-input" style={{ width: 46 }}
@@ -922,11 +953,9 @@ function AddEntryModal({ settings, categoryOptions, subcatsFor, typeOptions, onC
                     </select>
                   </td>
                   <td style={{ padding: '2px 3px' }}>
-                    <input type="number" className="field-input" style={{ width: 54 }}
-                      min="0.01" max="1" step="0.01"
+                    <NumberInput kind="ratio" style={{ width: 54 }} title="Akhil's share, 0 to 1"
                       disabled={r.shared_expense === 'N'}
-                      value={r.share_ratio}
-                      onChange={e => upd(r.id, 'share_ratio', parseFloat(e.target.value) || 1)} />
+                      value={r.share_ratio} onChange={v => upd(r.id, 'share_ratio', v)} />
                   </td>
                   <td style={{ padding: '2px 3px', whiteSpace: 'nowrap' }}>
                     <button className="btn btn-ghost btn-icon" style={{ fontSize: 12 }}
@@ -941,12 +970,11 @@ function AddEntryModal({ settings, categoryOptions, subcatsFor, typeOptions, onC
             </tbody>
           </table>
           <button className="btn btn-ghost btn-sm" style={{ marginTop: 8 }} onClick={addRow}>+ Add Row</button>
+          {error && <div style={{ color: 'var(--red)', fontSize: 12, marginTop: 8 }}>{error}</div>}
         </div>
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary"
-            disabled={rows.some(r => !r.entry_date || !r.entry_text.trim() || !r.amount)}
-            onClick={submit}>
+          <button className="btn btn-primary" onClick={submit}>
             Add {rows.length > 1 ? `${rows.length} Entries` : 'Entry'}
           </button>
         </div>

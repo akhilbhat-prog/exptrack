@@ -165,4 +165,7 @@ export interface RecurringDef {
   active: boolean
   last_generated: string | null
   created_at: string
+  day_of_month: number           // debit day 1-31; 31 = last day of shorter months
+  paid_by: 'Akhil' | 'Aditi'     // payer for the Shared row of a shared item
+  start_month: string | null     // 'YYYY-MM-01': nothing is generated before this month
 }

@@ -189,10 +189,9 @@ def create_shared():
         if monthly_amount <= 0:
             abort(400, f"Row {i+1}: monthly_amount must be greater than 0")
         try:
-            share_ratio = float(entry.get("share_ratio", 0.7))
-        except (TypeError, ValueError):
-            share_ratio = 0.7
-        share_ratio = max(0.01, min(1.0, share_ratio))
+            share_ratio = db.parse_share_ratio(entry.get("share_ratio"), default=0.7)
+        except ValueError as e:
+            abort(400, f"Row {i+1}: {e}")
         paid_by = str(entry.get("paid_by") or "Akhil").strip()
         owed_by = str(entry.get("owed_by") or "Aditi").strip()
         if paid_by not in ("Akhil", "Aditi"):
@@ -245,12 +244,9 @@ def update_shared(shared_id):
         fields["is_ignored"] = data["is_ignored"]
     if "share_ratio" in data:
         try:
-            v = float(data["share_ratio"])
-            if not (0 < v <= 1):
-                abort(400, "share_ratio must be between 0 and 1")
-            fields["share_ratio"] = v
-        except (TypeError, ValueError):
-            abort(400, "share_ratio must be a number")
+            fields["share_ratio"] = db.parse_share_ratio(data["share_ratio"])
+        except ValueError as e:
+            abort(400, str(e))
     if "amount" in data:
         try:
             v = float(data["amount"])

@@ -628,3 +628,40 @@ class TestFyMonthTotals:
         out = db.get_fy_month_totals(conn, 2025)
         assert out["months"][0]["period"] == "Apr-2024" and out["months"][-1]["period"] == "Mar-2025"
         assert out["label"] == "FY25" and out["fy_total"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Share ratio 0 is a real value (whole expense is Aditi's) - never coerced to 1
+# ---------------------------------------------------------------------------
+
+class TestParseShareRatio:
+    @pytest.mark.parametrize("raw,expected", [(0, 0.0), ("0", 0.0), (0.55, 0.55), ("1", 1.0), (1, 1.0)])
+    def test_valid(self, raw, expected):
+        assert db.parse_share_ratio(raw) == expected
+
+    @pytest.mark.parametrize("raw", [None, "", "  "])
+    def test_blank_uses_default(self, raw):
+        assert db.parse_share_ratio(raw) == 1.0
+        assert db.parse_share_ratio(raw, default=0.7) == 0.7
+
+    @pytest.mark.parametrize("raw", [-0.1, 1.5, "abc", [1]])
+    def test_invalid_raises(self, raw):
+        with pytest.raises(ValueError):
+            db.parse_share_ratio(raw)
+
+
+class TestUpdateHistoryRowRatioZero:
+    _ROW_RATIO_0 = (Decimal("4371.00"), "Aug-2026", "Travel", "Auto", "Expense", "O", 1, "Y", Decimal("0.0000"))
+
+    def test_existing_zero_ratio_kept_on_unrelated_edit(self):
+        conn, _ = _make_mock_conn(fetchone=self._ROW_RATIO_0, rowcount=1)
+        result = db.update_history_row(conn, 3949, {"category": "Travel"})
+        assert result["share_ratio"] == 0.0
+        assert result["final_amount"] == 0.0
+
+    def test_zero_ratio_can_be_set(self):
+        row = (Decimal("100.00"), "May-2026", "Food", "Eating Out", "Expense", "O", 1, "Y", Decimal("0.7"))
+        conn, _ = _make_mock_conn(fetchone=row, rowcount=1)
+        result = db.update_history_row(conn, 1, {"share_ratio": 0.0})
+        assert result["share_ratio"] == 0.0
+        assert result["final_amount"] == 0.0

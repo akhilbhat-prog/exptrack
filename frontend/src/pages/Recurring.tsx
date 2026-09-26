@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Play, X } from 'lucide-react'
 import { Layout } from '../components/Layout'
+import { NumberInput, validNumber, numberError } from '../components/NumberInput'
 import { useToast } from '../hooks/useToast'
 import { recurringApi, type RecurringPayload } from '../api/recurring'
 import type { RecurringDef, Cadence, SpendType } from '../types'
@@ -13,10 +14,16 @@ function fmtAmount(n: number) {
   return '₹' + n.toLocaleString('en-IN', { minimumFractionDigits: 2 })
 }
 
-const BLANK: RecurringPayload = {
-  entry_text: '', merchant: '', amount: 0, category: '', sub_category: '',
+// Form state: numeric fields are null while their field is blank or invalid.
+type RecurringForm = Omit<RecurringPayload, 'amount' | 'divide_by' | 'share_ratio' | 'day_of_month'> & {
+  amount: number | null; divide_by: number | null; share_ratio: number | null; day_of_month: number | null
+}
+
+const BLANK: RecurringForm = {
+  entry_text: '', merchant: '', amount: null, category: '', sub_category: '',
   spend_type: 'Expense', cadence: 'M', divide_by: 1,
   shared_expense: 'N', share_ratio: 1.0, active: true,
+  day_of_month: 1, paid_by: 'Akhil', start_this_month: false,
 }
 
 export function RecurringPage() {
@@ -31,7 +38,7 @@ export function RecurringPage() {
   const [modal, setModal] = useState<{ open: boolean; editing: RecurringDef | null }>({
     open: false, editing: null,
   })
-  const [form, setForm] = useState<RecurringPayload>(BLANK)
+  const [form, setForm] = useState<RecurringForm>(BLANK)
 
   const createMut = useMutation({
     mutationFn: recurringApi.create,
@@ -66,20 +73,32 @@ export function RecurringPage() {
       spend_type: (d.spend_type ?? 'Expense') as SpendType,
       cadence: d.cadence, divide_by: d.divide_by,
       shared_expense: d.shared_expense, share_ratio: d.share_ratio, active: d.active,
+      day_of_month: d.day_of_month, paid_by: d.paid_by,
     })
     setModal({ open: true, editing: d })
   }
   function closeModal() { setModal({ open: false, editing: null }) }
 
-  function f(k: keyof RecurringPayload, v: unknown) { setForm(p => ({ ...p, [k]: v })) }
+  function f(k: keyof RecurringForm, v: unknown) { setForm(p => ({ ...p, [k]: v })) }
 
   function save() {
     if (!form.entry_text.trim()) { toast('Description is required', 'error'); return }
-    if (!form.amount || form.amount <= 0) { toast('Amount must be > 0', 'error'); return }
+    if (!validNumber('amount', form.amount)) { toast(numberError('Amount', 'amount'), 'error'); return }
+    if (!validNumber('divisor', form.divide_by)) { toast(numberError('Divide By', 'divisor'), 'error'); return }
+    if (!validNumber('divisor', form.day_of_month) || form.day_of_month > 31) {
+      toast('Debit day must be a whole number from 1 to 31', 'error'); return
+    }
+    if (form.shared_expense === 'Y' && !validNumber('ratio', form.share_ratio)) {
+      toast(numberError('Share Ratio', 'ratio'), 'error'); return
+    }
+    const payload: RecurringPayload = {
+      ...form, amount: form.amount, divide_by: form.divide_by, share_ratio: form.share_ratio ?? 1.0,
+      day_of_month: form.day_of_month,
+    }
     if (modal.editing) {
-      updateMut.mutate({ id: modal.editing.id, payload: form })
+      updateMut.mutate({ id: modal.editing.id, payload })
     } else {
-      createMut.mutate(form)
+      createMut.mutate(payload)
     }
   }
 
@@ -90,6 +109,7 @@ export function RecurringPage() {
       spend_type: (d.spend_type ?? 'Expense') as SpendType,
       cadence: d.cadence, divide_by: d.divide_by,
       shared_expense: d.shared_expense, share_ratio: d.share_ratio, active: !d.active,
+      day_of_month: d.day_of_month, paid_by: d.paid_by,
     })
     qc.invalidateQueries({ queryKey: ['recurring'] })
   }
@@ -101,7 +121,7 @@ export function RecurringPage() {
     return !latest || d.last_generated > latest ? d.last_generated : latest
   }, null)
 
-  const monthlyPreview = form.amount ? form.amount / (form.divide_by || 1) : 0
+  const monthlyPreview = form.amount ? form.amount / (form.divide_by || 1) : 0   // blank fields preview as 0 / ÷1
   const finalPreview   = form.shared_expense === 'Y'
     ? monthlyPreview * (form.share_ratio ?? 1)
     : monthlyPreview
@@ -154,6 +174,7 @@ export function RecurringPage() {
                   <th>Category</th>
                   <th>Amount</th>
                   <th>Monthly</th>
+                  <th title="Debit day; the entry is dated this day">Day</th>
                   <th>Cadence</th>
                   <th>Shared</th>
                   <th>Active</th>
@@ -174,12 +195,20 @@ export function RecurringPage() {
                     </td>
                     <td>{fmtAmount(d.amount)}</td>
                     <td>{fmtAmount(d.amount / d.divide_by)}</td>
+                    <td>{d.day_of_month}</td>
                     <td>
                       <span className="pill" style={{
                         background: 'var(--surface2)', color: 'var(--muted)',
                       }}>{d.cadence}</span>
                     </td>
-                    <td>{d.shared_expense === 'Y' ? `${Math.round(d.share_ratio * 100)}%` : '—'}</td>
+                    <td>
+                      {d.shared_expense === 'Y' ? (
+                        <>
+                          <div>{Math.round(d.share_ratio * 100)}%</div>
+                          <div style={{ fontSize: 11, color: 'var(--muted)' }}>paid by {d.paid_by}</div>
+                        </>
+                      ) : '—'}
+                    </td>
                     <td>
                       <input
                         type="checkbox" className="active-toggle" checked={d.active}
@@ -187,7 +216,7 @@ export function RecurringPage() {
                       />
                     </td>
                     <td style={{ color: 'var(--muted)', fontSize: 12 }}>
-                      {d.last_generated ?? '—'}
+                      {d.last_generated ?? (d.start_month ? `Starts ${monthName(d.start_month)}` : '—')}
                     </td>
                     <td>
                       <div style={{ display: 'flex', gap: 4 }}>
@@ -234,9 +263,8 @@ export function RecurringPage() {
 
                 <div>
                   <label style={{ fontSize: 12, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Amount*</label>
-                  <input type="number" className="field-input" style={{ width: '100%' }} step="0.01"
-                    value={form.amount || ''}
-                    onChange={e => f('amount', parseFloat(e.target.value) || 0)} />
+                  <NumberInput kind="amount" style={{ width: '100%' }}
+                    value={form.amount} onChange={v => f('amount', v)} />
                 </div>
 
                 <div>
@@ -270,9 +298,15 @@ export function RecurringPage() {
 
                 <div>
                   <label style={{ fontSize: 12, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Divide By</label>
-                  <input type="number" className="field-input" style={{ width: '100%' }} min="1"
-                    value={form.divide_by}
-                    onChange={e => f('divide_by', parseInt(e.target.value) || 1)} />
+                  <NumberInput kind="divisor" style={{ width: '100%' }}
+                    value={form.divide_by} onChange={v => f('divide_by', v)} />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: 12, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Debit day</label>
+                  <NumberInput kind="divisor" style={{ width: '100%' }} title="1-31; 31 = last day of shorter months"
+                    value={form.day_of_month} onChange={v => f('day_of_month', v)} />
+                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>31 = last day of shorter months</div>
                 </div>
 
                 <div>
@@ -288,9 +322,31 @@ export function RecurringPage() {
                 {form.shared_expense === 'Y' && (
                   <div>
                     <label style={{ fontSize: 12, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Share Ratio</label>
-                    <input type="number" className="field-input" style={{ width: '100%' }} min="0.01" max="1" step="0.01"
-                      value={form.share_ratio}
-                      onChange={e => f('share_ratio', parseFloat(e.target.value) || 1)} />
+                    <NumberInput kind="ratio" style={{ width: '100%' }} title="Akhil's share, 0 to 1"
+                      value={form.share_ratio} onChange={v => f('share_ratio', v)} />
+                  </div>
+                )}
+
+                {form.shared_expense === 'Y' && (
+                  <div>
+                    <label style={{ fontSize: 12, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Paid by</label>
+                    <select className="field-input" style={{ width: '100%' }}
+                      value={form.paid_by} onChange={e => f('paid_by', e.target.value)}>
+                      <option>Akhil</option>
+                      <option>Aditi</option>
+                    </select>
+                  </div>
+                )}
+
+                {!modal.editing && (
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={!!form.start_this_month}
+                        onChange={e => f('start_this_month', e.target.checked)}
+                        style={{ accentColor: 'var(--teal)' }} />
+                      Start this month
+                      <span style={{ color: 'var(--muted)' }}>→ first entry: {firstEntryLabel(form)}</span>
+                    </label>
                   </div>
                 )}
 
@@ -324,4 +380,20 @@ export function RecurringPage() {
       )}
     </Layout>
   )
+}
+
+function monthName(iso: string) {
+  return new Date(`${iso.slice(0, 7)}-01T00:00:00`).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })
+}
+
+// Date of a new item's first entry: its debit day (clamped to the month's length) in this month when
+// "Start this month" is ticked, otherwise next month. Mirrors db.recurring_effective_day.
+function firstEntryLabel(form: { day_of_month: number | null; start_this_month?: boolean }) {
+  const now = new Date()
+  const first = new Date(now.getFullYear(), now.getMonth() + (form.start_this_month ? 0 : 1), 1)
+  const last = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate()
+  const day = Math.min(Math.max(1, form.day_of_month ?? 1), last)
+  const d = new Date(first.getFullYear(), first.getMonth(), day)
+  const label = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+  return form.start_this_month && day <= now.getDate() ? `${label} (added tonight)` : label
 }

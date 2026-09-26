@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, Play, CornerDownLeft, Trash2 } from 'lucide-react'
 import { Layout } from '../components/Layout'
 import { ComboInput } from '../components/ComboInput'
+import { NumberInput } from '../components/NumberInput'
 import { useToast } from '../hooks/useToast'
 import { batchesApi, type PatchItemPayload } from '../api/batches'
 import { api } from '../api/client'
@@ -465,9 +466,9 @@ export function ReviewPage() {
                           {isComplete ? (
                             fmtAmt(item.amount)
                           ) : (
-                            <input type="text" inputMode="decimal" className="field-input" style={{ width: 90 }}
+                            <NumberInput kind="amount" revertOnBlur style={{ width: 90 }}
                               value={item.amount}
-                              onChange={e => patchItem(item.transaction_id, { amount: parseFloat(e.target.value) || item.amount })} />
+                              onChange={v => { if (v !== null) patchItem(item.transaction_id, { amount: v }) }} />
                           )}
                         </td>
                         <td>
@@ -510,9 +511,9 @@ export function ReviewPage() {
                         </td>
                         <td style={{ textAlign: 'right' }}>
                           {isComplete ? item.divide_by : (
-                            <input type="text" inputMode="numeric" className="field-input" style={{ width: 44 }}
+                            <NumberInput kind="divisor" revertOnBlur style={{ width: 44 }}
                               value={item.divide_by}
-                              onChange={e => patchItem(item.transaction_id, { divide_by: parseInt(e.target.value) || 1 })} />
+                              onChange={v => { if (v !== null) patchItem(item.transaction_id, { divide_by: v }) }} />
                           )}
                         </td>
                         <td>
@@ -523,9 +524,9 @@ export function ReviewPage() {
                         </td>
                         <td style={{ textAlign: 'right' }}>
                           {isComplete ? item.share_ratio.toFixed(2) : (
-                            <input type="text" inputMode="decimal" className="field-input" style={{ width: 52 }}
+                            <NumberInput kind="ratio" revertOnBlur style={{ width: 52 }} title="Akhil's share, 0 to 1"
                               value={item.share_ratio}
-                              onChange={e => patchItem(item.transaction_id, { share_ratio: parseFloat(e.target.value) || 1 })} />
+                              onChange={v => { if (v !== null) patchItem(item.transaction_id, { share_ratio: v }) }} />
                           )}
                         </td>
                         <td style={{ textAlign: 'right', fontSize: 12, color: 'var(--muted)' }}>

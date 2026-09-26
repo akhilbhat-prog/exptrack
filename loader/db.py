@@ -11,7 +11,7 @@ Tables managed here:
 import os
 import uuid
 import logging
-from datetime import datetime, timezone, date as _date
+from datetime import datetime, timezone, timedelta, date as _date
 import calendar as _calendar
 
 import psycopg2
@@ -20,6 +20,34 @@ import psycopg2.extras
 logger = logging.getLogger(__name__)
 
 _SHARED_SCOPE_START = _date(2026, 4, 1)
+
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def today_ist() -> _date:
+    """Today's date in India. Cloud Run runs in UTC, which is a day behind IST until 05:30 IST."""
+    return datetime.now(IST).date()
+
+
+def _other_person(name: str) -> str:
+    return "Aditi" if name == "Akhil" else "Akhil"
+
+
+def parse_share_ratio(value, default: float = 1.0) -> float:
+    """Parse a share ratio (Akhil's share, 0..1 inclusive). 0 is valid: the whole expense is Aditi's.
+
+    None/'' -> default. Raises ValueError for anything that is not a number in [0, 1].
+    Never use `value or default`: that silently turns a real 0 into the default.
+    """
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return default
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        raise ValueError("share_ratio must be a number")
+    if not 0.0 <= v <= 1.0:
+        raise ValueError("share_ratio must be between 0 and 1")
+    return v
 
 
 def get_connection():
@@ -367,7 +395,7 @@ def update_history_row(conn, row_id: int, fields: dict) -> dict | None:
 
         amount = float(merged["amount"]) if merged["amount"] is not None else 0.0
         divide_by = max(1, int(merged["divide_by"] or 1))
-        share_ratio = float(merged["share_ratio"] or 1.0)
+        share_ratio = 1.0 if merged["share_ratio"] is None else float(merged["share_ratio"])
         monthly_amount = round(amount / divide_by, 2)
         final_amount = round(monthly_amount * share_ratio, 2)
 
@@ -550,7 +578,7 @@ def respread_series(conn, series_id: str, amount: float, divide_by: int, templat
         deleted = [r["id"] for r in doomed]
         rows = rows[:divide_by]
     monthly = round(amount / divide_by, 2)
-    ratio = float(template.get("share_ratio") or 1.0)
+    ratio = 1.0 if template.get("share_ratio") is None else float(template["share_ratio"])
     for k in range(len(rows), divide_by):
         d = add_months(rows[-1]["entry_date"] if rows else template["entry_date"], 1)
         new_id = insert_data_feed_row(
@@ -793,17 +821,23 @@ def upsert_shared_transaction(
     category: str | None,
     subcategory: str | None,
     entry_text: str | None,
+    paid_by: str = "Akhil",
 ) -> None:
-    """Insert or update a shared_transactions row. Preserves paid_by/owed_by/settled on conflict."""
+    """Insert or update a shared_transactions row. Preserves paid_by/owed_by/settled on conflict.
+
+    `paid_by` only applies when the row is first inserted (owed_by is the other person, and the
+    balance is what the other person owes).
+    """
     ma = float(monthly_amount)
     akhil_share = round(ma * float(share_ratio), 2)
     aditi_share = round(ma * (1.0 - float(share_ratio)), 2)
+    balance = aditi_share if paid_by == "Akhil" else akhil_share
     with conn.cursor() as cur:
         cur.execute("""
             INSERT INTO shared_transactions
                 (history_id, amount, monthly_amount, share_ratio, akhil_share, aditi_share, balance,
-                 entry_date, merchant, category, subcategory, entry_text)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 entry_date, merchant, category, subcategory, entry_text, paid_by, owed_by)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (history_id) DO UPDATE SET
                 amount         = EXCLUDED.amount,
                 monthly_amount = EXCLUDED.monthly_amount,
@@ -819,8 +853,8 @@ def upsert_shared_transaction(
                 subcategory    = EXCLUDED.subcategory,
                 entry_text     = EXCLUDED.entry_text
         """, (
-            history_id, amount, monthly_amount, share_ratio, akhil_share, aditi_share, aditi_share,
-            entry_date, merchant, category, subcategory, entry_text,
+            history_id, amount, monthly_amount, share_ratio, akhil_share, aditi_share, balance,
+            entry_date, merchant, category, subcategory, entry_text, paid_by, _other_person(paid_by),
         ))
     conn.commit()
 
@@ -1142,6 +1176,14 @@ def create_recurring_table(conn) -> None:
                 created_at      TIMESTAMPTZ DEFAULT NOW()
             );
         """)
+        # BL-27: debit day per item; who pays (for shared items); first month to generate.
+        cur.execute("""
+            ALTER TABLE recurring_transactions
+                ADD COLUMN IF NOT EXISTS day_of_month SMALLINT NOT NULL DEFAULT 1
+                    CHECK (day_of_month BETWEEN 1 AND 31),
+                ADD COLUMN IF NOT EXISTS paid_by TEXT NOT NULL DEFAULT 'Akhil',
+                ADD COLUMN IF NOT EXISTS start_month DATE;
+        """)
     conn.commit()
 
 
@@ -1151,7 +1193,7 @@ def get_recurring_transactions(conn) -> list[dict]:
         cur.execute("""
             SELECT id, entry_text, merchant, amount, category, sub_category,
                    spend_type, cadence, divide_by, shared_expense, share_ratio,
-                   active, last_generated, created_at
+                   active, last_generated, created_at, day_of_month, paid_by, start_month
             FROM recurring_transactions
             ORDER BY active DESC, id ASC
         """)
@@ -1172,6 +1214,9 @@ def get_recurring_transactions(conn) -> list[dict]:
             "active":         r[11],
             "last_generated": r[12].isoformat() if r[12] else None,
             "created_at":     r[13].isoformat() if r[13] else None,
+            "day_of_month":   r[14] if r[14] is not None else 1,
+            "paid_by":        r[15] or "Akhil",
+            "start_month":    r[16].isoformat() if r[16] else None,
         }
         for r in rows
     ]
@@ -1185,8 +1230,9 @@ def upsert_recurring_transaction(conn, data: dict, row_id: int | None = None) ->
                 """
                 INSERT INTO recurring_transactions
                     (entry_text, merchant, amount, category, sub_category, spend_type,
-                     cadence, divide_by, shared_expense, share_ratio, active)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                     cadence, divide_by, shared_expense, share_ratio, active,
+                     day_of_month, paid_by, start_month)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
                 (
@@ -1201,6 +1247,9 @@ def upsert_recurring_transaction(conn, data: dict, row_id: int | None = None) ->
                     data.get("shared_expense") or "N",
                     data.get("share_ratio") if data.get("share_ratio") is not None else 1.0,
                     data.get("active", True),
+                    data.get("day_of_month") or 1,
+                    data.get("paid_by") or "Akhil",
+                    data.get("start_month"),
                 ),
             )
             new_id = cur.fetchone()[0]
@@ -1221,7 +1270,10 @@ def upsert_recurring_transaction(conn, data: dict, row_id: int | None = None) ->
                        divide_by      = %s,
                        shared_expense = %s,
                        share_ratio    = %s,
-                       active         = %s
+                       active         = %s,
+                       -- omitted by the caller -> keep the stored value, never reset it
+                       day_of_month   = COALESCE(%s, day_of_month),
+                       paid_by        = COALESCE(%s, paid_by)
                  WHERE id = %s
                 RETURNING id
                 """,
@@ -1237,6 +1289,8 @@ def upsert_recurring_transaction(conn, data: dict, row_id: int | None = None) ->
                     data.get("shared_expense") or "N",
                     data.get("share_ratio") if data.get("share_ratio") is not None else 1.0,
                     data.get("active", True),
+                    data.get("day_of_month"),
+                    data.get("paid_by"),
                     row_id,
                 ),
             )
@@ -1256,36 +1310,51 @@ def delete_recurring_transaction(conn, row_id: int) -> bool:
     return deleted
 
 
-def generate_recurring_entries(conn, today: _date | None = None) -> list[dict]:
-    """Insert data_feed_history rows for all active recurring transactions not yet generated this month.
+def recurring_effective_day(day_of_month: int | None, year: int, month: int) -> int:
+    """The item's debit day in that month: day 31 falls on the 30th/28th/29th in shorter months."""
+    return min(max(1, int(day_of_month or 1)), _calendar.monthrange(year, month)[1])
 
-    entry_date is always the 1st of the current month.
+
+def generate_recurring_entries(conn, today: _date | None = None) -> list[dict]:
+    """Insert this month's data_feed_history row for every recurring item that is due and missing.
+
+    Runs every night (and from Generate Now). An item is due when it is active, its start_month
+    (if any) is not after this month, it has not been generated this month, and its debit day
+    (day_of_month, clamped to the month's length) has arrived. A missed night is caught up the next
+    night; the entry is still dated the debit day. Only the current month is ever filled.
     Returns a list of {id, feed_id, entry_text} for each generated row.
     """
     if today is None:
-        today = _date.today()
-
-    entry_date = _date(today.year, today.month, 1)
-    time_period = entry_date.strftime("%b-%Y")
+        today = today_ist()
+    month_start = _date(today.year, today.month, 1)
 
     with conn.cursor() as cur:
         cur.execute(
             """
             SELECT id, entry_text, merchant, amount, category, sub_category,
-                   spend_type, cadence, divide_by, shared_expense, share_ratio
+                   spend_type, cadence, divide_by, shared_expense, share_ratio,
+                   day_of_month, paid_by
             FROM recurring_transactions
             WHERE active = TRUE
+              AND (start_month IS NULL OR start_month <= %s::date)
               AND (last_generated IS NULL
                    OR DATE_TRUNC('month', last_generated) < DATE_TRUNC('month', %s::date))
             """,
-            (today.isoformat(),),
+            (month_start.isoformat(), today.isoformat()),
         )
         rows = cur.fetchall()
 
     results = []
     for row in rows:
         (rec_id, entry_text, merchant, amount, category, sub_category,
-         spend_type, cadence, divide_by, shared_expense, share_ratio) = row
+         spend_type, cadence, divide_by, shared_expense, share_ratio,
+         day_of_month, paid_by) = row
+
+        day = recurring_effective_day(day_of_month, today.year, today.month)
+        if today.day < day:
+            continue   # debit day not reached yet this month
+        entry_date = _date(today.year, today.month, day)
+        time_period = entry_date.strftime("%b-%Y")
 
         amount_f = float(amount)
         divide_by = max(1, int(divide_by or 1))
@@ -1319,6 +1388,7 @@ def generate_recurring_entries(conn, today: _date | None = None) -> list[dict]:
                 category=category,
                 subcategory=sub_category,
                 entry_text=entry_text,
+                paid_by=paid_by or "Akhil",
             )
 
         with conn.cursor() as cur:

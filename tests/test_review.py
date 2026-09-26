@@ -523,3 +523,29 @@ class TestCompleteBatch:
         assert first_call_args[1] == datetime(2026, 1, 15, tzinfo=timezone.utc)
         future_dates = [c[0][1] for c in mock_insert.call_args_list[1:]]
         assert future_dates == [_date(2026, m, 1) for m in range(2, 13)]
+
+
+class TestReviewItemShareRatioZero:
+    def _env(self, monkeypatch):
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
+        monkeypatch.delenv("INVITE_CODE", raising=False)
+
+    def test_zero_ratio_saved_as_zero(self, client, monkeypatch):
+        self._env(monkeypatch)
+        cur = MagicMock()
+        cur.rowcount = 1
+        cur.__enter__ = MagicMock(return_value=cur)
+        cur.__exit__ = MagicMock(return_value=False)
+        conn = MagicMock()
+        conn.cursor.return_value = cur
+        with patch("db.get_connection", return_value=conn):
+            resp = client.patch("/api/batches/1/items/2", json={"share_ratio": 0})
+        assert resp.status_code == 200
+        assert cur.execute.call_args[0][1][0] == 0.0
+
+    def test_out_of_range_ratio_rejected(self, client, monkeypatch):
+        self._env(monkeypatch)
+        with patch("db.get_connection") as gc:
+            resp = client.patch("/api/batches/1/items/2", json={"share_ratio": 1.5})
+        assert resp.status_code == 400
+        gc.assert_not_called()
