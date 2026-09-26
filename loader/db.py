@@ -9,6 +9,7 @@ Tables managed here:
 """
 
 import os
+import uuid
 import logging
 from datetime import datetime, timezone, date as _date
 import calendar as _calendar
@@ -193,6 +194,8 @@ def create_data_feed_table(conn) -> None:
             ALTER TABLE IF EXISTS data_feed_history ADD COLUMN IF NOT EXISTS share_ratio NUMERIC(6,4) DEFAULT 1.0;
             ALTER TABLE IF EXISTS data_feed_history ADD COLUMN IF NOT EXISTS final_amount NUMERIC(12,2);
             ALTER TABLE IF EXISTS data_feed_history ADD COLUMN IF NOT EXISTS exclude_from_training BOOLEAN DEFAULT FALSE;
+            ALTER TABLE IF EXISTS data_feed_history ADD COLUMN IF NOT EXISTS series_id TEXT;
+            CREATE INDEX IF NOT EXISTS idx_data_feed_history_series_id ON data_feed_history (series_id);
         """)
     conn.commit()
 
@@ -216,6 +219,7 @@ def insert_data_feed_row(
     share_ratio=None,
     final_amount=None,
     exclude_from_training: bool = False,
+    series_id: str | None = None,
 ) -> int:
     """Insert one row into data_feed_history. Returns the new row id."""
     with conn.cursor() as cur:
@@ -225,14 +229,16 @@ def insert_data_feed_row(
                 (entry_date, entry_text, sub_category, category, spend_type,
                  amount, merchant, vpa, upi_ref,
                  time_period, cadence, divide_by, monthly_amount,
-                 shared_expense, share_ratio, final_amount, exclude_from_training)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 shared_expense, share_ratio, final_amount, exclude_from_training,
+                 series_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
             (entry_date, entry_text, sub_category, category, spend_type,
              amount, merchant, vpa, upi_ref,
              time_period, cadence, divide_by, monthly_amount,
-             shared_expense, share_ratio, final_amount, exclude_from_training),
+             shared_expense, share_ratio, final_amount, exclude_from_training,
+             series_id),
         )
         row_id = cur.fetchone()[0]
     conn.commit()
@@ -416,6 +422,177 @@ def delete_history_row(conn, row_id: int) -> bool:
         deleted = cur.rowcount > 0
     conn.commit()
     return deleted
+
+
+def add_months(d: _date, n: int) -> _date:
+    """Return the 1st of the month n months after d's month."""
+    m = d.month - 1 + n
+    return _date(d.year + m // 12, m % 12 + 1, 1)
+
+
+def new_series_id() -> str:
+    return str(uuid.uuid4())
+
+
+def set_series_id(conn, row_id: int, series_id: str | None) -> None:
+    with conn.cursor() as cur:
+        cur.execute("UPDATE data_feed_history SET series_id = %s WHERE id = %s", (series_id, row_id))
+    conn.commit()
+
+
+def get_series_id(conn, row_id: int) -> str | None:
+    """Return the series_id of a data_feed_history row, or None."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT series_id FROM data_feed_history WHERE id = %s", (row_id,))
+        row = cur.fetchone()
+    return row[0] if row and row[0] else None
+
+
+def get_series_rows(conn, series_id: str) -> list[dict]:
+    """All rows in a series, ordered by entry_date then id (first row = the original entry)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT id, entry_date, entry_text, merchant, category, sub_category, spend_type,
+                   amount, share_ratio, shared_expense, cadence, divide_by
+            FROM data_feed_history
+            WHERE series_id = %s
+            ORDER BY entry_date ASC, id ASC
+            """,
+            (series_id,),
+        )
+        rows = cur.fetchall()
+    return [
+        {
+            "id": r[0], "entry_date": r[1], "entry_text": r[2], "merchant": r[3],
+            "category": r[4], "sub_category": r[5], "spend_type": r[6],
+            "amount": float(r[7]) if r[7] is not None else 0.0,
+            "share_ratio": float(r[8]) if r[8] is not None else 1.0,
+            "shared_expense": r[9] or "N", "cadence": r[10] or "O", "divide_by": r[11] or 1,
+        }
+        for r in rows
+    ]
+
+
+def get_series_info(conn, row_id: int) -> dict | None:
+    """Return {series_id, count, is_first} if row_id belongs to a multi-row series, else None."""
+    series_id = get_series_id(conn, row_id)
+    if not series_id:
+        return None
+    rows = get_series_rows(conn, series_id)
+    if len(rows) < 2:
+        return None
+    return {"series_id": series_id, "count": len(rows), "is_first": rows[0]["id"] == row_id}
+
+
+def sync_shared_from_history(conn, history_id: int) -> None:
+    """Make shared_transactions mirror exactly what data_feed_history holds for this row.
+
+    Shared+in-scope rows are upserted (keyed on history_id, so no duplicates are possible);
+    anything else has its mirror row removed. paid_by/settled/is_ignored are preserved.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT entry_date, merchant, category, sub_category, entry_text, amount,
+                   monthly_amount, share_ratio, shared_expense
+            FROM data_feed_history WHERE id = %s
+            """,
+            (history_id,),
+        )
+        r = cur.fetchone()
+    if not r or r[8] != "Y" or not r[0] or r[0] < _SHARED_SCOPE_START:
+        delete_shared_transaction(conn, history_id)
+        return
+    amount = float(r[5]) if r[5] is not None else 0.0
+    monthly = float(r[6]) if r[6] is not None else amount
+    ratio = float(r[7]) if r[7] is not None else 1.0
+    upsert_shared_transaction(conn, history_id, amount, monthly, ratio, r[0], r[1], r[2], r[3], r[4])
+
+
+def _apply_series_amounts(conn, rows: list[dict], amount: float, divide_by: int) -> None:
+    """Write amount/divide_by/monthly/final onto every given row (each keeps its own share_ratio)."""
+    monthly = round(amount / divide_by, 2)
+    with conn.cursor() as cur:
+        for r in rows:
+            cur.execute(
+                """
+                UPDATE data_feed_history
+                   SET amount = %s, cadence = 'A', divide_by = %s,
+                       monthly_amount = %s, final_amount = %s
+                 WHERE id = %s
+                """,
+                (amount, divide_by, monthly, round(monthly * r["share_ratio"], 2), r["id"]),
+            )
+    conn.commit()
+
+
+def respread_series(conn, series_id: str, amount: float, divide_by: int, template: dict) -> dict:
+    """Make a series exactly `divide_by` monthly rows carrying the lump-sum `amount`.
+
+    Grows by appending months after the last row; shrinks by removing rows from the end.
+    `template` supplies fields for new rows: entry_text, merchant, category, sub_category,
+    spend_type, shared_expense, share_ratio. Returns {"created": [...ids], "deleted": [...ids]}.
+    Raises ValueError if shrinking would remove template["keep_id"].
+    """
+    rows = get_series_rows(conn, series_id)
+    created: list[int] = []
+    deleted: list[int] = []
+    keep_id = template.get("keep_id")
+    if len(rows) > divide_by:
+        doomed = rows[divide_by:]
+        if keep_id is not None and any(r["id"] == keep_id for r in doomed):
+            raise ValueError("Div By is smaller than this entry's position in its series")
+        with conn.cursor() as cur:
+            for r in doomed:
+                cur.execute("DELETE FROM data_feed_history WHERE id = %s", (r["id"],))
+        conn.commit()
+        deleted = [r["id"] for r in doomed]
+        rows = rows[:divide_by]
+    monthly = round(amount / divide_by, 2)
+    ratio = float(template.get("share_ratio") or 1.0)
+    for k in range(len(rows), divide_by):
+        d = add_months(rows[-1]["entry_date"] if rows else template["entry_date"], 1)
+        new_id = insert_data_feed_row(
+            conn, d, template["entry_text"], template["sub_category"], template["category"],
+            template["spend_type"], amount,
+            merchant=template.get("merchant"),
+            time_period=d.strftime("%b-%Y"),
+            cadence="A", divide_by=divide_by, monthly_amount=monthly,
+            shared_expense=template.get("shared_expense") or "N", share_ratio=ratio,
+            final_amount=round(monthly * ratio, 2),
+            exclude_from_training=True, series_id=series_id,
+        )
+        created.append(new_id)
+        rows.append({"id": new_id, "entry_date": d, "share_ratio": ratio})
+    _apply_series_amounts(conn, rows, amount, divide_by)
+    for r in rows:
+        sync_shared_from_history(conn, r["id"])
+    return {"created": created, "deleted": deleted}
+
+
+def delete_series(conn, series_id: str) -> int:
+    """Delete every row of a series (shared mirror rows cascade). Returns rows deleted."""
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM data_feed_history WHERE series_id = %s", (series_id,))
+        n = cur.rowcount
+    conn.commit()
+    return n
+
+
+def remove_series_row_and_recalc(conn, row_id: int, series_id: str) -> int:
+    """Delete one non-first row of a series and re-spread the lump sum over the remaining rows.
+
+    Returns the number of rows left in the series.
+    """
+    rows = get_series_rows(conn, series_id)
+    remaining = [r for r in rows if r["id"] != row_id]
+    delete_history_row(conn, row_id)
+    if remaining:
+        _apply_series_amounts(conn, remaining, remaining[0]["amount"], len(remaining))
+        for r in remaining:
+            sync_shared_from_history(conn, r["id"])
+    return len(remaining)
 
 
 def get_history_summary(conn, period: str, prev_period: str | None = None) -> dict:
@@ -720,7 +897,7 @@ def update_shared_row(conn, shared_id: int, fields: dict) -> dict | None:
     """Update editable fields (paid_by, owed_by, share_ratio, settled, is_ignored) of a shared_transactions row."""
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT paid_by, owed_by, share_ratio, monthly_amount, settled, is_ignored FROM shared_transactions WHERE id = %s",
+            "SELECT paid_by, owed_by, share_ratio, monthly_amount, settled, is_ignored, history_id FROM shared_transactions WHERE id = %s",
             (shared_id,),
         )
         row = cur.fetchone()
@@ -761,6 +938,18 @@ def update_shared_row(conn, shared_id: int, fields: dict) -> dict | None:
               settled_new, is_ignored_new, settled_new, settled_new, shared_id))
         if cur.rowcount == 0:
             return None
+        # Write a changed share ratio through to the History row it mirrors, so /view matches.
+        history_id = row[6] if len(row) > 6 else None
+        if "share_ratio" in fields and history_id:
+            cur.execute(
+                """
+                UPDATE data_feed_history
+                   SET share_ratio  = %s,
+                       final_amount = ROUND(COALESCE(monthly_amount, amount) * %s, 2)
+                 WHERE id = %s
+                """,
+                (share_ratio, share_ratio, history_id),
+            )
     conn.commit()
     return {
         "paid_by": paid_by, "owed_by": owed_by, "share_ratio": share_ratio,

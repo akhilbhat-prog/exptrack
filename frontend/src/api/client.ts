@@ -16,7 +16,10 @@ export function withToken(path: string): string {
 
 export class ApiError extends Error {
   status: number
-  constructor(status: number, message: string) { super(message); this.status = status }
+  data?: Record<string, unknown>
+  constructor(status: number, message: string, data?: Record<string, unknown>) {
+    super(message); this.status = status; this.data = data
+  }
 }
 
 export async function apiFetch<T = unknown>(
@@ -38,7 +41,7 @@ export async function apiFetch<T = unknown>(
   const data = await res.json().catch(() => ({}))
 
   if (!res.ok) {
-    throw new ApiError(res.status, data?.error ?? `HTTP ${res.status}`)
+    throw new ApiError(res.status, data?.error ?? `HTTP ${res.status}`, data)
   }
   return data as T
 }

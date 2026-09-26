@@ -890,3 +890,115 @@ class TestHistorySummary:
              patch("history.db.get_history_summary", side_effect=fake_summary):
             client.get("/api/history/summary?period=May-2026")
         assert captured["prev_period"] is None
+
+
+# ---------------------------------------------------------------------------
+# Cadence-A series: confirmed deletes, series-aware re-spread
+# ---------------------------------------------------------------------------
+
+class TestDeleteSeries:
+    _info = {"series_id": "s1", "count": 12, "is_first": False}
+
+    def test_series_row_without_confirm_returns_409_and_deletes_nothing(self, client, monkeypatch):
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
+        mock_conn, _ = _make_mock_conn()
+        with patch("history.db.get_connection", return_value=mock_conn), \
+             patch("history.db.get_series_info", return_value=self._info), \
+             patch("history.db.delete_history_row") as delete_row, \
+             patch("history.db.delete_series") as delete_series:
+            resp = client.delete("/api/history/5")
+        assert resp.status_code == 409
+        body = resp.get_json()
+        assert body["requires_confirmation"] is True
+        assert body["series_count"] == 12 and body["is_first"] is False
+        delete_row.assert_not_called()
+        delete_series.assert_not_called()
+
+    def test_confirmed_first_entry_deletes_whole_series(self, client, monkeypatch):
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
+        mock_conn, _ = _make_mock_conn()
+        with patch("history.db.get_connection", return_value=mock_conn), \
+             patch("history.db.get_series_info", return_value={**self._info, "is_first": True}), \
+             patch("history.db.delete_series", return_value=12) as delete_series:
+            resp = client.delete("/api/history/5?confirm=1")
+        assert resp.status_code == 200
+        delete_series.assert_called_once_with(mock_conn, "s1")
+        assert resp.get_json()["deleted"] == 12
+
+    def test_confirmed_later_entry_recalculates_remaining(self, client, monkeypatch):
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
+        mock_conn, _ = _make_mock_conn()
+        with patch("history.db.get_connection", return_value=mock_conn), \
+             patch("history.db.get_series_info", return_value=self._info), \
+             patch("history.db.remove_series_row_and_recalc", return_value=11) as remove:
+            resp = client.delete("/api/history/5?confirm=1")
+        assert resp.status_code == 200
+        remove.assert_called_once_with(mock_conn, 5, "s1")
+        assert resp.get_json()["series_remaining"] == 11
+
+
+class TestSeriesRespread:
+    _existing = {"id": 1, "entry_text": "Ins", "entry_date": _date(2026, 5, 1),
+                 "time_period": "May-2026", "merchant": "Acme"}
+    _result = {"amount": 1400.0, "monthly_amount": 100.0, "final_amount": 100.0,
+               "category": "Bills", "sub_category": "Ins", "spend_type": "Expense",
+               "cadence": "A", "divide_by": 14, "shared_expense": "Y", "share_ratio": 1.0}
+
+    def test_known_series_is_respread_with_merchant_and_no_text_match_delete(self, client, monkeypatch):
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
+        mock_conn, mock_cursor = _make_mock_conn()
+        with patch("history.db.get_connection", return_value=mock_conn), \
+             patch("history.db.update_history_row", return_value=self._result), \
+             patch("history.db.get_history_row", return_value=self._existing), \
+             patch("history.db.get_series_id", return_value="s1"), \
+             patch("history.db.respread_series", return_value={"created": [9, 10], "deleted": []}) as respread:
+            resp = client.patch("/api/history/1", json={"divide_by": 14})
+        assert resp.status_code == 200
+        assert resp.get_json()["rows_created"] == 2
+        args = respread.call_args[0]
+        assert args[1:4] == ("s1", 1400.0, 14)
+        assert args[4]["merchant"] == "Acme" and args[4]["keep_id"] == 1
+        assert not [c for c in mock_cursor.execute.call_args_list if "DELETE FROM data_feed_history" in c[0][0]]
+
+    def test_shrink_past_own_position_is_rejected(self, client, monkeypatch):
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
+        mock_conn, _ = _make_mock_conn()
+        with patch("history.db.get_connection", return_value=mock_conn), \
+             patch("history.db.update_history_row", return_value=self._result), \
+             patch("history.db.get_history_row", return_value=self._existing), \
+             patch("history.db.get_series_id", return_value="s1"), \
+             patch("history.db.respread_series", side_effect=ValueError("too small")):
+            resp = client.patch("/api/history/1", json={"divide_by": 2})
+        assert resp.status_code == 400
+
+    def test_legacy_row_starts_a_series_and_creates_stamped_rows_with_shared_merchant(self, client, monkeypatch):
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
+        mock_conn, _ = _make_mock_conn()
+        result = {**self._result, "divide_by": 3}
+        inserts = []
+        with patch("history.db.get_connection", return_value=mock_conn), \
+             patch("history.db.update_history_row", return_value=result), \
+             patch("history.db.get_history_row", return_value=self._existing), \
+             patch("history.db.get_series_id", return_value=None), \
+             patch("history.db.set_series_id") as set_sid, \
+             patch("history.db.insert_data_feed_row", side_effect=lambda *a, **k: inserts.append(k) or 50 + len(inserts)), \
+             patch("history.db.upsert_shared_transaction") as upsert:
+            resp = client.patch("/api/history/1", json={"divide_by": 3})
+        assert resp.status_code == 200
+        sid = set_sid.call_args[0][2]
+        assert sid and all(k["series_id"] == sid for k in inserts) and len(inserts) == 2
+        # merchant (previously None) reaches the shared mirror of each new month
+        new_month_upserts = [c for c in upsert.call_args_list if c[0][1] in (51, 52)]
+        assert len(new_month_upserts) == 2 and all(c[0][6] == "Acme" for c in new_month_upserts)
+
+    def test_create_stamps_one_series_id_on_all_rows(self, client, monkeypatch):
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
+        mock_conn, _ = _make_mock_conn()
+        inserts = []
+        with patch("history.db.get_connection", return_value=mock_conn), \
+             patch("history.db.create_data_feed_table"), \
+             patch("history.db.insert_data_feed_row", side_effect=lambda *a, **k: inserts.append(k) or len(inserts)):
+            resp = client.post("/api/history", json={
+                "entry_date": "2026-05-10", "entry_text": "Ins", "amount": 1400, "cadence": "A", "divide_by": 14})
+        assert resp.status_code == 201 and len(inserts) == 14
+        assert len({k["series_id"] for k in inserts}) == 1 and inserts[0]["series_id"]

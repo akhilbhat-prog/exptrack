@@ -52,7 +52,8 @@ export const historyApi = {
   create:   (payload: CreateHistoryPayload) => api.post<{ ok: boolean; count: number }>('/api/history', payload),
   patch:    (id: number, payload: PatchHistoryPayload) =>
               api.patch<PatchHistoryResponse>(`/api/history/${id}`, payload),
-  delete:   (id: number) => api.delete(`/api/history/${id}`),
+  delete:   (id: number, confirmSeries = false) =>
+              api.delete(`/api/history/${id}${confirmSeries ? '?confirm=1' : ''}`),
   row:      (id: number) => api.get<HistoryRow>(`/api/history/${id}`),
 
   getSettings:    () => api.get<AppSettings>('/api/settings'),

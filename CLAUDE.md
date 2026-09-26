@@ -257,6 +257,7 @@ shared_expense        CHAR(1) DEFAULT 'N' -- 'Y' or 'N'
 share_ratio           NUMERIC(6,4) DEFAULT 1.0
 final_amount          NUMERIC(12,2)       -- computed: monthly_amount * share_ratio
 exclude_from_training BOOLEAN DEFAULT FALSE  -- TRUE for auto-generated recurring rows
+series_id             TEXT                -- uuid linking the monthly rows of one cadence-'A' entry; NULL otherwise; never shown in the UI
 ```
 
 ### `transaction_batches` — batch lifecycle management
@@ -503,7 +504,7 @@ The old manual SQL approach has been replaced by a web UI. Current workflow:
 | `GET /api/history/summary` | Top-5 categories + period total (`?period=<p>&prev_period=<p>` optional) |
 | `POST /api/history` | Create a manual entry; cadence=A + divide_by>1 auto-generates future-month rows |
 | `PATCH /api/history/<id>` | Update editable fields for one row; returns recomputed amounts |
-| `DELETE /api/history/<id>` | Delete a row from data_feed_history |
+| `DELETE /api/history/<id>` | Delete a row. If the row is in a multi-row cadence-A series it returns 409 `{requires_confirmation, series_count, is_first}` unless `?confirm=1`; confirmed delete of the first row deletes the whole series, a later row is removed and the lump sum re-spread over the remaining rows |
 | `GET /api/settings` | Return `{default_share_ratio, default_annual_divisor}` |
 | `PATCH /api/settings` | Update allowed keys (`default_share_ratio`, `default_annual_divisor`) |
 
@@ -528,6 +529,9 @@ The old manual SQL approach has been replaced by a web UI. Current workflow:
 - Settings panel (gear icon) lets the user view/update `default_share_ratio` and `default_annual_divisor` via `/api/settings`
 
 **Backfill:** `loader/backfill_time_period.py` — one-shot script to populate `time_period` from `entry_date` for rows where it is NULL or empty. Run manually if needed.
+
+### Cadence 'A' series
+`amount` is the lump sum on every row; `monthly_amount = amount / divide_by`. All rows of one entry share a `series_id` (set on create, on Complete Batch, or when a legacy row is first re-spread; `loader/backfill_series_id.py` proposes ids for older rows, dry-run by default). Editing amount/cadence/divide_by on any row re-spreads the whole series to `divide_by` rows (any divisor). `db.sync_shared_from_history` keeps `shared_transactions` identical to History (upsert keyed on `history_id`, delete when unshared/out of scope). Editing share ratio on `/shared` writes through to the linked History row.
 
 ### Shared Expenses Workflow
 `/shared` is a read/edit UI over `shared_transactions` — a ledger that mirrors `data_feed_history` rows where `shared_expense = 'Y'` and `entry_date >= 2026-04-01`.

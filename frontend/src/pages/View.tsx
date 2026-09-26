@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { X, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react'
 import { Layout } from '../components/Layout'
 import { ComboInput } from '../components/ComboInput'
+import { ConfirmDialog } from '../components/ConfirmDialog'
+import { ApiError } from '../api/client'
 import { useToast } from '../hooks/useToast'
 import { historyApi, type PatchHistoryPayload, type CreateHistoryPayload } from '../api/history'
 import { batchesApi } from '../api/batches'
@@ -185,16 +187,50 @@ export function ViewPage() {
     onError: (e: Error) => toast(e.message, 'error'),
   })
 
-  const deleteMut = useMutation({
-    mutationFn: historyApi.delete,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['history', activePeriod] })
-      qc.invalidateQueries({ queryKey: ['history-summary', activePeriod] })
-      qc.invalidateQueries({ queryKey: ['history-periods'] })
-      toast('Deleted', 'success')
-    },
-    onError: (e: Error) => toast(e.message, 'error'),
-  })
+  // Deleting part of a multi-month (cadence A) series needs the user's confirmation.
+  const [seriesPrompt, setSeriesPrompt] = useState<{ message: string; resolve: (ok: boolean) => void } | null>(null)
+  const askSeries = (message: string) =>
+    new Promise<boolean>(resolve => setSeriesPrompt({ message, resolve }))
+  const answerSeries = (ok: boolean) => { seriesPrompt?.resolve(ok); setSeriesPrompt(null) }
+
+  function seriesMessage(d: Record<string, unknown>) {
+    const n = d.series_count as number
+    return d.is_first
+      ? `This entry starts a ${n}-month series. Deleting it will delete all ${n} entries across those months.`
+      : `This entry is one of ${n} months in a series. Deleting it will re-spread the amount across the remaining ${n - 1} months and update all of them.`
+  }
+
+  async function deleteRowWithSeries(id: number): Promise<'deleted' | 'cancelled' | 'gone'> {
+    try {
+      await historyApi.delete(id)
+      return 'deleted'
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 404) return 'gone'
+      if (e instanceof ApiError && e.status === 409 && e.data) {
+        if (!(await askSeries(seriesMessage(e.data)))) return 'cancelled'
+        try {
+          await historyApi.delete(id, true)
+          return 'deleted'
+        } catch (e2) {
+          if (e2 instanceof ApiError && e2.status === 404) return 'gone'
+          throw e2
+        }
+      }
+      throw e
+    }
+  }
+
+  function refreshHistory() {
+    qc.invalidateQueries({ queryKey: ['history'] })
+    qc.invalidateQueries({ queryKey: ['history-summary'] })
+    qc.invalidateQueries({ queryKey: ['history-periods'] })
+  }
+
+  function deleteRow(id: number) {
+    deleteRowWithSeries(id)
+      .then(r => { if (r === 'deleted') { refreshHistory(); toast('Deleted', 'success') } })
+      .catch((e: Error) => toast(e.message, 'error'))
+  }
 
   function saveRow(row: HistoryRow) {
     const d = dirty.get(row.id)
@@ -231,16 +267,18 @@ export function ViewPage() {
       .catch((e: Error) => toast(e.message, 'error'))
   }
 
-  function bulkDelete() {
+  async function bulkDelete() {
     if (!confirm(`Delete ${selectedIds.size} rows?`)) return
-    Promise.all([...selectedIds].map(id => historyApi.delete(id)))
-      .then(() => {
-        qc.invalidateQueries({ queryKey: ['history', activePeriod] })
-        qc.invalidateQueries({ queryKey: ['history-periods'] })
-        setSelected(new Set())
-        toast('Deleted selected rows', 'success')
-      })
-      .catch((e: Error) => toast(e.message, 'error'))
+    try {
+      // Sequential: deleting one series row can change or remove its siblings.
+      for (const id of [...selectedIds]) await deleteRowWithSeries(id)
+      setSelected(new Set())
+      toast('Deleted selected rows', 'success')
+    } catch (e) {
+      toast((e as Error).message, 'error')
+    } finally {
+      refreshHistory()
+    }
   }
 
   const saveSettings = useCallback((s: AppSettings) => {
@@ -542,7 +580,7 @@ export function ViewPage() {
                           <button
                             className="btn btn-ghost btn-icon"
                             title="Delete row"
-                            onClick={() => { if (confirm('Delete row?')) deleteMut.mutate(row.id) }}
+                            onClick={() => { if (confirm('Delete row?')) deleteRow(row.id) }}
                           ><Trash2 size={14} /></button>
                         </div>
                       </td>
@@ -609,6 +647,15 @@ export function ViewPage() {
               })
               .catch((e: Error) => toast(e.message, 'error'))
           }}
+        />
+      )}
+      {seriesPrompt && (
+        <ConfirmDialog
+          title="Delete affects multiple months"
+          message={seriesPrompt.message}
+          confirmLabel="Delete"
+          onConfirm={() => answerSeries(true)}
+          onCancel={() => answerSeries(false)}
         />
       )}
     </Layout>

@@ -688,3 +688,30 @@ class TestPostPayment:
             with patch("db.insert_payment_shared_transaction", side_effect=fake_insert):
                 self._post(client, {"entry_date": "2026-06-01", "paid_by": "Aditi", "amount": 100})
         assert captured.get('owed_by') == 'Akhil'
+
+
+# ---------------------------------------------------------------------------
+# DB: share_ratio write-through to data_feed_history
+# ---------------------------------------------------------------------------
+
+class TestShareRatioWriteThrough:
+    def _row(self, history_id):
+        return ("Akhil", "Aditi", 0.7, 1000.0, False, False, history_id)
+
+    def test_ratio_change_updates_linked_history_row(self):
+        conn, cur = _make_mock_conn(fetchone=self._row(history_id=42))
+        db.update_shared_row(conn, 1, {"share_ratio": 0.5})
+        history_updates = [c for c in cur.execute.call_args_list
+                           if "UPDATE data_feed_history" in c[0][0]]
+        assert len(history_updates) == 1
+        assert history_updates[0][0][1] == (0.5, 0.5, 42)
+
+    def test_non_ratio_change_leaves_history_alone(self):
+        conn, cur = _make_mock_conn(fetchone=self._row(history_id=42))
+        db.update_shared_row(conn, 1, {"settled": True})
+        assert not [c for c in cur.execute.call_args_list if "UPDATE data_feed_history" in c[0][0]]
+
+    def test_manual_row_without_history_id_is_not_written_back(self):
+        conn, cur = _make_mock_conn(fetchone=self._row(history_id=None))
+        db.update_shared_row(conn, 1, {"share_ratio": 0.5})
+        assert not [c for c in cur.execute.call_args_list if "UPDATE data_feed_history" in c[0][0]]

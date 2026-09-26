@@ -350,9 +350,10 @@ def complete_batch(batch_id):
                     )
 
                 if (cadence or "O") == "A" and divide_by > 1 and row_date:
+                    series_id = db.new_series_id()
+                    db.set_series_id(conn, feed_id, series_id)
                     for i in range(1, divide_by):
-                        m = row_date.month - 1 + i
-                        period_date = _date(row_date.year + m // 12, m % 12 + 1, 1)
+                        period_date = db.add_months(row_date, i)
                         future_id = db.insert_data_feed_row(
                             conn, period_date, entry, subcategory, category, txn_type,
                             amount_val,
@@ -364,6 +365,7 @@ def complete_batch(batch_id):
                             shared_expense=shared_expense or "N",
                             share_ratio=share_ratio,
                             final_amount=final_amount,
+                            series_id=series_id,
                         )
                         inserted += 1
                         if (shared_expense or "N") == "Y" and period_date >= _SHARED_SCOPE_START:

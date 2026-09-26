@@ -7,7 +7,9 @@ connection directly — no patching of psycopg2.connect needed.
 
 from datetime import date, datetime, timezone
 from decimal import Decimal
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 import db
 
@@ -498,3 +500,109 @@ class TestUsernameExists:
     def test_returns_false_when_not_found(self):
         mock_conn, _ = _make_mock_conn(fetchone=None)
         assert db.username_exists(mock_conn, "nobody") is False
+
+
+# ---------------------------------------------------------------------------
+# Cadence-A series helpers + shared mirror sync
+# ---------------------------------------------------------------------------
+
+class TestSeriesHelpers:
+    def _rows(self, n, amount=1200.0):
+        from datetime import date
+        return [{"id": 100 + i, "entry_date": db.add_months(date(2026, 5, 1), i), "share_ratio": 1.0,
+                 "amount": amount, "entry_text": "Ins", "merchant": "Acme"} for i in range(n)]
+
+    def test_add_months_wraps_year(self):
+        from datetime import date
+        assert db.add_months(date(2026, 11, 15), 3) == date(2027, 2, 1)
+
+    def test_get_series_info_none_without_series(self):
+        conn, _ = _make_mock_conn(fetchone=None)
+        assert db.get_series_info(conn, 1) is None
+
+    def test_respread_grows_beyond_twelve_without_cap(self):
+        from datetime import date
+        conn, _ = _make_mock_conn()
+        rows = [{"id": 1, "entry_date": date(2026, 5, 1), "share_ratio": 1.0}]
+        inserted = []
+        def fake_insert(c, d, *a, **k):
+            inserted.append((d, k["divide_by"], k["monthly_amount"], k["series_id"], k["merchant"]))
+            return 100 + len(inserted)
+        with patch("db.get_series_rows", return_value=rows), \
+             patch("db.insert_data_feed_row", side_effect=fake_insert), \
+             patch("db._apply_series_amounts") as apply_amounts, \
+             patch("db.sync_shared_from_history") as sync:
+            out = db.respread_series(conn, "s1", 1400.0, 14, {
+                "keep_id": 1, "entry_date": date(2026, 5, 1), "entry_text": "Ins", "merchant": "Acme",
+                "category": "Bills", "sub_category": "Ins", "spend_type": "Expense",
+                "shared_expense": "N", "share_ratio": 1.0})
+        assert len(out["created"]) == 13 and out["deleted"] == []
+        assert inserted[0][0] == date(2026, 6, 1) and inserted[-1][0] == date(2027, 6, 1)
+        assert all(i[1] == 14 and i[2] == 100.0 and i[3] == "s1" and i[4] == "Acme" for i in inserted)
+        assert apply_amounts.call_args[0][2:] == (1400.0, 14)
+        assert sync.call_count == 14  # every month's shared mirror re-synced
+
+    def test_respread_shrinks_from_the_end(self):
+        conn, cur = _make_mock_conn()
+        rows = self._rows(12)
+        with patch("db.get_series_rows", return_value=rows), \
+             patch("db._apply_series_amounts"), patch("db.sync_shared_from_history"):
+            out = db.respread_series(conn, "s1", 1200.0, 10, {"keep_id": 100, "share_ratio": 1.0})
+        assert out["deleted"] == [110, 111]
+
+    def test_respread_refuses_to_delete_the_edited_row(self):
+        conn, _ = _make_mock_conn()
+        with patch("db.get_series_rows", return_value=self._rows(12)):
+            with pytest.raises(ValueError):
+                db.respread_series(conn, "s1", 1200.0, 10, {"keep_id": 111, "share_ratio": 1.0})
+
+    def test_remove_row_recalculates_remaining_over_new_count(self):
+        conn, _ = _make_mock_conn()
+        rows = self._rows(12)
+        with patch("db.get_series_rows", return_value=rows), \
+             patch("db.delete_history_row") as delete_row, \
+             patch("db._apply_series_amounts") as apply_amounts, \
+             patch("db.sync_shared_from_history") as sync:
+            left = db.remove_series_row_and_recalc(conn, 105, "s1")
+        assert left == 11
+        delete_row.assert_called_once_with(conn, 105)
+        remaining, amount, divide_by = apply_amounts.call_args[0][1:]
+        assert amount == 1200.0 and divide_by == 11 and 105 not in [r["id"] for r in remaining]
+        assert sync.call_count == 11
+
+
+class TestSyncSharedFromHistory:
+    # (entry_date, merchant, category, sub_category, entry_text, amount, monthly_amount, share_ratio, shared_expense)
+    def _row(self, shared="Y", d=None):
+        from datetime import date
+        return (d or date(2026, 6, 1), "Acme", "Bills", "Ins", "Ins", 1200, 100, 0.7, shared)
+
+    def test_shared_row_is_upserted_with_merchant(self):
+        conn, _ = _make_mock_conn(fetchone=self._row())
+        with patch("db.upsert_shared_transaction") as up, patch("db.delete_shared_transaction") as dele:
+            db.sync_shared_from_history(conn, 7)
+        up.assert_called_once()
+        args = up.call_args[0]
+        assert args[1:4] == (7, 1200.0, 100.0) and args[6] == "Acme"
+        dele.assert_not_called()
+
+    def test_unshared_row_removes_mirror(self):
+        conn, _ = _make_mock_conn(fetchone=self._row(shared="N"))
+        with patch("db.upsert_shared_transaction") as up, patch("db.delete_shared_transaction") as dele:
+            db.sync_shared_from_history(conn, 7)
+        up.assert_not_called()
+        dele.assert_called_once_with(conn, 7)
+
+    def test_out_of_scope_date_removes_mirror(self):
+        from datetime import date
+        conn, _ = _make_mock_conn(fetchone=self._row(d=date(2026, 3, 1)))
+        with patch("db.upsert_shared_transaction") as up, patch("db.delete_shared_transaction") as dele:
+            db.sync_shared_from_history(conn, 7)
+        up.assert_not_called()
+        dele.assert_called_once()
+
+    def test_missing_history_row_removes_mirror(self):
+        conn, _ = _make_mock_conn(fetchone=None)
+        with patch("db.delete_shared_transaction") as dele:
+            db.sync_shared_from_history(conn, 7)
+        dele.assert_called_once_with(conn, 7)
