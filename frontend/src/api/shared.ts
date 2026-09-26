@@ -21,6 +21,7 @@ export interface PaymentPayload {
 }
 
 export interface PatchSharedPayload {
+  amount?:      number   // History-linked rows: the History amount (lump sum for cadence A)
   paid_by?:     string
   owed_by?:     string
   share_ratio?: number
@@ -36,7 +37,7 @@ export const sharedApi = {
   months:   () => api.get<SharedMonth[]>('/api/shared/months'),
   create:   (rows: CreateSharedPayload[]) => api.post<{ ok: boolean; count: number }>('/api/shared', rows),
   payment:  (payload: PaymentPayload) => api.post<SharedRow>('/api/shared/payment', payload),
-  patch:    (id: number, payload: PatchSharedPayload) => api.patch<SharedRow>(`/api/shared/${id}`, payload),
+  patch:    (id: number, payload: PatchSharedPayload) => api.patch<SharedRow & { rows_created: number }>(`/api/shared/${id}`, payload),
   delete:   (id: number) => api.delete(`/api/shared/${id}`),
   exportUrl: () => withToken('/api/shared/export'),
 }

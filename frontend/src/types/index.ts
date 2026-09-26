@@ -131,6 +131,7 @@ export interface SharedRow {
   is_payment: boolean
   is_ignored: boolean
   created_at: string
+  divide_by: number            // linked History row's divisor (monthly_amount = amount / divide_by); 1 otherwise
 }
 
 export interface SharedMonth {

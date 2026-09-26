@@ -154,9 +154,10 @@ class TestDeleteSharedTransaction:
 # ---------------------------------------------------------------------------
 
 class TestUpdateSharedRow:
-    # fetchone shape: (paid_by, owed_by, share_ratio, monthly_amount, settled, is_ignored)
+    # fetchone shape: (paid_by, owed_by, share_ratio, monthly_amount, settled, is_ignored,
+    #                  history_id, amount, is_payment)
     def _existing(self, paid_by="Akhil", owed_by="Aditi", share_ratio=0.7, monthly_amount=1000.0, settled=False, is_ignored=False):
-        return (paid_by, owed_by, share_ratio, monthly_amount, settled, is_ignored)
+        return (paid_by, owed_by, share_ratio, monthly_amount, settled, is_ignored, None, monthly_amount, False)
 
     def test_balance_akhil_paid(self):
         conn, cur = _make_mock_conn(fetchone=self._existing(paid_by="Akhil", share_ratio=0.7, monthly_amount=1000.0))
@@ -471,7 +472,7 @@ class TestPatchShared:
     def test_settled_toggle(self, client, monkeypatch):
         monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         with patch("db.get_connection") as mock_fn:
-            mock_conn, _ = _make_mock_conn()
+            mock_conn, _ = _make_mock_conn(fetchone=(None,))   # history_id lookup: manual row
             mock_fn.return_value = mock_conn
             with patch("db.update_shared_row", return_value={"paid_by": "Akhil", "owed_by": "Aditi", "balance": 300.0, "settled": True}):
                 resp = client.patch("/api/shared/1",
@@ -483,7 +484,7 @@ class TestPatchShared:
     def test_paid_by_change(self, client, monkeypatch):
         monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         with patch("db.get_connection") as mock_fn:
-            mock_conn, _ = _make_mock_conn()
+            mock_conn, _ = _make_mock_conn(fetchone=(None,))   # history_id lookup: manual row
             mock_fn.return_value = mock_conn
             with patch("db.update_shared_row", return_value={"paid_by": "Aditi", "owed_by": "Akhil", "balance": 700.0, "settled": False}):
                 resp = client.patch("/api/shared/1",
@@ -734,27 +735,77 @@ class TestPostPayment:
 # DB: share_ratio write-through to data_feed_history
 # ---------------------------------------------------------------------------
 
-class TestShareRatioWriteThrough:
-    def _row(self, history_id):
-        return ("Akhil", "Aditi", 0.7, 1000.0, False, False, history_id)
+class TestSharedAmountAndRatioEdits:
+    """Amount/ratio edits on /shared: History-linked rows go through history.apply_history_patch
+    (so /view, series re-spread and the mirror all stay in step); manual/payment rows are edited
+    in shared_transactions directly."""
 
-    def test_ratio_change_updates_linked_history_row(self):
+    # update_shared_row fetchone shape: (paid_by, owed_by, share_ratio, monthly_amount, settled,
+    #                                    is_ignored, history_id, amount, is_payment)
+    def _row(self, history_id=None, amount=1000.0, monthly=1000.0, is_payment=False, paid_by="Akhil"):
+        return (paid_by, "Aditi", 0.7, monthly, False, False, history_id, amount, is_payment)
+
+    def _patch(self, client, monkeypatch, body, history_id):
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
+        monkeypatch.delenv("INVITE_CODE", raising=False)
+        mock_conn, _ = _make_mock_conn(fetchone=(history_id,))
+        with patch("db.get_connection", return_value=mock_conn),              patch("shared.apply_history_patch", return_value={"rows_created": 0}) as hist,              patch("db.update_shared_row", return_value={"balance": 1.0}) as upd:
+            resp = client.patch("/api/shared/1", json=body)
+        return resp, hist, upd, mock_conn
+
+    def test_linked_row_amount_and_ratio_go_through_history(self, client, monkeypatch):
+        resp, hist, upd, conn = self._patch(client, monkeypatch, {"amount": 1200, "share_ratio": 0.5, "settled": True}, 42)
+        assert resp.status_code == 200
+        hist.assert_called_once_with(conn, 42, {"amount": 1200.0, "share_ratio": 0.5})
+        assert upd.call_args[0][2] == {"settled": True}
+
+    def test_linked_row_other_fields_skip_history(self, client, monkeypatch):
+        resp, hist, upd, _ = self._patch(client, monkeypatch, {"paid_by": "Aditi"}, 42)
+        assert resp.status_code == 200
+        hist.assert_not_called()
+        assert upd.call_args[0][2] == {"paid_by": "Aditi"}
+
+    def test_manual_row_amount_goes_to_shared_only(self, client, monkeypatch):
+        resp, hist, upd, _ = self._patch(client, monkeypatch, {"amount": 500}, None)
+        assert resp.status_code == 200
+        hist.assert_not_called()
+        assert upd.call_args[0][2] == {"amount": 500.0}
+
+    def test_invalid_amount_rejected(self, client, monkeypatch):
+        for bad in (0, -5, "abc"):
+            resp, hist, upd, _ = self._patch(client, monkeypatch, {"amount": bad}, None)
+            assert resp.status_code == 400
+            upd.assert_not_called()
+
+    def test_missing_row_is_404(self, client, monkeypatch):
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
+        monkeypatch.delenv("INVITE_CODE", raising=False)
+        mock_conn, _ = _make_mock_conn(fetchone=None)
+        with patch("db.get_connection", return_value=mock_conn):
+            resp = client.patch("/api/shared/999", json={"amount": 10})
+        assert resp.status_code == 404
+
+    def test_db_manual_amount_recomputes_monthly_and_shares(self):
+        conn, cur = _make_mock_conn(fetchone=self._row())
+        result = db.update_shared_row(conn, 1, {"amount": 2000})
+        assert result["amount"] == result["monthly_amount"] == 2000.0
+        assert (result["akhil_share"], result["aditi_share"], result["balance"]) == (1400.0, 600.0, 600.0)
+
+    def test_db_linked_row_ignores_amount(self):
+        conn, cur = _make_mock_conn(fetchone=self._row(history_id=42, amount=12000.0, monthly=1000.0))
+        result = db.update_shared_row(conn, 1, {"amount": 5})
+        assert (result["amount"], result["monthly_amount"]) == (12000.0, 1000.0)
+
+    def test_db_never_writes_history(self):
         conn, cur = _make_mock_conn(fetchone=self._row(history_id=42))
         db.update_shared_row(conn, 1, {"share_ratio": 0.5})
-        history_updates = [c for c in cur.execute.call_args_list
-                           if "UPDATE data_feed_history" in c[0][0]]
-        assert len(history_updates) == 1
-        assert history_updates[0][0][1] == (0.5, 0.5, 42)
+        assert not [c for c in cur.execute.call_args_list if "data_feed_history" in c[0][0]]
 
-    def test_non_ratio_change_leaves_history_alone(self):
-        conn, cur = _make_mock_conn(fetchone=self._row(history_id=42))
-        db.update_shared_row(conn, 1, {"settled": True})
-        assert not [c for c in cur.execute.call_args_list if "UPDATE data_feed_history" in c[0][0]]
-
-    def test_manual_row_without_history_id_is_not_written_back(self):
-        conn, cur = _make_mock_conn(fetchone=self._row(history_id=None))
-        db.update_shared_row(conn, 1, {"share_ratio": 0.5})
-        assert not [c for c in cur.execute.call_args_list if "UPDATE data_feed_history" in c[0][0]]
+    def test_db_payment_amount_sets_balance_without_shares(self):
+        conn, cur = _make_mock_conn(fetchone=self._row(is_payment=True, amount=32000.0, monthly=32000.0))
+        result = db.update_shared_row(conn, 1, {"amount": 30000})
+        assert result["balance"] == 30000.0
+        assert result["akhil_share"] == result["aditi_share"] == 0.0
 
 
 # ---------------------------------------------------------------------------

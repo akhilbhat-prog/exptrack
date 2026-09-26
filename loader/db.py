@@ -897,13 +897,14 @@ def get_shared_transactions(conn, fy_year: int) -> list[dict]:
     fy_end   = _date(fy_year + 1, 4, 1)
     with conn.cursor() as cur:
         cur.execute("""
-            SELECT id, history_id, paid_by, owed_by, amount, monthly_amount, share_ratio,
-                   akhil_share, aditi_share, balance,
-                   entry_date, merchant, category, subcategory, entry_text,
-                   settled, settled_at, is_payment, is_ignored
-            FROM shared_transactions
-            WHERE entry_date >= %s AND entry_date < %s
-            ORDER BY entry_date DESC, id DESC
+            SELECT s.id, s.history_id, s.paid_by, s.owed_by, s.amount, s.monthly_amount, s.share_ratio,
+                   s.akhil_share, s.aditi_share, s.balance,
+                   s.entry_date, s.merchant, s.category, s.subcategory, s.entry_text,
+                   s.settled, s.settled_at, s.is_payment, s.is_ignored, h.divide_by
+            FROM shared_transactions s
+            LEFT JOIN data_feed_history h ON h.id = s.history_id
+            WHERE s.entry_date >= %s AND s.entry_date < %s
+            ORDER BY s.entry_date DESC, s.id DESC
         """, (fy_start, fy_end))
         rows = cur.fetchall()
     return [
@@ -927,25 +928,38 @@ def get_shared_transactions(conn, fy_year: int) -> list[dict]:
             "settled_at":     r[16].isoformat() if r[16] else None,
             "is_payment":     bool(r[17]),
             "is_ignored":     bool(r[18]),
+            "divide_by":      max(1, int(r[19] or 1)),   # History row's divisor; 1 for manual/payment rows
         }
         for r in rows
     ]
 
 
 def update_shared_row(conn, shared_id: int, fields: dict) -> dict | None:
-    """Update editable fields (paid_by, owed_by, share_ratio, settled, is_ignored) of a shared_transactions row."""
+    """Update editable fields (paid_by, owed_by, share_ratio, settled, is_ignored, amount) of a shared_transactions row.
+
+    `amount` is only applied to rows with no History link (manual entries and payments), where
+    amount = monthly_amount. History-linked rows take amount/share_ratio edits through
+    history.apply_history_patch, which keeps data_feed_history the source of truth.
+    """
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT paid_by, owed_by, share_ratio, monthly_amount, settled, is_ignored, history_id FROM shared_transactions WHERE id = %s",
+            """SELECT paid_by, owed_by, share_ratio, monthly_amount, settled, is_ignored, history_id,
+                      amount, is_payment
+                 FROM shared_transactions WHERE id = %s""",
             (shared_id,),
         )
         row = cur.fetchone()
         if not row:
             return None
+        history_id     = row[6]
+        is_payment     = bool(row[8])
         paid_by        = fields.get("paid_by",    row[0])
         owed_by        = fields.get("owed_by",    row[1])
         share_ratio    = float(fields.get("share_ratio", row[2]))
+        amount         = float(row[7]) if row[7] is not None else 0.0
         monthly_amount = float(row[3]) if row[3] is not None else 0.0
+        if "amount" in fields and not history_id:
+            amount = monthly_amount = round(float(fields["amount"]), 2)
         settled_new    = fields.get("settled")
         if settled_new is None:
             settled_new = row[4]
@@ -956,12 +970,19 @@ def update_shared_row(conn, shared_id: int, fields: dict) -> dict | None:
             is_ignored_new = row[5]
         elif isinstance(is_ignored_new, str):
             is_ignored_new = is_ignored_new.lower() in ("true", "1", "yes")
-        akhil_share = round(monthly_amount * share_ratio, 2)
-        aditi_share = round(monthly_amount * (1.0 - share_ratio), 2)
-        balance = aditi_share if paid_by == "Akhil" else akhil_share
+        if is_payment:
+            # A settlement has no shares; its balance is the amount paid.
+            akhil_share = aditi_share = 0.0
+            balance = amount
+        else:
+            akhil_share = round(monthly_amount * share_ratio, 2)
+            aditi_share = round(monthly_amount * (1.0 - share_ratio), 2)
+            balance = aditi_share if paid_by == "Akhil" else akhil_share
         cur.execute("""
             UPDATE shared_transactions
-               SET paid_by     = %s,
+               SET amount         = %s,
+                   monthly_amount = %s,
+                   paid_by     = %s,
                    owed_by     = %s,
                    share_ratio = %s,
                    akhil_share = %s,
@@ -973,24 +994,13 @@ def update_shared_row(conn, shared_id: int, fields: dict) -> dict | None:
                                       WHEN NOT %s THEN NULL
                                       ELSE settled_at END
              WHERE id = %s
-        """, (paid_by, owed_by, share_ratio, akhil_share, aditi_share, balance,
+        """, (amount, monthly_amount, paid_by, owed_by, share_ratio, akhil_share, aditi_share, balance,
               settled_new, is_ignored_new, settled_new, settled_new, shared_id))
         if cur.rowcount == 0:
             return None
-        # Write a changed share ratio through to the History row it mirrors, so /view matches.
-        history_id = row[6] if len(row) > 6 else None
-        if "share_ratio" in fields and history_id:
-            cur.execute(
-                """
-                UPDATE data_feed_history
-                   SET share_ratio  = %s,
-                       final_amount = ROUND(COALESCE(monthly_amount, amount) * %s, 2)
-                 WHERE id = %s
-                """,
-                (share_ratio, share_ratio, history_id),
-            )
     conn.commit()
     return {
+        "amount": amount, "monthly_amount": monthly_amount,
         "paid_by": paid_by, "owed_by": owed_by, "share_ratio": share_ratio,
         "akhil_share": akhil_share, "aditi_share": aditi_share,
         "balance": balance, "settled": settled_new, "is_ignored": is_ignored_new,

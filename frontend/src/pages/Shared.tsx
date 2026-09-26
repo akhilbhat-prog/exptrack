@@ -20,8 +20,7 @@ export function SharedPage() {
 
   const [fy, setFy] = useState<number | null>(null)
   const [month, setMonth] = useState<string | null>(null)   // 'YYYY-MM' inside the FY, or null for the whole FY
-  const [split, setSplit] = useState(false)                   // month view only: one table per payer
-  const splitOn = split && month != null
+  const [split, setSplit] = useState(true)                    // one table per payer (FY or month)
   const [expandedFys, setExpandedFys] = useState<Set<number>>(new Set())
   const [sortCol, setSortCol]   = useState<SortKey>('entry_date')
   const [sortDir, setSortDir]   = useState<'asc' | 'desc'>('desc')
@@ -61,7 +60,10 @@ export function SharedPage() {
   const patchMut = useMutation({
     mutationFn: ({ id, payload }: { id: number; payload: Parameters<typeof sharedApi.patch>[1] }) =>
       sharedApi.patch(id, payload),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['shared'] }); qc.invalidateQueries({ queryKey: ['shared-summary'] }) },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['shared'] }); qc.invalidateQueries({ queryKey: ['shared-summary'] })
+      qc.invalidateQueries({ queryKey: ['shared-months'] })
+    },
     onError: (e: Error) => toast(e.message, 'error'),
   })
 
@@ -115,7 +117,14 @@ export function SharedPage() {
   function saveRow(row: SharedRow) {
     const edits = pending[row.id] ?? {}
     if (!Object.keys(edits).length) return
-    patchMut.mutate({ id: row.id, payload: edits })
+    if (edits.amount !== undefined && !(edits.amount > 0)) { toast('Amount must be greater than 0', 'error'); return }
+    const payload = { amount: edits.amount, share_ratio: edits.share_ratio, paid_by: edits.paid_by }
+    patchMut.mutate({ id: row.id, payload }, {
+      onSuccess: () => toast(
+        edits.amount !== undefined && row.divide_by > 1
+          ? `Saved: all ${row.divide_by} months of this series re-spread in History`
+          : 'Saved', 'success'),
+    })
     setPending(p => { const n = { ...p }; delete n[row.id]; return n })
   }
 
@@ -142,7 +151,7 @@ export function SharedPage() {
           <div
             className={`fy-item${activeFy === y && !month ? ' active' : ''}`}
             style={{ display: 'flex', alignItems: 'center', gap: 4 }}
-            onClick={() => { setFy(y); setMonth(null); setSplit(false) }}
+            onClick={() => { setFy(y); setMonth(null) }}
           >
             <button className="sidebar-chevron" title={isOpen(y) ? 'Collapse' : 'Expand'}
               onClick={e => { e.stopPropagation(); toggleFy(y) }}>
@@ -182,54 +191,25 @@ export function SharedPage() {
         </div>
       }
     >
-      {/* Summary cards (Split view swaps them for the settle-up panel) */}
-      {splitOn && month && <SettleUpPanel rows={monthRows} title={monthLabel(month)} summary={summary} />}
-      {!splitOn && summary && (
-        <div className="summary-cards">
-          {[
-            { label: 'Net Balance', value: summary.net_balance, isBalance: true },
-            { label: 'Akhil Paid', value: summary.total_akhil_paid },
-            { label: 'Aditi Paid', value: summary.total_aditi_paid },
-          ].map(s => (
-            <div key={s.label} className="summary-card">
-              <div className="sc-label">{s.label}</div>
-              <div className="sc-value" style={{
-                color: s.isBalance
-                  ? (s.value >= 0 ? 'var(--green)' : 'var(--red)')
-                  : 'var(--text)',
-                fontSize: 18,
-              }}>
-                {fmtAmt(s.isBalance ? Math.abs(s.value) : s.value)}
-              </div>
-              {s.isBalance && (
-                <div className="sc-sub">
-                  {s.value >= 0 ? 'Aditi owes Akhil' : 'Akhil owes Aditi'}
-                </div>
-              )}
-              {s.isBalance && summary.carried_over !== 0 && (
-                <div className="sc-sub">
-                  incl. {fmtAmt(Math.abs(summary.carried_over))} ({summary.carried_over > 0 ? 'Aditi owes Akhil' : 'Akhil owes Aditi'}) carried from previous months
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+      {/* Settle-up panel (FY or month), shown in both views */}
+      {month
+        ? <SettleUpPanel rows={monthRows} title={monthLabel(month)} periodLabel={monthLabel(month).split(' ')[0]}
+            carriedFrom="previous months" summary={summary} />
+        : <SettleUpPanel rows={monthRows} title={`FY ${fyLabel(activeFy)}`} periodLabel={`FY ${fyLabel(activeFy)}`}
+            carriedFrom="previous FYs" summary={summary} />}
 
       {/* Table */}
       <div className="card">
         <div className="card-header" style={{ gap: 8 }}>
           <span>Shared Transactions — FY {fyLabel(activeFy)}{month ? ` · ${monthLabel(month)}` : ''}</span>
-          {month && (
-            <label className="btn btn-secondary btn-sm" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-              <input type="checkbox" checked={split} onChange={e => setSplit(e.target.checked)} />
-              Split view
-            </label>
-          )}
+          <label className="btn btn-secondary btn-sm" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+            <input type="checkbox" checked={split} onChange={e => setSplit(e.target.checked)} />
+            Split view
+          </label>
           <input
             className="field-input"
             placeholder="Filter…"
-            style={{ marginLeft: month ? 0 : 'auto', width: 200, fontSize: 12 }}
+            style={{ width: 200, fontSize: 12 }}
             value={filter}
             onChange={e => setFilter(e.target.value)}
           />
@@ -238,9 +218,10 @@ export function SharedPage() {
           <div className="empty-state">Loading…</div>
         ) : displayed.length === 0 ? (
           <div className="empty-state">No shared transactions</div>
-        ) : splitOn ? (
+        ) : split ? (
           <SplitViews
             rows={displayed}
+            editor={{ pending, setPend, isDirty, saveRow }}
             onIgnore={row => patchMut.mutate({ id: row.id, payload: { is_ignored: !row.is_ignored } })}
             onDelete={row => { if (confirm('Delete?')) deleteMut.mutate(row.id) }}
           />
@@ -253,10 +234,11 @@ export function SharedPage() {
                   <th className="sortable" onClick={() => sort('merchant')}>Merchant{sortArrow('merchant')}</th>
                   <th className="sortable" onClick={() => sort('category')}>Category{sortArrow('category')}</th>
                   <th className="sortable" style={{ textAlign: 'right' }} onClick={() => sort('amount')}>Amount{sortArrow('amount')}</th>
-                  <th>Paid By</th>
+                  <th style={{ textAlign: 'right' }}>Mo. Amt</th>
                   <th style={{ textAlign: 'right' }}>Ratio</th>
-                  <th style={{ textAlign: 'right' }}>Akhil</th>
+                  <th style={{ textAlign: 'right' }} title="Mo. Amt × ratio (Akhil's share), as in History">Final Amt</th>
                   <th style={{ textAlign: 'right' }}>Aditi</th>
+                  <th>Paid By</th>
                   <th className="sortable" style={{ textAlign: 'right' }} onClick={() => sort('balance')}>Balance{sortArrow('balance')}</th>
                   <th>Settled</th>
                   <th></th>
@@ -265,13 +247,7 @@ export function SharedPage() {
               <tbody>
                 {displayed.map(row => {
                   const dirty = isDirty(row.id)
-                  const ratio = (get(row, 'share_ratio') ?? row.share_ratio)
-                  const monthly = row.monthly_amount ?? row.amount
-                  const akhil = row.is_payment ? 0 : Math.round(monthly * ratio * 100) / 100
-                  const aditi = row.is_payment ? 0 : Math.round(monthly * (1 - ratio) * 100) / 100
-                  const paidBy = get(row, 'paid_by') ?? row.paid_by
-                  const balance = row.is_payment ? row.balance
-                    : (paidBy === 'Akhil' ? aditi : akhil)
+                  const c = liveCalc(row, pending[row.id])
                   const settled = get(row, 'settled') ?? row.settled
                   const ignored = get(row, 'is_ignored') ?? row.is_ignored
 
@@ -290,42 +266,29 @@ export function SharedPage() {
                         {row.category && <div style={{ fontSize: 11, color: 'var(--muted)' }}>{row.category}</div>}
                       </td>
                       <td style={{ color: 'var(--muted)' }}>{row.category ?? '—'}</td>
-                      <td className="amt">{fmtAmt(row.amount)}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        <AmountInput row={row} value={c.amount} onChange={v => setPend(row.id, 'amount', v)} />
+                      </td>
+                      <td className="amt"><MonthlyCell row={row} mo={c.mo} /></td>
+                      <td style={{ textAlign: 'right' }}>
+                        {row.is_payment ? '—' : <RatioInput value={c.ratio} onChange={v => setPend(row.id, 'share_ratio', v)} />}
+                      </td>
+                      <td className="amt">{row.is_payment ? '—' : fmtAmt(c.akhil)}</td>
+                      <td className="amt">{row.is_payment ? '—' : fmtAmt(c.aditi)}</td>
                       <td>
                         {row.is_payment ? (
                           <span style={{ color: 'var(--teal)', fontSize: 12 }}>Payment</span>
                         ) : (
-                          <select
-                            className="field-input"
-                            style={{ padding: '3px 6px', fontSize: 12 }}
-                            value={paidBy as string}
-                            onChange={e => { setPend(row.id, 'paid_by', e.target.value) }}
-                          >
-                            <option>Akhil</option>
-                            <option>Aditi</option>
-                          </select>
+                          <PaidBySelect value={c.paidBy} onChange={v => setPend(row.id, 'paid_by', v)} />
                         )}
                       </td>
-                      <td style={{ textAlign: 'right' }}>
-                        {row.is_payment ? '—' : (
-                          <input
-                            type="number" className="field-input"
-                            style={{ width: 64, padding: '3px 6px', fontSize: 12 }}
-                            min="0.01" max="1" step="0.01"
-                            value={ratio}
-                            onChange={e => setPend(row.id, 'share_ratio', parseFloat(e.target.value) || 1)}
-                          />
-                        )}
-                      </td>
-                      <td className="amt">{row.is_payment ? '—' : fmtAmt(akhil)}</td>
-                      <td className="amt">{row.is_payment ? '—' : fmtAmt(aditi)}</td>
                       {row.is_payment ? (
                         <td className="amt" style={{ color: 'var(--green)', fontWeight: 600 }} title="Settlement, not a shared expense">
-                          Settlement {fmtSigned(settleEffect(row))}
+                          Settlement {fmtSigned(settleEffect({ ...row, amount: c.amount }))}
                         </td>
                       ) : (
-                        <td className="amt" style={{ color: balance > 0 ? 'var(--red)' : 'var(--green)', fontWeight: 600 }}>
-                          {fmtAmt(balance)}
+                        <td className="amt" style={{ color: c.balance > 0 ? 'var(--red)' : 'var(--green)', fontWeight: 600 }}>
+                          {fmtAmt(c.balance)}
                         </td>
                       )}
                       <td>
@@ -405,6 +368,70 @@ function fmtSigned(n: number) { return n < 0 ? `−${fmtAmt(-n)}` : fmtAmt(n) }
 // Effect of a settlement on "Aditi owes Akhil": Aditi paying reduces it, Akhil paying increases it.
 function settleEffect(r: SharedRow) { return r.paid_by === 'Aditi' ? -r.amount : r.amount }
 
+// Row values with any unsaved edits applied, so computed columns update live before Update.
+// Mo. Amt = Amount / the History row's divisor (a cadence-A lump sum is spread over its series).
+function liveCalc(r: SharedRow, e: Partial<SharedRow> = {}) {
+  const amount = e.amount ?? r.amount
+  const ratio = e.share_ratio ?? r.share_ratio
+  const paidBy = e.paid_by ?? r.paid_by
+  const mo = e.amount === undefined ? (r.monthly_amount ?? r.amount) : r2(amount / (r.divide_by || 1))
+  const akhil = r.is_payment ? 0 : r2(mo * ratio)
+  const aditi = r.is_payment ? 0 : r2(mo * (1 - ratio))
+  const owed = paidBy === 'Akhil' ? aditi : akhil
+  return { amount, ratio, paidBy, mo, akhil, aditi, own: paidBy === 'Akhil' ? akhil : aditi, owed,
+           balance: r.is_payment ? amount : owed }
+}
+
+function AmountInput({ row, value, onChange }: { row: SharedRow; value: number; onChange: (v: number) => void }) {
+  return (
+    <input
+      type="number" className="field-input"
+      style={{ width: 96, padding: '3px 6px', fontSize: 12, textAlign: 'right' }}
+      min="0.01" step="0.01" value={value}
+      title={row.divide_by > 1 ? `Lump sum spread over ${row.divide_by} months; saving re-spreads the whole series` : undefined}
+      onChange={e => onChange(parseFloat(e.target.value) || 0)}
+    />
+  )
+}
+
+function MonthlyCell({ row, mo }: { row: SharedRow; mo: number }) {
+  return (
+    <>
+      {fmtAmt(mo)}
+      {row.divide_by > 1 && <div style={{ fontSize: 11, color: 'var(--muted)' }}>÷{row.divide_by}</div>}
+    </>
+  )
+}
+
+function RatioInput({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  return (
+    <input
+      type="number" className="field-input"
+      style={{ width: 64, padding: '3px 6px', fontSize: 12 }}
+      min="0.01" max="1" step="0.01" value={value}
+      onChange={e => onChange(parseFloat(e.target.value) || 1)}
+    />
+  )
+}
+
+function PaidBySelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <select className="field-input" style={{ padding: '3px 6px', fontSize: 12 }} value={value}
+      onChange={e => onChange(e.target.value)}>
+      <option>Akhil</option>
+      <option>Aditi</option>
+    </select>
+  )
+}
+
+// Unsaved-edit state owned by SharedPage, shared with the Split tables.
+interface RowEditor {
+  pending: Record<number, Partial<SharedRow>>
+  setPend: (id: number, field: keyof SharedRow, value: unknown) => void
+  isDirty: (id: number) => boolean
+  saveRow: (row: SharedRow) => void
+}
+
 // Payments are settlements between the two, not shared expenses: no shares, never split.
 function calcRow(r: SharedRow) {
   const monthly = r.monthly_amount ?? r.amount
@@ -430,9 +457,11 @@ function splitTotals(rows: SharedRow[]) {
 
 function otherOf(p: string) { return p === 'Akhil' ? 'Aditi' : 'Akhil' }
 
-// Top-of-page panel in Split view (replaces the three summary cards). Takes the month's rows
-// without the text Filter; the net is the server's closing balance so it always agrees with it.
-function SettleUpPanel({ rows, title, summary }: { rows: SharedRow[]; title: string; summary?: SharedSummary }) {
+// Top-of-page panel in Split view (replaces the three summary cards). Takes the month's (or FY's)
+// rows without the text Filter; the net is the server's closing balance so it always agrees with it.
+function SettleUpPanel({ rows, title, periodLabel, carriedFrom, summary }: {
+  rows: SharedRow[]; title: string; periodLabel: string; carriedFrom: string; summary?: SharedSummary
+}) {
   const [byAkhil, byAditi] = splitTotals(rows)
   const settlements = rows.filter(r => r.is_payment && !r.is_ignored)
   const carried = summary?.carried_over ?? 0
@@ -449,11 +478,11 @@ function SettleUpPanel({ rows, title, summary }: { rows: SharedRow[]; title: str
     <div className="summary-card" style={{ marginBottom: 14 }}>
       <div className="sc-label" style={{ marginBottom: 8 }}>Settle up · {title}</div>
       {carried !== 0 && line(
-        'Carried over from previous months',
+        `Carried over from ${carriedFrom}`,
         carried > 0 ? 'Aditi owes Akhil' : 'Akhil owes Aditi',
         fmtAmt(Math.abs(carried)),
       )}
-      {line(`${title.split(' ')[0]} shared expenses`, 'Aditi owes Akhil', fmtAmt(byAkhil.owed))}
+      {line(`${periodLabel} shared expenses`, 'Aditi owes Akhil', fmtAmt(byAkhil.owed))}
       {line('', 'Akhil owes Aditi', `−${fmtAmt(byAditi.owed)}`)}
       {settlements.map(r => line(
         `Settlement · ${fmtDate(r.entry_date)}`,
@@ -471,9 +500,10 @@ function SettleUpPanel({ rows, title, summary }: { rows: SharedRow[]; title: str
   )
 }
 
-// Split view: one collapsible table per payer. Read-only apart from Ignore/delete.
-function SplitViews({ rows, onIgnore, onDelete }: {
+// Split view: one collapsible table per payer. Amount/Ratio/Paid By edit like the full table (saved on Update).
+function SplitViews({ rows, editor, onIgnore, onDelete }: {
   rows: SharedRow[]
+  editor: RowEditor
   onIgnore: (r: SharedRow) => void
   onDelete: (r: SharedRow) => void
 }) {
@@ -505,7 +535,7 @@ function SplitViews({ rows, onIgnore, onDelete }: {
               <span>{t.other} Owes: <b className="amt">{fmtAmt(t.owed)}</b></span>
             </div>
             {isOpen && (t.list.length === 0 ? (
-              <div className="empty-state" style={{ padding: 16 }}>Nothing paid by {t.payer} this month</div>
+              <div className="empty-state" style={{ padding: 16 }}>Nothing paid by {t.payer} in this period</div>
             ) : (
               <div style={{ overflowX: 'auto' }}>
                 <table className="data-table">
@@ -515,28 +545,41 @@ function SplitViews({ rows, onIgnore, onDelete }: {
                       <th>Merchant</th>
                       <th>Category</th>
                       <th style={{ textAlign: 'right' }}>Amount</th>
-                      <th style={{ textAlign: 'right' }} title="Akhil : Aditi">Ratio</th>
+                      <th style={{ textAlign: 'right' }}>Mo. Amt</th>
+                      <th style={{ textAlign: 'right' }} title="Akhil's share of Mo. Amt">Ratio</th>
                       <th style={{ textAlign: 'right' }}>{t.payer}'s share</th>
                       <th style={{ textAlign: 'right' }}>Owed by {t.other}</th>
+                      <th>Paid By</th>
                       <th></th>
                     </tr>
                   </thead>
                   <tbody>
                     {t.list.map(r => {
-                      const c = calcRow(r)
+                      const c = liveCalc(r, editor.pending[r.id])
+                      const dirty = editor.isDirty(r.id)
                       return (
-                        <tr key={r.id} style={{
+                        <tr key={r.id} className={dirty ? 'dirty' : ''} style={{
                           opacity: r.is_ignored ? 0.3 : 1,
                         }}>
                           <td style={{ color: 'var(--muted)', whiteSpace: 'nowrap' }}>{fmtDate(r.entry_date)}</td>
                           <td>{r.merchant ?? r.entry_text}</td>
                           <td style={{ color: 'var(--muted)' }}>{r.category ?? '—'}</td>
-                          <td className="amt">{fmtAmt(c.base)}</td>
-                          <td className="amt" style={{ color: 'var(--muted)' }}>{ratioLabel(r.share_ratio)}</td>
+                          <td style={{ textAlign: 'right' }}>
+                            <AmountInput row={r} value={c.amount} onChange={v => editor.setPend(r.id, 'amount', v)} />
+                          </td>
+                          <td className="amt"><MonthlyCell row={r} mo={c.mo} /></td>
+                          <td style={{ textAlign: 'right' }}>
+                            <RatioInput value={c.ratio} onChange={v => editor.setPend(r.id, 'share_ratio', v)} />
+                            <div style={{ fontSize: 11, color: 'var(--muted)' }}>{ratioLabel(c.ratio)}</div>
+                          </td>
                           <td className="amt">{fmtAmt(c.own)}</td>
                           <td className="amt" style={{ fontWeight: 600 }}>{fmtAmt(c.owed)}</td>
+                          <td><PaidBySelect value={c.paidBy} onChange={v => editor.setPend(r.id, 'paid_by', v)} /></td>
                           <td>
                             <div style={{ display: 'flex', gap: 4 }}>
+                              {dirty && (
+                                <button className="btn btn-primary btn-sm" onClick={() => editor.saveRow(r)}>Update</button>
+                              )}
                               <button
                                 className="btn btn-ghost btn-sm"
                                 style={{ color: r.is_ignored ? 'var(--muted)' : 'var(--amber)', fontSize: 11 }}
@@ -555,10 +598,12 @@ function SplitViews({ rows, onIgnore, onDelete }: {
                     })}
                     <tr style={{ fontWeight: 700, borderTop: '2px solid var(--border2)' }}>
                       <td colSpan={3}>Total · {t.count} transactions</td>
+                      <td></td>
                       <td className="amt">{fmtAmt(t.amount)}</td>
                       <td></td>
                       <td className="amt">{fmtAmt(t.own)}</td>
                       <td className="amt">{fmtAmt(t.owed)}</td>
+                      <td></td>
                       <td></td>
                     </tr>
                   </tbody>
@@ -604,13 +649,19 @@ function SplitViews({ rows, onIgnore, onDelete }: {
                 </thead>
                 <tbody>
                   {settlements.map(r => (
-                    <tr key={r.id} style={{ opacity: r.is_ignored ? 0.3 : 1 }}>
+                    <tr key={r.id} className={editor.isDirty(r.id) ? 'dirty' : ''} style={{ opacity: r.is_ignored ? 0.3 : 1 }}>
                       <td style={{ color: 'var(--muted)', whiteSpace: 'nowrap' }}>{fmtDate(r.entry_date)}</td>
                       <td>{r.paid_by} → {otherOf(r.paid_by)}</td>
                       <td style={{ color: 'var(--muted)' }}>{r.entry_text ?? '—'}</td>
-                      <td className="amt">{fmtAmt(r.amount)}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        <AmountInput row={r} value={editor.pending[r.id]?.amount ?? r.amount}
+                          onChange={v => editor.setPend(r.id, 'amount', v)} />
+                      </td>
                       <td>
                         <div style={{ display: 'flex', gap: 4 }}>
+                          {editor.isDirty(r.id) && (
+                            <button className="btn btn-primary btn-sm" onClick={() => editor.saveRow(r)}>Update</button>
+                          )}
                           <button
                             className="btn btn-ghost btn-sm"
                             style={{ color: r.is_ignored ? 'var(--muted)' : 'var(--amber)', fontSize: 11 }}

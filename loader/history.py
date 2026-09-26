@@ -231,121 +231,136 @@ def update_history(row_id):
 
     conn = db.get_connection()
     try:
-        result = db.update_history_row(conn, row_id, fields)
+        try:
+            result = apply_history_patch(conn, row_id, fields)
+        except ValueError as e:
+            abort(400, str(e))
         if result is None:
             abort(404, "Row not found")
-
-        rows_created = 0
-        expansion_relevant_fields = {"amount", "cadence", "divide_by"}
-        if (expansion_relevant_fields & fields.keys()
-                and result["cadence"] == "A" and result["divide_by"] > 1):
-            existing = db.get_history_row(conn, row_id)
-            if existing and existing.get("entry_date"):
-                base_date = existing["entry_date"]
-                divide_by = result["divide_by"]
-                share_ratio = result["share_ratio"]
-                shared_expense = result["shared_expense"]
-                amount = result["amount"]
-                monthly_amount = result["monthly_amount"]
-                final_amount = result["final_amount"]
-                entry_text = existing["entry_text"]
-                merchant = existing["merchant"]
-                sub_category = result["sub_category"] or None
-                category = result["category"] or None
-                spend_type = result["spend_type"] or None
-
-                series_id = db.get_series_id(conn, row_id)
-                if series_id:
-                    # Known series: it is the source of truth - grow/shrink it to divide_by
-                    # rows and re-spread the lump sum across all of them (any divisor).
-                    try:
-                        outcome = db.respread_series(
-                            conn, series_id, amount, divide_by,
-                            {
-                                "keep_id": row_id, "entry_date": base_date,
-                                "entry_text": entry_text, "merchant": merchant,
-                                "category": category, "sub_category": sub_category,
-                                "spend_type": spend_type, "shared_expense": shared_expense,
-                                "share_ratio": share_ratio,
-                            },
-                        )
-                    except ValueError as e:
-                        abort(400, str(e))
-                    rows_created = len(outcome["created"])
-                else:
-                    # Legacy row with no series yet: clear the old unlinked future rows for
-                    # this same item, then start a proper series.
-                    series_id = db.new_series_id()
-                    db.set_series_id(conn, row_id, series_id)
-                    future_periods = [
-                        db.add_months(base_date, i).strftime("%b-%Y")
-                        for i in range(1, max(12, divide_by))
-                    ]
-
-                    # Delete any pre-existing future rows for this *same* recurring item
-                    # (entry_text alone is not unique - e.g. "Online Learning" is shared by
-                    # several distinct subscriptions, so match on merchant/category/sub_category
-                    # too to avoid deleting sibling items that happen to share the label)
-                    with conn.cursor() as cur:
-                        placeholders = ",".join(["%s"] * len(future_periods))
-                        cur.execute(
-                            f"""
-                            DELETE FROM data_feed_history
-                            WHERE entry_text = %s AND id != %s AND time_period IN ({placeholders})
-                              AND merchant IS NOT DISTINCT FROM %s
-                              AND category IS NOT DISTINCT FROM %s
-                              AND sub_category IS NOT DISTINCT FROM %s
-                            """,
-                            [entry_text, row_id] + future_periods + [merchant, category, sub_category],
-                        )
-                    conn.commit()
-
-                    # Create new rows for months 2..divide_by
-                    for i in range(1, divide_by):
-                        period_date = db.add_months(base_date, i)
-                        new_id = db.insert_data_feed_row(
-                            conn,
-                            period_date, entry_text, sub_category, category, spend_type,
-                            amount,
-                            merchant=merchant,
-                            time_period=period_date.strftime("%b-%Y"),
-                            cadence="A",
-                            divide_by=divide_by,
-                            monthly_amount=monthly_amount,
-                            shared_expense=shared_expense,
-                            share_ratio=share_ratio,
-                            final_amount=final_amount,
-                            exclude_from_training=True,
-                            series_id=series_id,
-                        )
-                        rows_created += 1
-                        if shared_expense == 'Y' and period_date >= _SHARED_SCOPE_START:
-                            db.upsert_shared_transaction(
-                                conn, new_id, amount, monthly_amount, share_ratio,
-                                period_date, merchant, category, sub_category, entry_text,
-                            )
-
-        # Sync the updated row itself to shared_transactions
-        new_shared = result["shared_expense"]
-        if new_shared == 'Y':
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT entry_date, merchant, entry_text FROM data_feed_history WHERE id = %s",
-                    (row_id,),
-                )
-                dfh = cur.fetchone()
-            if dfh and dfh[0] and dfh[0] >= _SHARED_SCOPE_START:
-                db.upsert_shared_transaction(
-                    conn, row_id, result["amount"], result["monthly_amount"], result["share_ratio"],
-                    dfh[0], dfh[1], result["category"] or None,
-                    result["sub_category"] or None, dfh[2],
-                )
-        else:
-            db.delete_shared_transaction(conn, row_id)
-
-        return jsonify({"ok": True, **result, "rows_created": rows_created})
+        return jsonify({"ok": True, **result})
     finally:
         conn.close()
+
+
+def apply_history_patch(conn, row_id: int, fields: dict) -> dict | None:
+    """Apply a partial edit to one data_feed_history row and everything that hangs off it.
+
+    Updates the row (recomputing monthly/final amounts), re-spreads its cadence-A series when
+    amount/cadence/divide_by change, and syncs its shared_transactions mirror. Used by
+    PATCH /api/history/<id> and by PATCH /api/shared/<id> for History-linked rows.
+    Returns the merged row plus rows_created, or None if the row does not exist.
+    Raises ValueError if the series cannot be shrunk to the new divide_by.
+    """
+    result = db.update_history_row(conn, row_id, fields)
+    if result is None:
+        return None
+
+    rows_created = 0
+    expansion_relevant_fields = {"amount", "cadence", "divide_by"}
+    if (expansion_relevant_fields & fields.keys()
+            and result["cadence"] == "A" and result["divide_by"] > 1):
+        existing = db.get_history_row(conn, row_id)
+        if existing and existing.get("entry_date"):
+            base_date = existing["entry_date"]
+            divide_by = result["divide_by"]
+            share_ratio = result["share_ratio"]
+            shared_expense = result["shared_expense"]
+            amount = result["amount"]
+            monthly_amount = result["monthly_amount"]
+            final_amount = result["final_amount"]
+            entry_text = existing["entry_text"]
+            merchant = existing["merchant"]
+            sub_category = result["sub_category"] or None
+            category = result["category"] or None
+            spend_type = result["spend_type"] or None
+
+            series_id = db.get_series_id(conn, row_id)
+            if series_id:
+                # Known series: it is the source of truth - grow/shrink it to divide_by
+                # rows and re-spread the lump sum across all of them (any divisor).
+                outcome = db.respread_series(
+                    conn, series_id, amount, divide_by,
+                    {
+                        "keep_id": row_id, "entry_date": base_date,
+                        "entry_text": entry_text, "merchant": merchant,
+                        "category": category, "sub_category": sub_category,
+                        "spend_type": spend_type, "shared_expense": shared_expense,
+                        "share_ratio": share_ratio,
+                    },
+                )
+                rows_created = len(outcome["created"])
+            else:
+                # Legacy row with no series yet: clear the old unlinked future rows for
+                # this same item, then start a proper series.
+                series_id = db.new_series_id()
+                db.set_series_id(conn, row_id, series_id)
+                future_periods = [
+                    db.add_months(base_date, i).strftime("%b-%Y")
+                    for i in range(1, max(12, divide_by))
+                ]
+
+                # Delete any pre-existing future rows for this *same* recurring item
+                # (entry_text alone is not unique - e.g. "Online Learning" is shared by
+                # several distinct subscriptions, so match on merchant/category/sub_category
+                # too to avoid deleting sibling items that happen to share the label)
+                with conn.cursor() as cur:
+                    placeholders = ",".join(["%s"] * len(future_periods))
+                    cur.execute(
+                        f"""
+                        DELETE FROM data_feed_history
+                        WHERE entry_text = %s AND id != %s AND time_period IN ({placeholders})
+                          AND merchant IS NOT DISTINCT FROM %s
+                          AND category IS NOT DISTINCT FROM %s
+                          AND sub_category IS NOT DISTINCT FROM %s
+                        """,
+                        [entry_text, row_id] + future_periods + [merchant, category, sub_category],
+                    )
+                conn.commit()
+
+                # Create new rows for months 2..divide_by
+                for i in range(1, divide_by):
+                    period_date = db.add_months(base_date, i)
+                    new_id = db.insert_data_feed_row(
+                        conn,
+                        period_date, entry_text, sub_category, category, spend_type,
+                        amount,
+                        merchant=merchant,
+                        time_period=period_date.strftime("%b-%Y"),
+                        cadence="A",
+                        divide_by=divide_by,
+                        monthly_amount=monthly_amount,
+                        shared_expense=shared_expense,
+                        share_ratio=share_ratio,
+                        final_amount=final_amount,
+                        exclude_from_training=True,
+                        series_id=series_id,
+                    )
+                    rows_created += 1
+                    if shared_expense == 'Y' and period_date >= _SHARED_SCOPE_START:
+                        db.upsert_shared_transaction(
+                            conn, new_id, amount, monthly_amount, share_ratio,
+                            period_date, merchant, category, sub_category, entry_text,
+                        )
+
+    # Sync the updated row itself to shared_transactions
+    new_shared = result["shared_expense"]
+    if new_shared == 'Y':
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT entry_date, merchant, entry_text FROM data_feed_history WHERE id = %s",
+                (row_id,),
+            )
+            dfh = cur.fetchone()
+        if dfh and dfh[0] and dfh[0] >= _SHARED_SCOPE_START:
+            db.upsert_shared_transaction(
+                conn, row_id, result["amount"], result["monthly_amount"], result["share_ratio"],
+                dfh[0], dfh[1], result["category"] or None,
+                result["sub_category"] or None, dfh[2],
+            )
+    else:
+        db.delete_shared_transaction(conn, row_id)
+
+    return {**result, "rows_created": rows_created}
 
 
 @history_bp.route("/api/settings")

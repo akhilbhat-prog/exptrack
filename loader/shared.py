@@ -7,7 +7,7 @@ Routes:
   GET   /api/shared?fy=<year>       — all shared rows for a financial year
   GET   /api/shared/summary?fy=<y>  — aggregate stats for summary cards
   GET   /api/shared/export          — CSV download of all shared rows, every FY
-  PATCH /api/shared/<id>            — update paid_by, owed_by, or settled
+  PATCH /api/shared/<id>            — update paid_by, owed_by, settled, is_ignored, share_ratio, amount
   DELETE /api/shared/<id>           — remove row from mirror
 
 Auth: ADMIN_TOKEN grants full access. Valid user session (role='user') also grants access.
@@ -20,6 +20,7 @@ from datetime import date as _date
 from flask import Blueprint, Response, abort, jsonify, request
 
 import db
+from history import apply_history_patch
 from token_auth import require_any_auth as _require_token
 
 shared_bp = Blueprint("shared", __name__)
@@ -250,14 +251,43 @@ def update_shared(shared_id):
             fields["share_ratio"] = v
         except (TypeError, ValueError):
             abort(400, "share_ratio must be a number")
+    if "amount" in data:
+        try:
+            v = float(data["amount"])
+        except (TypeError, ValueError):
+            abort(400, "amount must be a number")
+        if v <= 0:
+            abort(400, "amount must be greater than 0")
+        fields["amount"] = v
     if not fields:
         abort(400, "No valid fields provided")
     conn = db.get_connection()
     try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT history_id FROM shared_transactions WHERE id = %s", (shared_id,))
+            found = cur.fetchone()
+        if not found:
+            abort(404, "Row not found")
+        history_id = found[0]
+
+        # Amount/ratio of a History-linked row are edited on the History row (the source of
+        # truth), exactly as /view does: it recomputes amounts, re-spreads a cadence-A series and
+        # re-syncs this mirror row. The remaining fields are then applied to the mirror.
+        rows_created = 0
+        history_fields = {k: fields.pop(k) for k in ("amount", "share_ratio") if k in fields} if history_id else {}
+        if history_fields:
+            try:
+                patched = apply_history_patch(conn, history_id, history_fields)
+            except ValueError as e:
+                abort(400, str(e))
+            if patched is None:
+                abort(404, "Linked History row not found")
+            rows_created = patched["rows_created"]
+
         result = db.update_shared_row(conn, shared_id, fields)
         if result is None:
             abort(404, "Row not found")
-        return jsonify({"ok": True, **result})
+        return jsonify({"ok": True, **result, "rows_created": rows_created})
     finally:
         conn.close()
 
