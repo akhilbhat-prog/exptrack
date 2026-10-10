@@ -598,5 +598,149 @@
     "subcategory": "Eating Out",
     "type": "expense",
     "confidence": 0.9
+  },
+  "COMPASS INDIA FOOD SERVICES": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "LAKSHMI N": {
+    "category": "Personal Purchase",
+    "subcategory": "Grooming",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "N BALAJI": {
+    "category": "Personal Purchase",
+    "subcategory": "Xerox",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "RELIANCE RETAIL": {
+    "category": "Bills",
+    "subcategory": "Jio Internet",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "S P PRAKASH": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "BASIL LEWIS": {
+    "category": "Personal Purchase",
+    "subcategory": "Tailor",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "MANJUNATH K": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "PAAKASHALA": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "ROHITH J": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "SRI GANESH DAVANGERE": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "PADMARAJU": {
+    "category": "Personal Purchase",
+    "subcategory": "Clothes Press",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "CHANDRASHEKAR K J": {
+    "category": "Medical",
+    "subcategory": "Dentist",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "HONNASHREE ENTERPRISES": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "MAMATHA K S": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "MANJUNATH S": {
+    "category": "Travel",
+    "subcategory": "Auto",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "MARCH TEE": {
+    "category": "Personal Purchase",
+    "subcategory": "Clothes",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "RAMESH PRABHU": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "RAVI KUMAR": {
+    "category": "Travel",
+    "subcategory": "Fuel",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "SULOCHANA": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "SHABARI TIFFINS": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "SRI UDUPI PARK": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "REKHA S": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "BHAGYA": {
+    "category": "Food",
+    "subcategory": "Eating Out",
+    "type": "expense",
+    "confidence": 0.9
+  },
+  "BALAJI N": {
+    "category": "Personal Purchase",
+    "subcategory": "Xerox",
+    "type": "expense",
+    "confidence": 0.9
   }
 }
