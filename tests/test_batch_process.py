@@ -10,7 +10,9 @@ from unittest.mock import MagicMock, patch, call
 import pandas as pd
 import pytest
 
-from batch_process import cmd_process, cmd_complete, BATCH_SIZE
+from datetime import datetime, timezone
+
+from batch_process import cmd_process, cmd_complete, retrain_if_stale, BATCH_SIZE
 
 
 def _make_transactions_df(n: int) -> pd.DataFrame:
@@ -189,3 +191,36 @@ class TestCmdComplete:
             mock_connect.return_value.__exit__ = MagicMock(return_value=False)
             with pytest.raises(SystemExit):
                 cmd_complete(batch_id=99)
+
+
+_OCT4 = datetime(2026, 10, 4, 11, 44, tzinfo=timezone.utc)
+_OCT10 = datetime(2026, 10, 10, 7, 33, tzinfo=timezone.utc)
+
+
+class TestRetrainIfStale:
+    def _run(self, completed_at, model_at):
+        with patch("batch_process._latest_batch_completed_at", return_value=completed_at), \
+             patch("batch_process.model_updated_at", return_value=model_at), \
+             patch("batch_process.retrain") as mock_retrain:
+            result = retrain_if_stale()
+        return result, mock_retrain
+
+    def test_retrains_when_batch_completed_after_model_saved(self):
+        result, mock_retrain = self._run(_OCT10, _OCT4)
+        assert result is True
+        mock_retrain.assert_called_once()
+
+    def test_skips_when_model_newer_than_last_completion(self):
+        result, mock_retrain = self._run(_OCT4, _OCT10)
+        assert result is False
+        mock_retrain.assert_not_called()
+
+    def test_retrains_when_no_model_exists(self):
+        result, mock_retrain = self._run(_OCT4, None)
+        assert result is True
+        mock_retrain.assert_called_once()
+
+    def test_skips_when_no_batch_ever_completed(self):
+        result, mock_retrain = self._run(None, None)
+        assert result is False
+        mock_retrain.assert_not_called()

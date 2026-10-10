@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch, call
 
 import gmail_poller
-from gmail_poller import _strip_html, _get_received_at, _get_subject, run_parser_tests, run_categorization, send_summary_email
+from gmail_poller import _strip_html, _get_received_at, _get_subject, run_parser_tests, run_categorization, run_retraining, send_summary_email
 
 
 class TestStripHtml:
@@ -158,6 +158,24 @@ class TestRunCategorization:
         assert "FAILED" in result
 
 
+class TestRunRetraining:
+    def _run(self, **mock_kwargs):
+        mock_module = MagicMock()
+        mock_module.retrain_if_stale = MagicMock(**mock_kwargs)
+        with patch.dict(sys.modules, {"batch_process": mock_module}):
+            return run_retraining()
+
+    def test_reports_retrained(self):
+        assert self._run(return_value=True) == "retrained"
+
+    def test_reports_up_to_date(self):
+        assert self._run(return_value=False).startswith("up to date")
+
+    def test_returns_failed_string_on_exception(self):
+        result = self._run(side_effect=RuntimeError("GCS bucket not found"))
+        assert result == "FAILED: GCS bucket not found"
+
+
 class TestSendSummaryEmail:
     def _make_service(self):
         # Use a plain MagicMock — don't call send() during setup or it poisons call counts
@@ -227,6 +245,21 @@ class TestSendSummaryEmail:
         send_summary_email(svc, self._make_summary(), "(no output)", categorization_status="FAILED: GCS down")
         _, body = self._decode_email(svc)
         assert "FAILED: GCS down" in body
+
+    def test_retraining_status_in_email_body(self, monkeypatch):
+        monkeypatch.setenv("NOTIFICATION_EMAIL", "test@example.com")
+        svc = self._make_service()
+        send_summary_email(svc, self._make_summary(), "(no output)", retraining_status="retrained")
+        _, body = self._decode_email(svc)
+        assert "Model Retraining" in body
+        assert "retrained" in body
+
+    def test_no_retraining_section_when_status_absent(self, monkeypatch):
+        monkeypatch.setenv("NOTIFICATION_EMAIL", "test@example.com")
+        svc = self._make_service()
+        send_summary_email(svc, self._make_summary(), "(no output)")
+        _, body = self._decode_email(svc)
+        assert "Model Retraining" not in body
 
     def test_categorization_ok_in_email_body(self, monkeypatch):
         monkeypatch.setenv("NOTIFICATION_EMAIL", "test@example.com")

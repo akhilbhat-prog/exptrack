@@ -17,7 +17,7 @@ from flask import Flask, abort, jsonify, redirect, send_from_directory, url_for
 from auth_routes import auth_bp
 from token_auth import require_admin, _is_valid_admin_token, _is_valid_user_session
 from history import history_bp
-from review import review_bp, is_retraining
+from review import review_bp
 from recurring import recurring_bp
 from shared import shared_bp
 from werkzeug.exceptions import HTTPException
@@ -26,6 +26,7 @@ from gmail_poller import (
     main,
     run_categorization,
     run_parser_tests,
+    run_retraining,
     send_summary_email,
 )
 
@@ -98,11 +99,7 @@ def trigger():
 def _run_trigger():
     service = _build_gmail_service()
     summary = main(service)
-    if is_retraining():
-        _logging.getLogger(__name__).info("Skipping categorization — model retraining in progress.")
-        cat_status = "skipped (model retraining in progress)"
-    else:
-        cat_status = run_categorization()
+    cat_status = run_categorization()
     test_output = run_parser_tests()
 
     # Every night: add any recurring entry whose debit day has arrived this month and is still
@@ -115,7 +112,13 @@ def _run_trigger():
     except Exception as _re:
         _logging.getLogger(__name__).warning("Recurring generation failed: %s", _re)
 
-    send_summary_email(service, summary, test_output, categorization_status=cat_status)
+    # Runs inside this request (not a background process) so Cloud Run keeps CPU allocated.
+    retrain_status = run_retraining()
+
+    send_summary_email(
+        service, summary, test_output,
+        categorization_status=cat_status, retraining_status=retrain_status,
+    )
 
     no_transactions = summary["processed"] == 0 and summary["skipped"] == 0
     return jsonify({
@@ -124,6 +127,7 @@ def _run_trigger():
         "skipped": summary["skipped"],
         "failed": summary["failed"],
         "recurring_generated": _recurring_count,
+        "retraining": retrain_status,
         "message": (
             "No new transactions found."
             if no_transactions

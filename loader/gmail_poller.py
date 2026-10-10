@@ -238,7 +238,13 @@ def run_parser_tests() -> str:
 # Summary email
 # ---------------------------------------------------------------------------
 
-def send_summary_email(service, summary: dict, test_output: str, categorization_status: str = "ok") -> None:
+def send_summary_email(
+    service,
+    summary: dict,
+    test_output: str,
+    categorization_status: str = "ok",
+    retraining_status: str | None = None,
+) -> None:
     recipient = os.environ.get("NOTIFICATION_EMAIL", "")
     if not recipient:
         logger.warning("NOTIFICATION_EMAIL not set — skipping summary email.")
@@ -299,6 +305,10 @@ def send_summary_email(service, summary: dict, test_output: str, categorization_
         "Categorization",
         "-" * 40,
         categorization_status,
+    ]
+    if retraining_status is not None:
+        lines += ["", "Model Retraining", "-" * 40, retraining_status]
+    lines += [
         "",
         "Parser Test Results",
         "-" * 40,
@@ -490,6 +500,24 @@ def run_categorization() -> str:
         return f"FAILED: {exc}"
 
 
+def run_retraining() -> str:
+    """Retrain the model if batches were completed since it was last saved.
+
+    Returns "retrained", "up to date (...)", or "FAILED: <reason>".
+    """
+    try:
+        _cat_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "categorizer")
+        if _cat_dir not in sys.path:
+            sys.path.insert(0, _cat_dir)
+        from batch_process import retrain_if_stale
+        if retrain_if_stale():
+            return "retrained"
+        return "up to date (no batches completed since last training)"
+    except Exception as exc:
+        logger.exception("Model retraining failed.")
+        return f"FAILED: {exc}"
+
+
 # ---------------------------------------------------------------------------
 # Entry point (CLI mode)
 # ---------------------------------------------------------------------------
@@ -498,8 +526,12 @@ if __name__ == "__main__":
     svc = _build_gmail_service()
     summary = main(svc)
     cat_status = run_categorization()
+    retrain_status = run_retraining()
     test_output = run_parser_tests()
-    send_summary_email(svc, summary, test_output, categorization_status=cat_status)
+    send_summary_email(
+        svc, summary, test_output,
+        categorization_status=cat_status, retraining_status=retrain_status,
+    )
     print(
         f"Summary: {summary['processed']} processed, "
         f"{summary['skipped']} skipped, {summary['failed']} failed"

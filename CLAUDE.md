@@ -187,7 +187,7 @@ exptrack/
 | `ADMIN_TOKEN` | No | If set, admin-only `/api/*` routes (all except `/api/shared/*` and `/api/me`) require this token via `?token=` or `Authorization: Bearer`. The SPA shell itself (`/review`, `/view`, `/recurring`) is always served by `spa_catch_all`; auth is enforced when the page calls the underlying `/api/*` routes. |
 | `INVITE_CODE` | No | Required to register a new user at `/register`; must be set to enable user registration |
 | `SECRET_KEY` | Prod | Flask session signing key; must be set in production (stored in GCP Secret Manager as `flask-secret-key`). Falls back to `"dev-secret-change-me"` locally with a warning. |
-| `GCS_MODEL_BUCKET` | Prod | GCS bucket for ML model artifacts (set to `exptrack-mlruns` in Cloud Run via `deploy.yml`). Required for model retraining triggered by Complete Batch. |
+| `GCS_MODEL_BUCKET` | Prod | GCS bucket for ML model artifacts (set to `exptrack-mlruns` in Cloud Run via `deploy.yml`). Required for categorization and the nightly model retraining. |
 
 ### Categorizer
 | Variable | Required | Description |
@@ -456,7 +456,7 @@ The old manual SQL approach has been replaced by a web UI. Current workflow:
 2. Open `/review` in a browser — select the batch from the sidebar
 3. Edit `category`, `subcategory`, `type` inline via dropdowns — changes auto-save on every change (PATCH to API)
 4. Click **Mark Reviewed** — sets batch status to `reviewed`
-5. Click **Complete Batch** — inserts rows into `data_feed_history`, sets status to `complete`, triggers model retraining in background
+5. Click **Complete Batch** — inserts rows into `data_feed_history`, sets status to `complete`. The model retrains in that night's `/trigger` run (`gmail_poller.run_retraining` → `batch_process.retrain_if_stale`, which retrains only if a batch was completed after the GCS champion was last saved). It runs inside the request, not as a background process, because Cloud Run throttles CPU once a response is sent; `deploy.yml` sets `--timeout=900` for this.
 
 **Review UI implementation files:**
 - `loader/review.py` — Flask Blueprint registered on the main app; all API logic is here
@@ -472,7 +472,7 @@ The old manual SQL approach has been replaced by a web UI. Current workflow:
 | `DELETE /api/batches/<id>/items/<txn_id>` | Remove one item from batch; adds to `transaction_exclusions`, decrements row_count |
 | `DELETE /api/batches/<id>` | Delete an entire pending/reviewed batch |
 | `POST /api/batches/<id>/mark-reviewed` | Transitions batch pending → reviewed |
-| `POST /api/batches/<id>/complete` | Inserts into data_feed_history, mirrors shared rows, triggers retraining |
+| `POST /api/batches/<id>/complete` | Inserts into data_feed_history, mirrors shared rows (retraining happens nightly) |
 | `GET /api/categories` | Returns `{categories, types}` merged from rules.json + data_feed_history |
 
 **UI behaviour notes:**

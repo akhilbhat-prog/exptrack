@@ -33,6 +33,23 @@ def client(monkeypatch):
 
 
 class TestTriggerEndpoint:
+    @pytest.fixture(autouse=True)
+    def _stub_retraining(self):
+        with patch("app.run_retraining", return_value="retrained") as mock_retrain:
+            self.mock_retrain = mock_retrain
+            yield
+
+    def test_retraining_runs_and_status_reaches_email_and_response(self, client):
+        with patch("app._build_gmail_service", return_value=MagicMock()), \
+             patch("app.main", return_value=_EMPTY_SUMMARY), \
+             patch("app.run_categorization", return_value="ok"), \
+             patch("app.run_parser_tests", return_value="PASS"), \
+             patch("app.send_summary_email") as mock_send:
+            data = client.get("/trigger").get_json()
+        self.mock_retrain.assert_called_once()
+        assert mock_send.call_args.kwargs["retraining_status"] == "retrained"
+        assert data["retraining"] == "retrained"
+
     def test_returns_200_with_no_transactions(self, client):
         with patch("app._build_gmail_service", return_value=MagicMock()), \
              patch("app.main", return_value=_EMPTY_SUMMARY), \

@@ -8,7 +8,7 @@ Routes:
   DELETE /api/batches/<id>/items/<txn_id>     — remove item; permanently excludes transaction
   DELETE /api/batches/<id>                    — delete entire pending/reviewed batch
   POST   /api/batches/<id>/mark-reviewed      — set batch status = 'reviewed'
-  POST   /api/batches/<id>/complete           — complete batch, trigger retraining
+  POST   /api/batches/<id>/complete           — complete batch (model retrains in the nightly run)
   GET    /api/categories                      — {categories, types} merged from rules.json + data_feed_history
 
 Auth: if ADMIN_TOKEN env var is set, all routes require a matching
@@ -18,8 +18,6 @@ Auth: if ADMIN_TOKEN env var is set, all routes require a matching
 import json
 import logging
 import os
-import subprocess
-import sys
 from datetime import date as _date
 
 from flask import Blueprint, abort, jsonify, request
@@ -384,40 +382,9 @@ def complete_batch(batch_id):
             )
         conn.commit()
 
-        _trigger_retraining()
         return jsonify({"ok": True, "inserted": inserted})
     finally:
         conn.close()
-
-
-_retraining_proc: subprocess.Popen | None = None
-
-
-def is_retraining() -> bool:
-    """Return True if a model retraining subprocess is currently running."""
-    global _retraining_proc
-    if _retraining_proc is not None and _retraining_proc.poll() is None:
-        return True
-    _retraining_proc = None
-    return False
-
-
-def _trigger_retraining():
-    global _retraining_proc
-    main_py = os.path.join(_project_root, "categorizer", "main.py")
-    if not os.path.exists(main_py):
-        return
-    if is_retraining():
-        logger.info("Model retraining already in progress — skipping duplicate trigger.")
-        return
-    try:
-        _retraining_proc = subprocess.Popen(
-            [sys.executable, main_py],
-            cwd=os.path.join(_project_root, "categorizer"),
-        )
-        logger.info("Model retraining triggered in background.")
-    except Exception:
-        logger.exception("Failed to trigger model retraining.")
 
 
 # ---------------------------------------------------------------------------

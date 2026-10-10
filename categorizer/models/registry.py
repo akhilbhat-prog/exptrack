@@ -25,6 +25,12 @@ def register_model(bundle: dict) -> None:
     print(f"Model saved to gs://{bucket.name}/{MODEL_BLOB}")
 
 
+def model_updated_at():
+    """Return when the champion was last written (tz-aware datetime), or None if absent."""
+    blob = _bucket().get_blob(MODEL_BLOB)
+    return blob.updated if blob is not None else None
+
+
 def load_model() -> dict:
     """Load the champion model bundle from GCS."""
     bucket = _bucket()

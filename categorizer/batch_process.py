@@ -6,7 +6,7 @@ from pathlib import Path
 
 from ingestion.database import connect, parse_database
 from ingestion.transactions import complete_batch, create_batch, fetch_transactions, insert_batch_items
-from models.registry import load_model, register_model
+from models.registry import load_model, model_updated_at, register_model
 from models.train import train_category_model
 from processing.cleaner import clean_entry
 from processing.memory import MerchantMemory
@@ -58,11 +58,36 @@ def cmd_complete(batch_id: int) -> None:
     print(f"Inserted {inserted} rows into data_feed_history.")
 
     print("\nRetraining model on updated history...")
+    retrain()
+
+
+def retrain() -> None:
     history_df = parse_database()
     history_df["entry_clean"] = history_df["entry_raw"].map(clean_entry)
     model = train_category_model(history_df)
     register_model(model)
     print("New model version registered as champion.")
+
+
+def _latest_batch_completed_at():
+    with connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT MAX(completed_at) FROM public.transaction_batches WHERE status = 'complete'"
+            )
+            return cur.fetchone()[0]
+
+
+def retrain_if_stale() -> bool:
+    """Retrain when a batch was completed after the champion was saved (or none exists)."""
+    completed_at = _latest_batch_completed_at()
+    if completed_at is None:
+        return False
+    model_at = model_updated_at()
+    if model_at is not None and completed_at <= model_at:
+        return False
+    retrain()
+    return True
 
 
 def main() -> None:

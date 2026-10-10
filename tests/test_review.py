@@ -437,8 +437,7 @@ class TestCompleteBatch:
         mock_conn = self._make_complete_conn("reviewed")
         with patch("review.db.get_connection", return_value=mock_conn), \
              patch("review.db.create_data_feed_table"), \
-             patch("review.db.insert_data_feed_row", return_value=True), \
-             patch("review._trigger_retraining"):
+             patch("review.db.insert_data_feed_row", return_value=True):
             resp = client.post("/api/batches/1/complete")
         assert resp.status_code == 200
         assert "inserted" in resp.get_json()
@@ -478,8 +477,7 @@ class TestCompleteBatch:
         mock_conn.cursor.return_value.fetchall.return_value = [edited_row]
         with patch("review.db.get_connection", return_value=mock_conn), \
              patch("review.db.create_data_feed_table"), \
-             patch("review.db.insert_data_feed_row", return_value=1) as mock_insert, \
-             patch("review._trigger_retraining"):
+             patch("review.db.insert_data_feed_row", return_value=1) as mock_insert:
             resp = client.post("/api/batches/1/complete")
         assert resp.status_code == 200
         args, kwargs = mock_insert.call_args
@@ -506,8 +504,7 @@ class TestCompleteBatch:
         mock_conn.cursor.return_value.fetchall.return_value = [annual_row]
         with patch("review.db.get_connection", return_value=mock_conn), \
              patch("review.db.create_data_feed_table"), \
-             patch("review.db.insert_data_feed_row", return_value=1) as mock_insert, \
-             patch("review._trigger_retraining"):
+             patch("review.db.insert_data_feed_row", return_value=1) as mock_insert:
             resp = client.post("/api/batches/1/complete")
         assert resp.status_code == 200
         assert resp.get_json()["inserted"] == 12
