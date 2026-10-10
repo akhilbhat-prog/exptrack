@@ -5,15 +5,15 @@ import warnings
 import numpy as np
 import scipy.sparse as sp
 
-from models.train import build_amount_features
+from models.train import _to_onehot, build_amount_features
 
 
 def predict_category(model_bundle: dict, text: str, amount: float = 0.0) -> dict:
     """
     Predict category, subcategory, and type using the hierarchical chain.
 
-    Stage 1 predicts type, stage 2 conditions on type probabilities to predict
-    category, stage 3 conditions on both to predict subcategory.
+    Stage 1 predicts type, stage 2 conditions on the predicted type (one-hot) to
+    predict category, stage 3 conditions on both to predict subcategory.
     """
     word_vec = model_bundle["word_vec"]
     char_vec = model_bundle["char_vec"]
@@ -41,16 +41,16 @@ def predict_category(model_bundle: dict, text: str, amount: float = 0.0) -> dict
         type_pred = str(type_model.classes_[int(np.argmax(type_probs))])
         type_conf = float(np.max(type_probs))
 
-        # Stage 2: category — soft conditioning on type probability distribution
-        type_probs_mat = sp.csr_matrix(type_probs.reshape(1, -1))
-        cat_input = sp.hstack([base_features, type_probs_mat], format="csr")
+        # Stages are trained on exact 0/1 labels and LightGBM splits those near 0, so passing
+        # soft probabilities lets any tiny non-zero class probability flip the split.
+        type_onehot = sp.csr_matrix(_to_onehot([type_pred], type_model.classes_))
+        cat_input = sp.hstack([base_features, type_onehot], format="csr")
         cat_probs = cat_model.predict_proba(cat_input)[0]
         cat_pred = str(cat_model.classes_[int(np.argmax(cat_probs))])
         cat_conf = float(np.max(cat_probs))
 
-        # Stage 3: subcategory — soft conditioning on type + category distributions
-        cat_probs_mat = sp.csr_matrix(cat_probs.reshape(1, -1))
-        subcat_input = sp.hstack([base_features, type_probs_mat, cat_probs_mat], format="csr")
+        cat_onehot = sp.csr_matrix(_to_onehot([cat_pred], cat_model.classes_))
+        subcat_input = sp.hstack([base_features, type_onehot, cat_onehot], format="csr")
         subcat_probs = subcat_model.predict_proba(subcat_input)[0]
         subcat_pred = str(subcat_model.classes_[int(np.argmax(subcat_probs))])
         subcat_conf = float(np.max(subcat_probs))
