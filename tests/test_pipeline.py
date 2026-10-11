@@ -88,6 +88,27 @@ class TestPredictRow:
         assert result["source"] == "ml"
         assert result["category"] == "Shopping"
 
+    def test_rule_beats_memory(self):
+        memory = self._memory(lookup_return={"category": "Food", "subcategory": "Eating Out",
+                                             "type": "Expense", "confidence": 0.9})
+        rule_result = {"category": "Transport", "subcategory": "Cab", "type": "expense", "confidence": 0.9}
+        with patch("processing.pipeline.apply_rules", return_value=rule_result):
+            result = predict_row({"text_combined": "uber ride", "vpa": "uber@axis", "amount": 200},
+                                 rules={}, memory=memory)
+        assert result["source"] == "rule"
+        memory.lookup.assert_not_called()
+
+    def test_memory_beats_ml_and_is_keyed_on_vpa(self):
+        memory = self._memory(lookup_return={"category": "Food", "subcategory": "Eating Out",
+                                             "type": "Expense", "confidence": 0.85})
+        with patch("processing.pipeline.apply_rules", return_value=None),              patch("processing.pipeline.predict_category") as mock_ml:
+            result = predict_row({"text_combined": "s p prakash", "vpa": "Q289201289@ybl",
+                                  "db_merchant": "S P PRAKASH", "amount": 50},
+                                 rules={}, memory=memory, model=object())
+        assert result["source"] == "memory"
+        mock_ml.assert_not_called()
+        memory.lookup.assert_called_once_with("vpa:q289201289@ybl")
+
     def test_no_model_and_no_match_returns_unknown(self):
         memory = self._memory(lookup_return=None)
         with patch("processing.pipeline.apply_rules", return_value=None):

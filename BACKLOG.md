@@ -227,6 +227,30 @@ Several UI changes shipped (or are about to ship) without a browser check agains
 
 ---
 
+## BL-29 — Populate merchant memory from history
+
+**Status:** Complete (2026-10-11): order is now Rules → Memory → ML. Memory is built from `data_feed_history` on each `cmd_process` run and keyed on the payee VPA, falling back to the DB merchant name. The pipeline's own merchant extraction reduces "S P PRAKASH" to "prakash", which is too broad to key on. A payee is included with ≥2 rows and ≥80% agreement; at the time of writing that was 71 payees. If history can't be loaded, memory stays empty and ML takes over.
+
+Original note:
+
+`MerchantMemory` (`categorizer/processing/memory.py`) is created empty on every `batch_process.cmd_process` run, so the memory layer never fires. Idea: build it from `data_feed_history`. Key it on the normalised `db_merchant`, and include a merchant only if it has ≥2 rows and one (category, subcategory, type) covers ≥80% of them. Reorder `pipeline.predict_row` to Rules → Memory → ML so hand-written rules always win. Deferred because the ML fix of 2026-10-10 (≈90% category accuracy) plus nightly retraining already learns repeat merchants; revisit if repeat merchants keep being mispredicted in `/review`.
+
+---
+
+## BL-30 — Decide on re-added person-name rules (`S P PRAKASH`, `LAKSHMI N`)
+
+**Status:** Complete (2026-10-11): both are regular vendors, so both rules are kept. Outlier History rows 385 → Food/Eating Out and 1617 → Personal Purchase/Grooming; 2595 and 2591 left as they are by choice.
+
+Original note:
+
+Commit `b26b335` (2026-10-10) re-added `S P PRAKASH` and added `LAKSHMI N` to `rules.json`, although BL-12 had removed `S P PRAKASH` and `lakshmi` as overly broad person-name rules. Across all history each matches a single UPI ID:
+- `S P PRAKASH`: 19 rows; Food/Eating Out 17, Food/Ordering In 1, Travel/Auto 1.
+- `LAKSHMI N`: 26 rows; Personal Purchase/Grooming 24, Food/Eating Out 1, Personal Purchase/Anis Haircut 1.
+
+Risk: rules match by substring after digits are stripped, so a different person with the same name would also be caught, and matching on the UPI ID isn't possible. Recommendation: keep `LAKSHMI N` (narrower than the removed `lakshmi`); `S P PRAKASH` is the user's call. Decide: keep both, or remove one or both.
+
+---
+
 ## BL-15 — Context management strategy
 
 **Status:** Complete (2026-06-20)

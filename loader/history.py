@@ -25,6 +25,19 @@ from token_auth import require_admin as _require_token
 history_bp = Blueprint("history", __name__)
 
 _SHARED_SCOPE_START = db._SHARED_SCOPE_START
+_MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+
+def _parse_time_period(raw) -> str | None:
+    """'may-2026' -> 'May-2026'; blank -> None (period falls back to entry_date). ValueError otherwise."""
+    text = (raw or "").strip()
+    if not text:
+        return None
+    mon, _, year = text.partition("-")
+    mon = mon.capitalize()
+    if mon not in _MONTHS or len(year) != 4 or not year.isdigit():
+        raise ValueError(f"Time period must look like May-2026, got {text!r}")
+    return f"{mon}-{year}"
 
 
 
@@ -216,7 +229,10 @@ def update_history(row_id):
         raw_amount = data.get("amount")
         fields["amount"] = float(raw_amount) if raw_amount is not None else None
     if "time_period" in data:
-        fields["time_period"] = (data.get("time_period") or "").strip() or None
+        try:
+            fields["time_period"] = _parse_time_period(data.get("time_period"))
+        except ValueError as e:
+            abort(400, str(e))
     if "category" in data:
         fields["category"] = (data.get("category") or "").strip()
     if "sub_category" in data:

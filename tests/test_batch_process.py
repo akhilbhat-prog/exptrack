@@ -52,7 +52,7 @@ class TestCmdProcess:
     def test_returns_early_when_no_transactions(self):
         with patch("batch_process.load_model", return_value=MagicMock()), \
              patch("batch_process.load_rules", return_value={}), \
-             patch("batch_process.MerchantMemory", return_value=MagicMock()), \
+             patch("batch_process._load_memory", return_value=MagicMock()), \
              patch("batch_process.fetch_transactions", return_value=pd.DataFrame()), \
              patch("batch_process.connect") as mock_connect:
             cmd_process()
@@ -64,7 +64,7 @@ class TestCmdProcess:
         mock_conn = MagicMock()
         with patch("batch_process.load_model", return_value=MagicMock()), \
              patch("batch_process.load_rules", return_value={}), \
-             patch("batch_process.MerchantMemory", return_value=MagicMock()), \
+             patch("batch_process._load_memory", return_value=MagicMock()), \
              patch("batch_process.fetch_transactions", return_value=df), \
              patch("batch_process.process_dataframe", return_value=processed), \
              patch("batch_process.connect") as mock_connect, \
@@ -82,7 +82,7 @@ class TestCmdProcess:
         mock_conn = MagicMock()
         with patch("batch_process.load_model", return_value=MagicMock()), \
              patch("batch_process.load_rules", return_value={}), \
-             patch("batch_process.MerchantMemory", return_value=MagicMock()), \
+             patch("batch_process._load_memory", return_value=MagicMock()), \
              patch("batch_process.fetch_transactions", return_value=df), \
              patch("batch_process.process_dataframe", return_value=processed), \
              patch("batch_process.connect") as mock_connect, \
@@ -99,7 +99,7 @@ class TestCmdProcess:
         mock_conn = MagicMock()
         with patch("batch_process.load_model", return_value=MagicMock()), \
              patch("batch_process.load_rules", return_value={}), \
-             patch("batch_process.MerchantMemory", return_value=MagicMock()), \
+             patch("batch_process._load_memory", return_value=MagicMock()), \
              patch("batch_process.fetch_transactions", return_value=df), \
              patch("batch_process.process_dataframe", return_value=processed), \
              patch("batch_process.connect") as mock_connect, \
@@ -117,7 +117,7 @@ class TestCmdProcess:
         mock_conn = MagicMock()
         with patch("batch_process.load_model", return_value=MagicMock()), \
              patch("batch_process.load_rules", return_value={}), \
-             patch("batch_process.MerchantMemory", return_value=MagicMock()), \
+             patch("batch_process._load_memory", return_value=MagicMock()), \
              patch("batch_process.fetch_transactions", return_value=df), \
              patch("batch_process.process_dataframe", return_value=processed), \
              patch("batch_process.connect") as mock_connect, \
@@ -131,7 +131,7 @@ class TestCmdProcess:
     def test_model_load_failure_propagates(self):
         with patch("batch_process.load_model", side_effect=FileNotFoundError("No champion model")), \
              patch("batch_process.load_rules", return_value={}), \
-             patch("batch_process.MerchantMemory", return_value=MagicMock()):
+             patch("batch_process._load_memory", return_value=MagicMock()):
             with pytest.raises(FileNotFoundError, match="No champion model"):
                 cmd_process()
 
@@ -141,7 +141,7 @@ class TestCmdProcess:
         mock_conn = MagicMock()
         with patch("batch_process.load_model", return_value=MagicMock()), \
              patch("batch_process.load_rules", return_value={}), \
-             patch("batch_process.MerchantMemory", return_value=MagicMock()), \
+             patch("batch_process._load_memory", return_value=MagicMock()), \
              patch("batch_process.fetch_transactions", return_value=df), \
              patch("batch_process.process_dataframe", return_value=processed) as mock_proc, \
              patch("batch_process.connect") as mock_connect, \

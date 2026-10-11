@@ -141,7 +141,7 @@ input, select, textarea, button {
 .nav-link:hover  { color: var(--text); border-color: var(--border2); }
 .nav-link.active { color: var(--teal) !important; border-color: var(--teal) !important; }
 
-.header-right { display: flex; align-items: center; gap: 10px; }
+.header-right { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
 .header-date  { font-size: 13px; color: var(--muted); white-space: nowrap; }
 
 .user-chip {

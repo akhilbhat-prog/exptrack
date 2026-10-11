@@ -199,9 +199,9 @@ export function SharedPage() {
       {/* Settle-up panel (FY or month), shown in both views */}
       {month
         ? <SettleUpPanel rows={monthRows} title={monthLabel(month)} periodLabel={monthLabel(month).split(' ')[0]}
-            carriedFrom="previous months" summary={summary} />
+            carriedFrom="previous months" summary={summary} onRecordPayment={() => setPayModal(true)} />
         : <SettleUpPanel rows={monthRows} title={`FY ${fyLabel(activeFy)}`} periodLabel={`FY ${fyLabel(activeFy)}`}
-            carriedFrom="previous FYs" summary={summary} />}
+            carriedFrom="previous FYs" summary={summary} onRecordPayment={() => setPayModal(true)} />}
 
       {/* Table */}
       <div className="card">
@@ -467,8 +467,9 @@ function otherOf(p: string) { return p === 'Akhil' ? 'Aditi' : 'Akhil' }
 
 // Top-of-page panel in Split view (replaces the three summary cards). Takes the month's (or FY's)
 // rows without the text Filter; the net is the server's closing balance so it always agrees with it.
-function SettleUpPanel({ rows, title, periodLabel, carriedFrom, summary }: {
+function SettleUpPanel({ rows, title, periodLabel, carriedFrom, summary, onRecordPayment }: {
   rows: SharedRow[]; title: string; periodLabel: string; carriedFrom: string; summary?: SharedSummary
+  onRecordPayment: () => void
 }) {
   const [byAkhil, byAditi] = splitTotals(rows)
   const settlements = rows.filter(r => r.is_payment && !r.is_ignored)
@@ -484,7 +485,12 @@ function SettleUpPanel({ rows, title, periodLabel, carriedFrom, summary }: {
   )
   return (
     <div className="summary-card" style={{ marginBottom: 14 }}>
-      <div className="sc-label" style={{ marginBottom: 8 }}>Settle up · {title}</div>
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
+        <div className="sc-label">Settle up · {title}</div>
+        <button className="btn btn-primary btn-sm" style={{ marginLeft: 'auto' }} onClick={onRecordPayment}>
+          <Plus size={13} /> Record Payment
+        </button>
+      </div>
       {carried !== 0 && line(
         `Carried over from ${carriedFrom}`,
         carried > 0 ? 'Aditi owes Akhil' : 'Akhil owes Aditi',

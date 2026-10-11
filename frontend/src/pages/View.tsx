@@ -39,6 +39,8 @@ function fyOfPeriod(period: string): number | null {
   return mi < 0 ? null : parseInt(yr) + (mi >= 3 ? 1 : 0)
 }
 
+const TIME_PERIOD_RE = /^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)-\d{4}$/i
+
 function fmtPeriod(period: string) { return period.replace('-', ' ') }
 
 function prevPeriod(period: string): string | undefined {
@@ -285,6 +287,9 @@ export function ViewPage() {
     ]
     for (const [k, label, kind] of checks) {
       if (k in d && !validNumber(kind, d[k] as number | null)) { toast(numberError(label, kind), 'error'); return }
+    }
+    if ('time_period' in d && d.time_period && !TIME_PERIOD_RE.test(d.time_period.trim())) {
+      toast('Time period must look like May-2026', 'error'); return
     }
     patchMut.mutate({ id: row.id, payload: d as PatchHistoryPayload })
   }
@@ -611,8 +616,11 @@ export function ViewPage() {
                         <input type="checkbox" checked={selectedIds.has(row.id)}
                           onChange={() => toggleRow(row.id)} style={{ cursor: 'pointer' }} />
                       </td>
-                      <td style={{ color: 'var(--muted)', whiteSpace: 'nowrap', fontSize: 12 }}>
-                        {row.time_period}
+                      <td>
+                        <input type="text" className="field-input" style={{ width: 76 }} placeholder="Mon-YYYY"
+                          title="Move this row to another month, e.g. May-2026"
+                          value={getVal(row, 'time_period') ?? ''}
+                          onChange={e => setField(row.id, 'time_period', e.target.value)} />
                       </td>
                       <td style={{ color: 'var(--muted)', whiteSpace: 'nowrap', fontSize: 12 }}>
                         {fmtDateShort(row.entry_date)}

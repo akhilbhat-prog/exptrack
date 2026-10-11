@@ -1,4 +1,6 @@
-from processing.memory import MerchantMemory
+import pandas as pd
+
+from processing.memory import MerchantMemory, memory_key
 
 
 class TestMerchantMemory:
@@ -51,3 +53,53 @@ class TestMerchantMemory:
         m = MerchantMemory()
         m.update("swiggy", "Food", "Delivery", "Expense")
         assert m.lookup("zomato") is None
+
+
+def _history(rows):
+    return pd.DataFrame(rows, columns=["vpa", "db_merchant", "final_category", "final_subcategory", "final_type"])
+
+
+class TestMemoryKey:
+    def test_vpa_preferred_and_lowercased(self):
+        assert memory_key(" Q289@YBL ", "S P PRAKASH") == "vpa:q289@ybl"
+
+    def test_falls_back_to_normalised_merchant(self):
+        assert memory_key("", "  s p   prakash ") == "merchant:S P PRAKASH"
+
+    def test_empty_when_nothing_known(self):
+        assert memory_key(None, "") == ""
+
+
+class TestFromHistory:
+    def test_consistent_payee_is_remembered(self):
+        m = MerchantMemory.from_history(_history([
+            ("a@ybl", "A", "Food", "Eating Out", "Expense"),
+        ] * 4 + [("a@ybl", "A", "Travel", "Auto", "Expense")]))
+        hit = m.lookup("vpa:a@ybl")
+        assert (hit["category"], hit["subcategory"], hit["type"]) == ("Food", "Eating Out", "Expense")
+        assert hit["confidence"] == 0.8
+
+    def test_single_row_payee_is_skipped(self):
+        m = MerchantMemory.from_history(_history([("a@ybl", "A", "Food", "Eating Out", "Expense")]))
+        assert m.lookup("vpa:a@ybl") is None
+
+    def test_payee_below_80_percent_agreement_is_skipped(self):
+        m = MerchantMemory.from_history(_history([
+            ("a@ybl", "A", "Food", "Eating Out", "Expense"),
+            ("a@ybl", "A", "Food", "Eating Out", "Expense"),
+            ("a@ybl", "A", "Travel", "Auto", "Expense"),
+        ]))
+        assert m.lookup("vpa:a@ybl") is None
+
+    def test_rows_without_payee_or_category_are_ignored(self):
+        m = MerchantMemory.from_history(_history([
+            ("", "", "Food", "Eating Out", "Expense"),
+            ("", "", "Food", "Eating Out", "Expense"),
+            ("b@ybl", "B", "", "", ""),
+            ("b@ybl", "B", "", "", ""),
+        ]))
+        assert m.memory == {}
+
+    def test_merchant_name_used_when_no_vpa(self):
+        m = MerchantMemory.from_history(_history([("", "Netflix", "Bills", "OTT", "Expense")] * 2))
+        assert m.lookup("merchant:NETFLIX")["category"] == "Bills"

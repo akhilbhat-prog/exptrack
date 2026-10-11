@@ -221,6 +221,31 @@ class TestUpdateHistory:
             resp = client.patch("/api/history/999", json=self._payload)
         assert resp.status_code == 404
 
+    def test_time_period_normalised_before_save(self, client, monkeypatch):
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
+        mock_conn, _ = _make_mock_conn()
+        captured = {}
+        def fake_update(conn, row_id, fields):
+            captured["fields"] = fields
+            return {
+                "amount": 100.0, "monthly_amount": 100.0, "final_amount": 100.0,
+                "category": "Food", "sub_category": "Eating Out", "spend_type": "Expense",
+                "cadence": "O", "divide_by": 1, "shared_expense": "N", "share_ratio": 1.0,
+            }
+        with patch("history.db.get_connection", return_value=mock_conn), \
+             patch("history.db.update_history_row", side_effect=fake_update):
+            resp = client.patch("/api/history/1", json={"time_period": " jun-2026 "})
+        assert resp.status_code == 200
+        assert captured["fields"] == {"time_period": "Jun-2026"}
+
+    @pytest.mark.parametrize("bad", ["June-2026", "Jun 2026", "Jun-26", "2026-06", "Foo-2026"])
+    def test_invalid_time_period_rejected(self, client, monkeypatch, bad):
+        monkeypatch.delenv("ADMIN_TOKEN", raising=False)
+        with patch("history.db.update_history_row") as mock_update:
+            resp = client.patch("/api/history/1", json={"time_period": bad})
+        assert resp.status_code == 400
+        mock_update.assert_not_called()
+
     def test_divide_by_clamped_to_1(self, client, monkeypatch):
         monkeypatch.delenv("ADMIN_TOKEN", raising=False)
         mock_conn, _ = _make_mock_conn()

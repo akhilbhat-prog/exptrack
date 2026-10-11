@@ -22,13 +22,14 @@ def cmd_process() -> None:
     model = load_model()
 
     rules = load_rules(DEFAULT_RULES_PATH)
-    memory = MerchantMemory()
 
     print("Fetching transactions...")
     transactions_df = fetch_transactions()
     if transactions_df.empty:
         print("No new transactions to process.")
         return
+
+    memory = _load_memory()
 
     print(f"Running predictions on {len(transactions_df)} transactions...")
     processed_df = process_dataframe(transactions_df, rules=rules, memory=memory, model=model)
@@ -44,6 +45,17 @@ def cmd_process() -> None:
     print(f"\n{len(batch_ids)} batch(es) created — {len(processed_df)} transactions total.")
     for bid in batch_ids:
         print(f"  Batch #{bid}")
+
+
+def _load_memory() -> MerchantMemory:
+    """Payee memory from labelled history; empty (ML takes over) if history can't be loaded."""
+    try:
+        memory = MerchantMemory.from_history(parse_database())
+    except Exception as exc:
+        print(f"Merchant memory unavailable, continuing without it: {exc}", file=sys.stderr)
+        return MerchantMemory()
+    print(f"Merchant memory: {len(memory.memory)} payees.")
+    return memory
 
 
 def cmd_complete(batch_id: int) -> None:

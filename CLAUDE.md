@@ -438,8 +438,8 @@ Each format has its own `parse_*()` function. The main `parse()` entry point ret
 
 ### Categorization Fallback Chain
 `categorizer/processing/pipeline.py` applies in order:
-1. **Memory** (`memory.py`): exact merchant match from past classifications
-2. **Rules** (`rules.py`): keyword match from `config/rules.json`
+1. **Rules** (`rules.py`): keyword match from `config/rules.json` (hand-written rules always win)
+2. **Memory** (`memory.py`): payee lookup built from `data_feed_history` on each run (`MerchantMemory.from_history`), keyed on VPA, falling back to the DB merchant name; a payee qualifies with ≥2 rows and ≥80% agreement on (category, subcategory, type)
 3. **ML model** (`models/predict.py`): 3-stage LightGBM (type → category → subcategory)
 4. **Fallback**: `"Unknown"`
 

@@ -4,6 +4,7 @@ import pandas as pd
 
 from models.predict import predict_category
 from processing.cleaner import clean_entry, extract_vpa_handle
+from processing.memory import memory_key
 from processing.merchant import extract_merchant
 from processing.rules import apply_rules
 
@@ -20,19 +21,8 @@ def predict_row(row, rules: dict, memory, model=None) -> dict:
     """
     Predict category metadata for a single transaction row.
     """
-    merchant = row.get("merchant", "")
     text_combined = row.get("text_combined") or row.get("entry_clean", "")
     amount = row.get("amount")
-
-    memory_match = memory.lookup(merchant)
-    if memory_match is not None:
-        return {
-            "category": memory_match.get("category", "Unknown"),
-            "subcategory": memory_match.get("subcategory", "Unknown"),
-            "type": memory_match.get("type", "Unknown"),
-            "confidence": float(memory_match.get("confidence", 0.0)),
-            "source": "memory",
-        }
 
     rule_match = apply_rules(text_combined, rules, amount=amount)
     if rule_match is not None:
@@ -42,6 +32,16 @@ def predict_row(row, rules: dict, memory, model=None) -> dict:
             "type": rule_match.get("type", "Unknown"),
             "confidence": float(rule_match.get("confidence", 0.0)),
             "source": "rule",
+        }
+
+    memory_match = memory.lookup(memory_key(row.get("vpa"), row.get("db_merchant")))
+    if memory_match is not None:
+        return {
+            "category": memory_match.get("category", "Unknown"),
+            "subcategory": memory_match.get("subcategory", "Unknown"),
+            "type": memory_match.get("type", "Unknown"),
+            "confidence": float(memory_match.get("confidence", 0.0)),
+            "source": "memory",
         }
 
     if model is not None:
