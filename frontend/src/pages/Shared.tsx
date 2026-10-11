@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, CreditCard, Download, X, ChevronDown, ChevronRight } from 'lucide-react'
+import { Plus, Download, X, ChevronDown, ChevronRight } from 'lucide-react'
 import { Layout } from '../components/Layout'
 import { NumberInput, validNumber, numberError } from '../components/NumberInput'
 import { useToast } from '../hooks/useToast'
@@ -186,9 +186,6 @@ export function SharedPage() {
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn btn-secondary btn-sm" onClick={() => window.open(sharedApi.exportUrl(), '_blank')}>
             <Download size={13} /> Download All
-          </button>
-          <button className="btn btn-secondary btn-sm" onClick={() => setPayModal(true)}>
-            <CreditCard size={13} /> Payment
           </button>
           <button className="btn btn-primary btn-sm" onClick={() => setAddModal(true)}>
             <Plus size={13} /> Add Entry

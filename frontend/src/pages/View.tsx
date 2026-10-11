@@ -25,7 +25,7 @@ function fmtDateShort(s: string) {
 }
 
 const COL_WIDTH: Partial<Record<SortKey, number>> = {
-  time_period: 84, entry_date: 76, merchant: 200, amount: 90, category: 128, sub_category: 148, spend_type: 106,
+  time_period: 100, entry_date: 76, merchant: 200, amount: 90, category: 128, sub_category: 148, spend_type: 106,
   monthly_amount: 100, final_amount: 100,
 }
 
@@ -39,7 +39,16 @@ function fyOfPeriod(period: string): number | null {
   return mi < 0 ? null : parseInt(yr) + (mi >= 3 ? 1 : 0)
 }
 
-const TIME_PERIOD_RE = /^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)-\d{4}$/i
+// Every month from the earliest period with data to 12 months ahead, newest first.
+function periodOptions(periods: { period: string }[]): string[] {
+  const idx = (p: string) => { const [m, y] = p.split('-'); return parseInt(y) * 12 + MONTHS.indexOf(m) }
+  const now = new Date()
+  const last = now.getFullYear() * 12 + now.getMonth() + 12
+  const first = Math.min(last, ...periods.map(p => p.period).filter(p => MONTHS.includes(p.split('-')[0])).map(idx))
+  const out: string[] = []
+  for (let i = last; i >= first; i--) out.push(`${MONTHS[i % 12]}-${Math.floor(i / 12)}`)
+  return out
+}
 
 function fmtPeriod(period: string) { return period.replace('-', ' ') }
 
@@ -159,6 +168,7 @@ export function ViewPage() {
 
   const allItems: HistoryRow[] = histPage?.items ?? []
 
+  const monthOptions = useMemo(() => periodOptions(periods), [periods])
   const categoryOptions = useMemo(() => Object.keys(cats?.categories ?? {}), [cats])
   const typeOptions = cats?.types ?? []
 
@@ -287,9 +297,6 @@ export function ViewPage() {
     ]
     for (const [k, label, kind] of checks) {
       if (k in d && !validNumber(kind, d[k] as number | null)) { toast(numberError(label, kind), 'error'); return }
-    }
-    if ('time_period' in d && d.time_period && !TIME_PERIOD_RE.test(d.time_period.trim())) {
-      toast('Time period must look like May-2026', 'error'); return
     }
     patchMut.mutate({ id: row.id, payload: d as PatchHistoryPayload })
   }
@@ -617,10 +624,14 @@ export function ViewPage() {
                           onChange={() => toggleRow(row.id)} style={{ cursor: 'pointer' }} />
                       </td>
                       <td>
-                        <input type="text" className="field-input" style={{ width: 76 }} placeholder="Mon-YYYY"
-                          title="Move this row to another month, e.g. May-2026"
+                        <select className="field-input" style={{ width: 92 }} title="Move this row to another month"
                           value={getVal(row, 'time_period') ?? ''}
-                          onChange={e => setField(row.id, 'time_period', e.target.value)} />
+                          onChange={e => setField(row.id, 'time_period', e.target.value)}>
+                          {!monthOptions.includes(getVal(row, 'time_period') ?? '') && (
+                            <option value={getVal(row, 'time_period') ?? ''}>{getVal(row, 'time_period') || '—'}</option>
+                          )}
+                          {monthOptions.map(p => <option key={p} value={p}>{p}</option>)}
+                        </select>
                       </td>
                       <td style={{ color: 'var(--muted)', whiteSpace: 'nowrap', fontSize: 12 }}>
                         {fmtDateShort(row.entry_date)}
