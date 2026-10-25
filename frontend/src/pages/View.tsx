@@ -53,21 +53,23 @@ function periodOptions(periods: { period: string }[]): string[] {
 function fmtPeriod(period: string) { return period.replace('-', ' ') }
 
 // Columns of the exported sheet, in order. Numbers stay numeric so Excel treats them as numbers.
+// Monthly/Final fall back to the raw amount when NULL, mirroring the web app's
+// SUM(COALESCE(final_amount, amount)) so the file total matches the on-screen total.
 const EXPORT_COLUMNS: [string, (r: HistoryRow) => string | number | null, number][] = [
-  ['Time Period',    r => r.time_period,     12],
-  ['Date',           r => r.entry_date,      12],
-  ['Merchant',       r => r.merchant,        24],
-  ['Description',    r => r.entry_text,      36],
-  ['Amount',         r => r.amount,          12],
-  ['Category',       r => r.category,        18],
-  ['Subcategory',    r => r.sub_category,    18],
-  ['Type',           r => r.spend_type,      12],
-  ['Cadence',        r => r.cadence,          9],
-  ['Divide By',      r => r.divide_by,        9],
-  ['Shared',         r => r.shared_expense,   8],
-  ['Share Ratio',    r => r.share_ratio,     11],
-  ['Monthly Amount', r => r.monthly_amount,  14],
-  ['Final Amount',   r => r.final_amount,    14],
+  ['Time Period',    r => r.time_period,                     12],
+  ['Date',           r => r.entry_date,                      12],
+  ['Merchant',       r => r.merchant,                        24],
+  ['Description',    r => r.entry_text,                      36],
+  ['Amount',         r => r.amount,                          12],
+  ['Category',       r => r.category,                        18],
+  ['Subcategory',    r => r.sub_category,                    18],
+  ['Type',           r => r.spend_type,                      12],
+  ['Cadence',        r => r.cadence,                          9],
+  ['Divide By',      r => r.divide_by,                        9],
+  ['Shared',         r => r.shared_expense,                   8],
+  ['Share Ratio',    r => r.share_ratio,                     11],
+  ['Monthly Amount', r => r.monthly_amount ?? r.amount,      14],
+  ['Final Amount',   r => r.final_amount ?? r.amount,        14],
 ]
 
 async function downloadXlsx(rows: HistoryRow[], period: string) {

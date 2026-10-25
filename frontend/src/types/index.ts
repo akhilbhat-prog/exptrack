@@ -58,8 +58,8 @@ export interface HistoryRow {
   entry_text: string
   merchant: string | null
   amount: number
-  monthly_amount: number
-  final_amount: number
+  monthly_amount: number | null   // NULL on legacy rows; web app/export fall back to amount
+  final_amount: number | null     // NULL on legacy rows; web app/export fall back to amount
   category: string | null
   sub_category: string | null
   spend_type: SpendType | null
