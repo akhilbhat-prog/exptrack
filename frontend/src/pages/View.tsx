@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { X, ChevronLeft, ChevronRight, ChevronDown, Trash2 } from 'lucide-react'
+import { X, ChevronLeft, ChevronRight, ChevronDown, Trash2, Download } from 'lucide-react'
 import { Layout } from '../components/Layout'
 import { ComboInput } from '../components/ComboInput'
 import { NumberInput, validNumber, numberError, type NumberKind } from '../components/NumberInput'
@@ -51,6 +51,35 @@ function periodOptions(periods: { period: string }[]): string[] {
 }
 
 function fmtPeriod(period: string) { return period.replace('-', ' ') }
+
+// Columns of the exported sheet, in order. Numbers stay numeric so Excel treats them as numbers.
+const EXPORT_COLUMNS: [string, (r: HistoryRow) => string | number | null, number][] = [
+  ['Time Period',    r => r.time_period,     12],
+  ['Date',           r => r.entry_date,      12],
+  ['Merchant',       r => r.merchant,        24],
+  ['Description',    r => r.entry_text,      36],
+  ['Amount',         r => r.amount,          12],
+  ['Category',       r => r.category,        18],
+  ['Subcategory',    r => r.sub_category,    18],
+  ['Type',           r => r.spend_type,      12],
+  ['Cadence',        r => r.cadence,          9],
+  ['Divide By',      r => r.divide_by,        9],
+  ['Shared',         r => r.shared_expense,   8],
+  ['Share Ratio',    r => r.share_ratio,     11],
+  ['Monthly Amount', r => r.monthly_amount,  14],
+  ['Final Amount',   r => r.final_amount,    14],
+]
+
+async function downloadXlsx(rows: HistoryRow[], period: string) {
+  const XLSX = await import('xlsx')
+  const header = EXPORT_COLUMNS.map(c => c[0])
+  const body = rows.map(r => EXPORT_COLUMNS.map(c => c[1](r)))
+  const ws = XLSX.utils.aoa_to_sheet([header, ...body])
+  ws['!cols'] = EXPORT_COLUMNS.map(c => ({ wch: c[2] }))
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, period)
+  XLSX.writeFile(wb, `exptrack-${period}.xlsx`)
+}
 
 function prevPeriod(period: string): string | undefined {
   const months = MONTHS
@@ -469,13 +498,24 @@ export function ViewPage() {
               {filtered.length} rows
             </div>
           </div>
-          <button
-            className="btn btn-ghost btn-sm"
-            style={{ borderRadius: 6, border: '1px solid var(--border2)' }}
-            onClick={() => setAddModal(true)}
-          >
-            + Add Entry
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              className="btn btn-ghost btn-sm"
+              style={{ borderRadius: 6, border: '1px solid var(--border2)', display: 'flex', alignItems: 'center', gap: 5 }}
+              title="Download these rows as an Excel file"
+              disabled={!activePeriod || filtered.length === 0}
+              onClick={() => downloadXlsx(filtered, activePeriod!)}
+            >
+              <Download size={14} /> Download
+            </button>
+            <button
+              className="btn btn-ghost btn-sm"
+              style={{ borderRadius: 6, border: '1px solid var(--border2)' }}
+              onClick={() => setAddModal(true)}
+            >
+              + Add Entry
+            </button>
+          </div>
         </div>
         {isLoading ? (
           <div className="empty-state">Loading…</div>
